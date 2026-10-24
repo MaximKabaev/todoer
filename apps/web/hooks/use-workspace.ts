@@ -198,7 +198,11 @@ export function useWorkspace(
         queues.current.delete(task.id);
     }
   }
-  async function create(input: TaskInput, files: File[] = []) {
+  async function create(
+    input: TaskInput,
+    files: File[] = [],
+    { quiet = false }: { quiet?: boolean } = {},
+  ) {
     const id = `pending-${crypto.randomUUID()}`;
     const stamp = new Date().toISOString();
     const temp = optimistic(
@@ -252,11 +256,12 @@ export function useWorkspace(
       return task;
     } catch (error) {
       await apply(id, () => null);
-      toast({
-        message:
-          error instanceof Error ? error.message : "Could not create task.",
-        error: true,
-      });
+      if (!quiet)
+        toast({
+          message:
+            error instanceof Error ? error.message : "Could not create task.",
+          error: true,
+        });
       throw error;
     }
   }

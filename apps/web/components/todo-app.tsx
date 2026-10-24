@@ -146,12 +146,24 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     if (defaultId === undefined) throw new Error("Projects are still loading. Please try again.");
     const override = projectOverride;
     setProjectOverride(undefined);
-    // A teammate can delete a project between polls. Resolve against the live catalog.
-    const fresh = await api.projects();
-    await store.projects.mutate(fresh, { revalidate: false });
-    const projectId = captureProjectId(fresh.projects, user.lastProjectId, viewProjectId, override);
-    const task = await store.create({ ...context, ...input, projectId }, files);
-    if (viewProjectId && projectId === viewProjectId) rememberProject(projectId);
+    // Resolve against the cached catalog so capture stays instant. If the other person
+    // deleted that project since the last poll, the API rejects it: refresh and retry once.
+    const projectId = captureProjectId(projects, user.lastProjectId, viewProjectId, override);
+    let task: Task;
+    try {
+      task = await store.create({ ...context, ...input, projectId }, files, { quiet: !!projectId });
+    } catch (error) {
+      if (!projectId || !(error instanceof ApiError && error.status === 400)) {
+        if (projectId)
+          toast({ message: error instanceof Error ? error.message : "Could not create task.", error: true });
+        throw error;
+      }
+      const fresh = await api.projects();
+      await store.projects.mutate(fresh, { revalidate: false });
+      const retryId = captureProjectId(fresh.projects, user.lastProjectId, viewProjectId, override);
+      task = await store.create({ ...context, ...input, projectId: retryId }, files);
+    }
+    if (viewProjectId && task.projectId === viewProjectId) rememberProject(viewProjectId);
     return task;
   }
   const subtitle =
