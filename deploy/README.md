@@ -17,12 +17,11 @@ Postgres is the local `todoer` database. Uploaded images live in `apps/api/uploa
 ```sh
 cd ~/.t3/projects/todoer
 git pull            # or merge your branch
-npm install
-npm run db:migrate
-# API_URL and NEXT_PUBLIC_* are baked in at build time
-API_URL=http://172.20.0.1:4200 NEXT_PUBLIC_API_PUBLIC_URL=https://api.todo.customsai.org npm run build
-sudo systemctl restart todoer-api todoer-web
+deploy/redeploy.sh  # install, test, migrate, clean build, restart, health check; stops on the first failure
 ```
+
+Always build from a clean `apps/web/.next`. Stale generated route types fail the build, and a failed
+build must never be followed by a restart (the script uses `set -euo pipefail` for this).
 
 ## First-time setup (already done)
 
