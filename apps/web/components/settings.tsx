@@ -147,6 +147,14 @@ export function Settings({
             {copied === "url" ? <Check size={16} /> : <Copy size={16} />}
           </button>
         </div>
+        {process.env.NEXT_PUBLIC_API_PUBLIC_URL && (
+          <p className="public-api small muted">
+            Direct API:{" "}
+            <a href={process.env.NEXT_PUBLIC_API_PUBLIC_URL}>
+              {process.env.NEXT_PUBLIC_API_PUBLIC_URL}
+            </a>
+          </p>
+        )}
         <p className="small muted">
           Give it this link and a personal token below. Your agent can see and
           edit your shared tasks as you.

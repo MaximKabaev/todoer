@@ -516,3 +516,167 @@ test("capture in Completed creates a completed task in that context", async ({
   ).toBeVisible();
   await page.request.delete(`/api/tasks/${task.id}`);
 });
+
+test("document and text-node events are safe, and a deleted inspector retires after one 404", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await login(page);
+  await page.evaluate(() => {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Shift", bubbles: true }),
+    );
+    document.dispatchEvent(new ClipboardEvent("paste", { bubbles: true }));
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["image"], "qa.png", { type: "image/png" }));
+    document.dispatchEvent(
+      new DragEvent("dragover", {
+        dataTransfer: transfer,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    document.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+    const text = document.querySelector(".row-title")?.firstChild;
+    text?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    text?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Shift", bubbles: true }),
+    );
+  });
+  const { task } = await (
+    await page.request.post("/api/tasks", {
+      data: { title: "Deleted elsewhere" },
+    })
+  ).json();
+  await page.reload();
+  await page
+    .getByRole("button", {
+      name: "Open Deleted elsewhere details",
+      exact: true,
+    })
+    .click();
+  await page.request.delete(`/api/tasks/${task.id}`);
+  // The next autosave receives the real deletion response and must not retry on unmount.
+  let patches = 0;
+  page.on("request", (r) => {
+    if (r.url().endsWith(`/api/tasks/${task.id}`) && r.method() === "PATCH")
+      patches++;
+  });
+  await page
+    .getByRole("textbox", { name: "Notes", exact: true })
+    .fill("A stale draft");
+  await expect(
+    page.getByText("This task was deleted", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Task details" })).toHaveCount(
+    0,
+  );
+  await expect(page.locator(`[data-task-id="${task.id}"]`)).toHaveCount(0);
+  await page.waitForTimeout(1500);
+  expect(patches).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test("mobile swipes complete and reveal actions, and Take replaces the assignee", async ({
+  page,
+}) => {
+  await login(page);
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page
+    .locator(".mobile-home")
+    .getByRole("button", { name: /My Tasks/ })
+    .click();
+  const { task } = await (
+    await page.request.post("/api/tasks", {
+      data: { title: "Swipe regression" },
+    })
+  ).json();
+  await page.reload();
+  await page
+    .locator(".mobile-home")
+    .getByRole("button", { name: /My Tasks/ })
+    .click();
+  const row = page.locator(`[data-task-id="${task.id}"]`);
+  const swipe = async (dx: number, dy = 0) => {
+    await row.evaluate(
+      (element, { dx, dy }) => {
+        // Dispatch pointer events without requiring physical touch hardware in CI.
+        element.parentElement!.setPointerCapture = () => {};
+        element.parentElement!.hasPointerCapture = () => false;
+        element.dispatchEvent(
+          new PointerEvent("pointerdown", {
+            pointerId: 7,
+            pointerType: "touch",
+            clientX: 180,
+            clientY: 300,
+            bubbles: true,
+          }),
+        );
+        element.dispatchEvent(
+          new PointerEvent("pointermove", {
+            pointerId: 7,
+            pointerType: "touch",
+            clientX: 180 + dx,
+            clientY: 300 + dy,
+            bubbles: true,
+          }),
+        );
+        element.dispatchEvent(
+          new PointerEvent("pointerup", {
+            pointerId: 7,
+            pointerType: "touch",
+            clientX: 180 + dx,
+            clientY: 300 + dy,
+            bubbles: true,
+          }),
+        );
+      },
+      { dx, dy },
+    );
+  };
+  await swipe(20, 100);
+  await expect(row).not.toHaveAttribute("style", /translateX/);
+  await swipe(-110);
+  const actions = row.locator("..").locator(".swipe-actions");
+  await expect(actions).toHaveAttribute("aria-hidden", "false");
+  await actions
+    .getByRole("button", { name: "Pass to Teammate", exact: true })
+    .click();
+  await expect(row).toHaveCount(0);
+  await page.getByRole("button", { name: "Lists", exact: true }).click();
+  await page
+    .locator(".mobile-home")
+    .getByRole("button", { name: /Teammate’s Tasks/ })
+    .click();
+  await row
+    .getByRole("button", { name: "Open Swipe regression details" })
+    .click();
+  const handed = page.waitForResponse((r) =>
+    r.url().endsWith(`/api/tasks/${task.id}/handoff`),
+  );
+  await page.getByRole("button", { name: "Take it", exact: true }).click();
+  expect(
+    (await (await handed).json()).task.assignees.map(
+      (u: { username: string }) => u.username,
+    ),
+  ).toEqual(["maxim"]);
+  await page
+    .getByRole("button", { name: "Close task details", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Lists", exact: true }).click();
+  await page
+    .locator(".mobile-home")
+    .getByRole("button", { name: /My Tasks/ })
+    .click();
+  await swipe(110);
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/tasks/${task.id}`)).json()).task
+          .done,
+    )
+    .toBe(true);
+  await page.request.delete(`/api/tasks/${task.id}`);
+});
