@@ -17,6 +17,8 @@ const users = [
     color: "orange",
   },
 ];
+const lastProjects = new Map(users.map((u) => [u.id, null]));
+const currentUser = (u) => ({ ...u, lastProjectId: lastProjects.get(u.id) });
 const passwords = new Map(users.map((u) => [u.id, "todoer"]));
 const sessions = new Map();
 const tokenSecrets = new Map();
@@ -423,11 +425,16 @@ const server = createServer(async (req, res) => {
         const { data } = await body(req);
         if (data.password && passwords.get(me.id) !== data.currentPassword)
           return send({ error: "incorrect_current_password" }, 400);
+        if (data.lastProjectId !== undefined) {
+          if (data.lastProjectId !== null && !projects.some((p) => p.id === data.lastProjectId))
+            return send({ error: "unknown_project" }, 400);
+          lastProjects.set(me.id, data.lastProjectId);
+        }
         if (data.displayName) me.displayName = data.displayName;
         if (data.password) passwords.set(me.id, data.password);
-        return send({ user: me });
+        return send({ user: currentUser(me) });
       }
-      return send({ user: me, teammate: users.find((u) => u.id !== me.id) });
+      return send({ user: currentUser(me), teammate: users.find((u) => u.id !== me.id) });
     }
     if (parts[1] === "users") return send({ users });
     if (parts[1] === "counts") {
@@ -604,6 +611,8 @@ const server = createServer(async (req, res) => {
       }
       if (method === "DELETE") {
         collection.splice(collection.indexOf(item), 1);
+        if (isProject) for (const [id, projectId] of lastProjects)
+          if (projectId === item.id) lastProjects.set(id, null);
         tasks.forEach((t) => {
           if (isProject && t.projectId === item.id) t.projectId = null;
           if (!isProject) t.tags = t.tags.filter((tag) => tag.id !== item.id);

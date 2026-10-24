@@ -3489,3 +3489,53 @@ kbd {
     min-height: 44px;
   }
 }
+
+/* Project capture preference: native select keeps keyboard and touch interaction familiar. */
+.composer-project-row {
+  display: flex;
+  padding: 3px 0 4px;
+}
+.composer-project-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  border-radius: 5px;
+  padding-left: 7px;
+  background: var(--blue-wash);
+  color: var(--blue);
+}
+.composer-project-chip select {
+  min-width: 0;
+  max-width: 210px;
+  border: 0;
+  border-radius: 5px;
+  padding: 4px 2px;
+  background: transparent;
+  color: inherit;
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+.composer-project-chip button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.composer-project-chip.no-project {
+  background: var(--surface);
+  color: var(--secondary);
+}
+@media (max-width: 700px) {
+  .composer-project-chip select {
+    min-height: 44px;
+    max-width: 160px;
+    font-size: 12px;
+  }
+  .composer-project-chip button {
+    width: 44px;
+    height: 44px;
+  }
+}

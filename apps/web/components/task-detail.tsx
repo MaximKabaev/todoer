@@ -35,6 +35,7 @@ type Props = {
   tags: Tag[];
   onClose: () => void;
   onPatch: (input: TaskInput, handoff?: boolean) => Promise<unknown>;
+  onProjectPick: (id: string | null) => void;
   onToggle: () => void;
   onDelete: () => void;
   onImages: (files: File[]) => Promise<unknown>;
@@ -48,6 +49,7 @@ export function TaskDetail({
   tags,
   onClose,
   onPatch,
+  onProjectPick,
   onToggle,
   onDelete,
   onImages,
@@ -385,7 +387,11 @@ export function TaskDetail({
               <select
                 aria-label="Project"
                 value={task.projectId || ""}
-                onChange={(e) => patch({ projectId: e.target.value || null })}
+                onChange={(e) => {
+                  const projectId = e.target.value || null;
+                  onProjectPick(projectId);
+                  patch({ projectId });
+                }}
               >
                 <option value="">No project</option>
                 {projects.map((p) => (

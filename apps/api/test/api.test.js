@@ -122,7 +122,7 @@ test('login is case-insensitive, cookie sessions expire and logout revokes them'
   assert.equal(session.forever, true);
   assert.notEqual(session.id, cookie.split(';')[0].split('=')[1]);
   const me = await browser.get('/api/me').expect(200);
-  assert.deepEqual(me.body, { user: first, teammate: second });
+  assert.deepEqual(me.body, { user: { ...first, lastProjectId: null }, teammate: second });
   // Each app load renews the cookie so a browser session never lapses.
   const renewed = me.headers['set-cookie']?.[0] ?? '';
   assert.equal(renewed.split(';')[0], cookie.split(';')[0]);
@@ -183,7 +183,7 @@ test('remote clients cannot bypass the login rate limit by changing X-Forwarded-
 
 test('bearer tokens act as their owner, are hashed, and update last_used_at', async () => {
   const me = await api('get', '/api/me', secondToken).expect(200);
-  assert.deepEqual(me.body, { user: second, teammate: first });
+  assert.deepEqual(me.body, { user: { ...second, lastProjectId: null }, teammate: first });
   const token = (await pool.query('SELECT token_hash, last_used_at FROM api_tokens WHERE user_id = $1', [second.id])).rows[0];
   assert.equal(token.token_hash, hash(secondToken));
   assert.ok(token.last_used_at);
@@ -538,4 +538,40 @@ test('not found, invalid JSON, invalid UUID, and validation failures use consist
   const invalid = await api('post', '/api/tasks').send({ assignees: 'me' }).expect(400);
   assert.equal(invalid.body.error, 'Invalid request'); assert.ok(invalid.body.details);
   await api('get', '/api/unknown').expect(404);
+});
+
+
+test('last project is an explicit per-user UI preference, validated and cleared on deletion', async () => {
+  const { project } = (await api('post', '/api/projects').send({ name: 'QA last project' }).expect(201)).body;
+  let task;
+  try {
+    assert.equal((await api('get', '/api/me').expect(200)).body.user.lastProjectId, null);
+    assert.equal((await api('patch', '/api/me').send({ lastProjectId: project.id }).expect(200)).body.user.lastProjectId, project.id);
+    assert.equal((await api('get', '/api/me').expect(200)).body.user.lastProjectId, project.id);
+    assert.equal((await api('get', '/api/me', secondToken).expect(200)).body.user.lastProjectId, null);
+    for (const lastProjectId of ['invalid', randomUUID()]) {
+      await api('patch', '/api/me').send({ lastProjectId }).expect(400);
+    }
+    // Agent task calls neither apply nor change the preference.
+    task = await create({ title: 'QA preference isolation' });
+    assert.equal(task.projectId, null);
+    await patch(task.id, { projectId: project.id });
+    await patch(task.id, { projectId: null });
+    assert.equal((await api('get', '/api/me').expect(200)).body.user.lastProjectId, project.id);
+    await api('patch', '/api/me').send({ displayName: first.displayName }).expect(200);
+    assert.equal((await api('get', '/api/me').expect(200)).body.user.lastProjectId, project.id);
+    assert.equal((await api('patch', '/api/me').send({ lastProjectId: null }).expect(200)).body.user.lastProjectId, null);
+    await api('patch', '/api/me').send({ lastProjectId: project.id }).expect(200);
+    await api('delete', `/api/projects/${project.id}`, secondToken).expect(200);
+    assert.equal((await api('get', '/api/me').expect(200)).body.user.lastProjectId, null);
+    assert.equal((await api('get', '/api/me', secondToken).expect(200)).body.user.lastProjectId, null);
+    const users = (await api('get', '/api/users').expect(200)).body.users;
+    assert.ok(users.every((u) => !('lastProjectId' in u)));
+    assert.ok(!('lastProjectId' in task.createdBy));
+  } finally {
+    if (task) await api('delete', `/api/tasks/${task.id}`);
+    await api('delete', `/api/projects/${project.id}`);
+    await api('patch', '/api/me').send({ lastProjectId: null });
+    await api('patch', '/api/me', secondToken).send({ lastProjectId: null });
+  }
 });

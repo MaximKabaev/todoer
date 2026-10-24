@@ -49,10 +49,10 @@ export async function authenticate(req, res, next) {
     }
   }
   if (!userId) throw new HttpError(401, 'unauthorized');
-  const { rows } = await pool.query(`SELECT ${userColumns} FROM users ORDER BY created_at, id`);
-  req.users = rows;
+  const { rows } = await pool.query(`SELECT ${userColumns}, last_project_id AS "lastProjectId" FROM users ORDER BY created_at, id`);
+  req.users = rows.map(publicUser);
   req.user = rows.find((user) => user.id === userId);
-  req.teammate = rows.find((user) => user.id !== userId);
+  req.teammate = req.users.find((user) => user.id !== userId);
   if (!req.user) throw new HttpError(401, 'unauthorized');
   next();
 }

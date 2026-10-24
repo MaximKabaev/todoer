@@ -99,6 +99,22 @@ Images only (png, jpeg, gif, webp, heic/heif, svg is NOT allowed). Max 20 MB per
 Creating a task inside a view pre-fills sensible context (assignee, list, project) but **nothing is
 required** — an empty task is valid.
 
+The UI defaults new text, empty, drop, paste, and photo tasks to the current project view,
+then the current user's `lastProjectId` if it still exists, then the only project if exactly
+one exists, otherwise no project. Wait for the project catalog before enabling capture;
+validate the selection against current projects before submitting. Teammate views retain
+teammate assignment. A deleted preference falls back without an error.
+
+Only explicit `PATCH /api/me` changes `lastProjectId` (unknown project: 400; null clears it).
+Deleting a project also nulls references via the foreign key. Task POST/PATCH never changes
+this preference, and task POST never defaults `projectId` on the server.
+The UI records last-used when picking a project (including No project) in task details,
+creating in a project view, or changing the composer project picker to a different selection.
+Automatically applying a default never records it. Outside project views the composer shows
+a color-dot, emoji, name chip with a compact project picker and an × to omit the project for
+one task only. The next capture uses the default again; × does not change the preference.
+Project controls support keyboard/touch and 44px mobile targets without disturbing typing focus.
+
 "Pass on / hand off" = exclusive reassignment to the chosen recipient (default: my teammate).
 All previous assignees are replaced with exactly `[to]`, including when `to` is `"me"`, or the
 task was shared or unassigned.
@@ -115,8 +131,8 @@ Unknown body fields are ignored. Everything is camelCase.
 ### Auth
 - `POST /api/auth/login` `{ username, password }` → `{ user }` + sets cookie. Username is case-insensitive.
 - `POST /api/auth/logout` → `{ ok: true }`
-- `GET /api/me` → `{ user, teammate }`
-- `PATCH /api/me` `{ displayName?, password?, currentPassword? }` → `{ user }` (password change requires currentPassword)
+- `GET /api/me` → `{ user, teammate }` (current `user` includes `lastProjectId: uuid | null`)
+- `PATCH /api/me` `{ displayName?, password?, currentPassword?, lastProjectId?: uuid | null }` → `{ user }` (password change requires currentPassword)
 - `GET /api/users` → `{ users: User[] }` (both users)
 - `GET /api/tokens` → `{ tokens: [{ id, name, createdAt, lastUsedAt }] }` (mine only)
 - `POST /api/tokens` `{ name? }` → `{ token: { id, name, createdAt }, secret: "tdr_..." }` (secret shown once)

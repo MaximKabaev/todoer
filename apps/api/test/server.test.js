@@ -19,14 +19,14 @@ async function withDeadline(promise) {
 
 test('production server binds default loopback or API_HOST and shuts down cleanly on SIGTERM', async (t) => {
   for (const [name, host, origin] of [
-    ['default 127.0.0.1', '', 'http://127.0.0.1:4200'],
-    ['explicit IPv6 loopback', '::1', 'http://[::1]:4200'],
+    ['default 127.0.0.1', '', 'http://127.0.0.1:4301'],
+    ['explicit IPv6 loopback', '::1', 'http://[::1]:4301'],
   ]) {
     await t.test(name, async () => {
       const directory = await mkdtemp(path.join(tmpdir(), 'todoer-server-'));
       const server = spawn(process.execPath, ['src/server.js'], {
         cwd: fileURLToPath(new URL('../', import.meta.url)),
-        env: { ...process.env, NODE_ENV: 'production', API_PORT: '4200', API_HOST: host, API_UPLOAD_DIR: directory },
+        env: { ...process.env, NODE_ENV: 'production', API_PORT: '4301', API_HOST: host, API_UPLOAD_DIR: directory },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       const closed = once(server, 'close');

@@ -183,3 +183,4 @@ curl -sS -X DELETE "$TODOER_BASE/api/projects/PROJECT_UUID" -H "Authorization: B
 curl -sS -X DELETE "$TODOER_BASE/api/tags/TAG_UUID" -H "Authorization: Bearer $TODOER_TOKEN"
 curl -sS -X DELETE "$TODOER_BASE/api/tokens/TOKEN_UUID" -H "Authorization: Bearer $TODOER_TOKEN"
 ```
+`lastProjectId` is a UI preference; agents should ignore it when creating tasks unless the human asks.

@@ -14,6 +14,7 @@ export type User = {
   displayName: string;
   color: Color;
 };
+export type CurrentUser = User & { lastProjectId: string | null };
 export type Project = {
   id: string;
   name: string;
@@ -179,12 +180,13 @@ export const api = {
       json("POST", { username, password }),
     ),
   logout: () => request<{ ok: true }>("/api/auth/logout", json("POST")),
-  me: () => request<{ user: User; teammate: User }>("/api/me"),
+  me: () => request<{ user: CurrentUser; teammate: User }>("/api/me"),
   updateMe: (input: {
+    lastProjectId?: string | null;
     displayName?: string;
     password?: string;
     currentPassword?: string;
-  }) => request<{ user: User }>("/api/me", json("PATCH", input)),
+  }) => request<{ user: CurrentUser }>("/api/me", json("PATCH", input)),
   users: () => request<{ users: User[] }>("/api/users"),
   tokens: () => request<{ tokens: AgentToken[] }>("/api/tokens"),
   createToken: (name?: string) =>

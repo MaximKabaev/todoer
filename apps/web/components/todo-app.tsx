@@ -21,10 +21,13 @@ import {
   api,
   ApiError,
   request,
+  type CurrentUser,
   type Task,
   type TaskInput,
   type User,
 } from "@/lib/api";
+import { captureProjectId, defaultProjectId } from "@/lib/project-default";
+import { useLastProject } from "@/hooks/use-last-project";
 import { imageFiles } from "@/lib/utils";
 import {
   useWorkspace,
@@ -41,7 +44,7 @@ import { useLocalDay } from "@/hooks/use-local-day";
 import { useToast } from "./providers";
 export function TodoApp() {
   const router = useRouter();
-  const { data, error } = useSWR<{ user: User; teammate: User }>("/api/me");
+  const { data, error } = useSWR<{ user: CurrentUser; teammate: User }>("/api/me");
   useEffect(() => {
     if (error instanceof ApiError && error.status === 401)
       router.replace("/login");
@@ -59,8 +62,10 @@ export function TodoApp() {
     );
   return <Workspace user={data.user} teammate={data.teammate} />;
 }
-function Workspace({ user, teammate }: { user: User; teammate: User }) {
+function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
   const day = useLocalDay();
+  const rememberProject = useLastProject();
+  const [projectOverride, setProjectOverride] = useState<string | null | undefined>();
   const [selection, setSelection] = useState<Selection>({ kind: "mine" });
   const [segment, setSegment] = useState(0);
   const [mobileHome, setMobileHome] = useState(true);
@@ -132,6 +137,23 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
   const accent = currentList?.color || project?.color || "teal";
   const Icon = currentList?.icon || ListTodo;
   const context = viewContext(selection, user, teammate);
+  const viewProjectId = selection.kind === "project" ? selection.id : undefined;
+  const defaultId = defaultProjectId(store.projects.data?.projects, user.lastProjectId, viewProjectId);
+  const captureId = store.projects.data
+    ? captureProjectId(projects, user.lastProjectId, viewProjectId, projectOverride)
+    : undefined;
+  async function createCapture(input: TaskInput, files: File[] = []) {
+    if (defaultId === undefined) throw new Error("Projects are still loading. Please try again.");
+    const override = projectOverride;
+    setProjectOverride(undefined);
+    // A teammate can delete a project between polls. Resolve against the live catalog.
+    const fresh = await api.projects();
+    await store.projects.mutate(fresh, { revalidate: false });
+    const projectId = captureProjectId(fresh.projects, user.lastProjectId, viewProjectId, override);
+    const task = await store.create({ ...context, ...input, projectId }, files);
+    if (viewProjectId && projectId === viewProjectId) rememberProject(projectId);
+    return task;
+  }
   const subtitle =
     selection.kind === "mine"
       ? "A clear mind starts with a little list."
@@ -157,6 +179,7 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
     };
   }, [completionTimers]);
   const select = (value: Selection) => {
+    setProjectOverride(undefined);
     setSelection(value);
     setSegment(0);
     setMobileHome(false);
@@ -181,7 +204,7 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
           }
         : {}),
     };
-    const task = await store.create(value);
+    const task = await createCapture(value);
     if (open) setSelectedId(task.id);
     return task;
   };
@@ -194,7 +217,7 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
         const { task } = await api.attach(targetId, valid);
         await store.apply(targetId, () => task);
       } else {
-        const task = await store.create(context, valid);
+        const task = await createCapture({}, valid);
         setSelectedId(task.id);
         setMobileHome(false);
       }
@@ -670,6 +693,14 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
             onCreate={create}
             onImages={(files) => upload(files)}
             uploading={uploading}
+            projects={projects}
+            projectId={captureId}
+            projectView={selection.kind === "project"}
+            onProjectChange={(id) => {
+              setProjectOverride(id);
+              if (id !== captureId) rememberProject(id);
+            }}
+            onClearProject={() => setProjectOverride(null)}
           />
           <div className="desktop-shortcuts">
             <span>
@@ -696,6 +727,7 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
           projects={projects}
           tags={tags}
           onClose={() => setSelectedId(null)}
+          onProjectPick={rememberProject}
           onPatch={(input, handoff) =>
             store.patch(selected.data!.task, input, handoff)
           }
