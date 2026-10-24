@@ -9,7 +9,9 @@ import { attachmentsRouter } from './routes/attachments.js';
 
 const instructions = await readFile(new URL('./lib/agent.md', import.meta.url), 'utf8');
 export const app = express();
-app.set('trust proxy', 'loopback');
+// Comma-separated addresses/subnets of reverse proxies (e.g. a Docker Caddy on a bridge network).
+const trustedProxies = (process.env.TRUST_PROXY || '').split(',').map((entry) => entry.trim()).filter(Boolean);
+app.set('trust proxy', trustedProxies.length ? trustedProxies : 'loopback');
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.get('/api/health', (req, res) => res.json({ ok: true }));

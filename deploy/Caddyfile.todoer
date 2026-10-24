@@ -1,0 +1,36 @@
+# todoer — appended to /opt/watermark-remover/infra/Caddyfile (infra-caddy-1 container).
+todo.customsai.org {
+	encode zstd gzip
+	request_body {
+		max_size 110MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	reverse_proxy 172.20.0.1:3200 {
+		transport http {
+			response_header_timeout 120s
+		}
+	}
+}
+
+api.todo.customsai.org {
+	encode zstd gzip
+	request_body {
+		max_size 110MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	reverse_proxy 172.20.0.1:4200 {
+		transport http {
+			response_header_timeout 120s
+		}
+	}
+}

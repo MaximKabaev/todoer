@@ -1,0 +1,17 @@
+[Unit]
+Description=todoer web (Next.js)
+After=network-online.target docker.service todoer-api.service
+Wants=network-online.target todoer-api.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=mkabaev
+WorkingDirectory=/home/mkabaev/.t3/projects/todoer/apps/web
+Environment=NODE_ENV=production
+ExecStart=/home/mkabaev/.t3/projects/todoer/node_modules/.bin/next start --hostname 172.20.0.1 --port 3200
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

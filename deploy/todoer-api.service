@@ -1,0 +1,23 @@
+[Unit]
+Description=todoer API (Express)
+# The API binds to the Docker bridge IP used by the infra Caddy container.
+After=network-online.target docker.service postgresql.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=mkabaev
+WorkingDirectory=/home/mkabaev/.t3/projects/todoer/apps/api
+Environment=NODE_ENV=production
+Environment=API_HOST=172.20.0.1
+Environment=API_PORT=4200
+Environment=PUBLIC_API_URL=https://api.todo.customsai.org
+Environment=COOKIE_SECURE=true
+Environment="TRUST_PROXY=loopback,172.20.0.0/16"
+ExecStart=/usr/local/bin/node src/server.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
