@@ -15,8 +15,15 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { Project, Tag, Task, TaskInput, User } from "@/lib/api";
-import { taskAccent, timeAgo } from "@/lib/utils";
+import {
+  ApiError,
+  type Project,
+  type Tag,
+  type Task,
+  type TaskInput,
+  type User,
+} from "@/lib/api";
+import { middleFilename, taskAccent, timeAgo } from "@/lib/utils";
 import { useDialog } from "@/hooks/use-dialog";
 import { useMedia } from "@/hooks/use-media";
 import { Avatar, Checkbox, Confirm, Modal } from "./ui";
@@ -56,6 +63,7 @@ export function TaskDetail({
   const [deleteImage, setDeleteImage] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const pending = useRef<TaskInput>({});
+  const retired = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const patchRef = useRef(onPatch);
   const inFlight = useRef(0);
@@ -76,7 +84,12 @@ export function TaskDetail({
     setSaveError(false);
     void patchRef
       .current(fields)
-      .catch(() => {
+      .catch((error) => {
+        if (error instanceof ApiError && error.status === 404) {
+          retired.current = true;
+          pending.current = {};
+          return;
+        }
         setSaveError(true);
         pending.current = { ...fields, ...pending.current };
       })
@@ -88,7 +101,7 @@ export function TaskDetail({
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
-      if (Object.keys(pending.current).length)
+      if (!retired.current && Object.keys(pending.current).length)
         void patchRef.current(pending.current).catch(() => {});
     },
     [],
@@ -130,7 +143,12 @@ export function TaskDetail({
     setSaveError(false);
     inFlight.current++;
     void onPatch(input, handoff)
-      .catch(() => {
+      .catch((error) => {
+        if (error instanceof ApiError && error.status === 404) {
+          retired.current = true;
+          pending.current = {};
+          return;
+        }
         pending.current = { ...input, ...pending.current };
         setSaveError(true);
       })
@@ -139,6 +157,7 @@ export function TaskDetail({
         if (!inFlight.current) setSaving(false);
       });
   }
+  const take = !task.assignees.some((a) => a.id === users[0].id);
   const addTag = (value: string) => {
     const name = value.trim().replace(/^#/, "");
     if (
@@ -222,7 +241,7 @@ export function TaskDetail({
               rows={1}
               className="detail-title"
               aria-label="Task title"
-              placeholder="New task"
+              placeholder={task.attachments.length ? "Image" : "New task"}
               value={draft.title}
               onChange={(e) => edit("title", e.target.value)}
               onBlur={flush}
@@ -274,10 +293,14 @@ export function TaskDetail({
             </div>
             <button
               className="handoff-button"
-              onClick={() => patch({ assignees: [users[1].id] }, true)}
+              onClick={() =>
+                patch({ assignees: [users[take ? 0 : 1].id] }, true)
+              }
             >
               <Send size={15} />
-              <span>Pass to {users[1].displayName}</span>
+              <span>
+                {take ? "Take it" : `Pass to ${users[1].displayName}`}
+              </span>
               <ArrowUpRight size={16} />
             </button>
           </div>
@@ -465,14 +488,11 @@ export function TaskDetail({
                     aria-label={`View ${a.filename}`}
                     onClick={() => setLightbox(index)}
                   >
-                    <Image
-                      unoptimized
-                      width={800}
-                      height={600}
-                      src={a.url}
-                      alt={a.filename}
-                    />
-                    <span>{a.filename}</span>
+                    <Image unoptimized fill src={a.url} alt={a.filename} />
+                    <span className="filename" title={a.filename}>
+                      <b>{a.filename.slice(0, -10)}</b>
+                      <b>{a.filename.slice(-10)}</b>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -510,15 +530,16 @@ export function TaskDetail({
       </div>
       {lightbox !== null && task.attachments[lightbox] && (
         <Modal
-          title={task.attachments[lightbox].filename}
+          title={middleFilename(task.attachments[lightbox].filename)}
           className="lightbox"
           onClose={() => setLightbox(null)}
         >
           <div className="lightbox-image">
             <Image
               unoptimized
-              width={800}
-              height={600}
+              width={task.attachments[lightbox].width || 800}
+              height={task.attachments[lightbox].height || 600}
+              style={{ width: "auto", height: "auto" }}
               src={task.attachments[lightbox].url}
               alt={task.attachments[lightbox].filename}
             />

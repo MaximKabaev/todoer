@@ -3171,3 +3171,321 @@ kbd {
     inset: -10px 0;
   }
 }
+
+/* Compact list navigation and gesture surfaces. */
+.main-content {
+  padding-top: 28px;
+}
+.heading-symbol {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+}
+.heading-symbol > svg {
+  width: 24px;
+  height: 24px;
+}
+.list-heading > p {
+  margin-top: 4px;
+}
+.segmented-control {
+  margin-top: 18px;
+}
+.task-list {
+  margin-top: 24px;
+}
+.swipe-row {
+  position: relative;
+}
+.swipe-actions,
+.swipe-complete {
+  display: none;
+}
+.task-row {
+  background: var(--bg);
+}
+.row-thumbnail.image-only {
+  width: 80px;
+  height: 60px;
+  display: block;
+}
+.image-gallery button {
+  min-width: 0;
+}
+.image-gallery button > span {
+  max-width: 100%;
+}
+.public-api {
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --secondary: #a7adba;
+    --muted: #9299a7;
+  }
+}
+@media (max-width: 760px) {
+  .mobile-home {
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
+  .home-greeting {
+    font-size: 28px;
+    letter-spacing: -0.7px;
+    margin: 16px 0 12px;
+  }
+  .home-search.search-field {
+    margin: 0 0 20px;
+    min-height: 44px;
+    background: var(--surface);
+  }
+  .home-search input {
+    width: 100%;
+    font-size: 16px;
+  }
+  .home-search .text-button {
+    min-height: 44px;
+    padding: 0 8px;
+    color: var(--blue);
+  }
+  .list-card {
+    min-height: 104px;
+    gap: 8px 4px;
+    padding: 13px 15px;
+  }
+  .main-content,
+  .has-detail .main-content {
+    padding-top: 4px;
+  }
+  .list-heading .heading-symbol,
+  .list-heading > p {
+    display: none;
+  }
+  .list-heading h1,
+  .has-detail .list-heading h1 {
+    font-size: 30px;
+    line-height: 38px;
+  }
+  .segmented-control {
+    margin-top: 10px;
+  }
+  .segmented-control button,
+  .has-detail .segmented-control button {
+    min-height: 44px;
+  }
+  .task-list {
+    margin-top: 18px;
+  }
+  .task-group + .task-group {
+    margin-top: 22px;
+  }
+  .task-row {
+    min-height: 78px;
+    padding: 12px 0;
+    touch-action: pan-y;
+  }
+  .task-row:hover {
+    background: var(--bg);
+  }
+  .task-row.selected {
+    background: var(--bg);
+  }
+  .swipe-row {
+    overflow: hidden;
+    border-radius: 8px;
+    touch-action: pan-y;
+  }
+  .swipe-row .task-row {
+    position: relative;
+    z-index: 1;
+    transition: opacity 0.3s;
+  }
+  .swipe-actions {
+    position: absolute;
+    inset: 0 0 0 auto;
+    display: flex;
+    width: 184px;
+    visibility: hidden;
+  }
+  .swipe-row:has(.task-row[style*="translateX(-"]) .swipe-actions,
+  .actions-open .swipe-actions {
+    visibility: visible;
+  }
+  .swipe-actions button {
+    width: 92px;
+    color: white;
+    background: #0069da;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px;
+    font-size: 11px;
+  }
+  .swipe-actions button:last-child {
+    background: #cf3028;
+  }
+  .swipe-complete {
+    display: flex;
+    position: absolute;
+    inset: 0;
+    align-items: center;
+    padding-left: 25px;
+    background: #25834f;
+    color: white;
+  }
+  .row-thumbnail.image-only {
+    width: 72px;
+    height: 58px;
+    flex-shrink: 0;
+  }
+  .row-open,
+  .has-detail .row-open {
+    margin-right: 0;
+  }
+  .task-meta,
+  .has-detail .task-meta {
+    font-size: 11px;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .task-meta .tag-pill {
+    font-size: 10px;
+  }
+  .meta-project {
+    max-width: 125px;
+  }
+  .nav-tags .tag-filter {
+    min-height: 44px;
+  }
+  .project-nav-wrap .project-edit {
+    opacity: 1;
+  }
+  .modal-header h2 {
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+  .detail-field,
+  .detail-field > span {
+    min-width: 0;
+  }
+  .settings-profile > div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .token-row > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+@media (max-width: 390px) {
+  .task-row {
+    gap: 9px;
+  }
+  .row-thumbnail.image-only {
+    width: 62px;
+  }
+  .mobile-home {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+@media (max-width: 760px) {
+  .list-card.unassigned-card {
+    min-height: 58px;
+  }
+}
+.image-gallery .filename {
+  display: flex;
+}
+.filename > b {
+  font-weight: inherit;
+}
+.filename > b:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filename > b:last-child {
+  flex-shrink: 0;
+}
+@media (max-width: 760px) {
+  .segmented-control button,
+  .has-detail .segmented-control button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 2px;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+@media (min-width: 761px) and (max-width: 1024px) {
+  .app-shell.has-detail {
+    grid-template-columns: 225px minmax(0, 1fr);
+  }
+  .task-detail {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: 420px;
+    z-index: 25;
+    box-shadow: -15px 0 60px #0002;
+  }
+  .detail-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 24;
+    background: #131a2a40;
+    backdrop-filter: blur(3px);
+  }
+  .has-detail .main-content {
+    padding-left: 45px;
+    padding-right: 45px;
+  }
+  .has-detail .sidebar {
+    pointer-events: none;
+  }
+  .icon-button {
+    width: 44px;
+    height: 44px;
+  }
+  .project-edit {
+    position: absolute;
+    right: 0;
+  }
+  .project-nav {
+    padding-right: 42px;
+  }
+  .segmented-control button,
+  .small-segment button,
+  .handoff-button,
+  .assignee-toggles > button {
+    min-height: 44px;
+  }
+  .priority-picker button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .nav-tags .tag-filter {
+    min-height: 44px;
+  }
+  .task-meta {
+    font-size: 11px;
+  }
+}
+.row-thumbnail {
+  position: relative;
+}
+@media (min-width: 761px) and (max-width: 1024px) {
+  .secondary-button,
+  .primary-button,
+  .danger-button,
+  .text-button,
+  .settings-form summary,
+  .logout-button {
+    min-height: 44px;
+  }
+}

@@ -9,6 +9,7 @@ import {
   ListTodo,
   Plus,
   Settings2,
+  Search,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -79,6 +80,7 @@ type Props = {
   onSettings: () => void;
   refresh: () => Promise<unknown>;
   home?: boolean;
+  onSearch: (query: string) => void;
 };
 export function Navigation({
   user,
@@ -91,6 +93,7 @@ export function Navigation({
   onSettings,
   refresh,
   home = false,
+  onSearch,
 }: Props) {
   const [editing, setEditing] = useState<Project | "new" | null>(null);
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
@@ -110,15 +113,28 @@ export function Navigation({
               <Avatar user={user} />
             </button>
           </div>
-          <div className="home-greeting">
-            <span className="eyebrow">YOUR SHARED LITTLE WORLD</span>
-            <h1>
-              Let’s make room
-              <br />
-              for what matters<span>.</span>
-            </h1>
-            <p>A little more done. A little more together.</p>
-          </div>
+          <h1 className="home-greeting">Your lists</h1>
+          <form
+            className="home-search search-field"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const query = String(
+                new FormData(e.currentTarget).get("q") || "",
+              ).trim();
+              if (query) onSearch(query);
+            }}
+          >
+            <Search size={18} />
+            <input
+              name="q"
+              aria-label="Search all tasks"
+              placeholder="Search all tasks"
+              type="search"
+            />
+            <button className="text-button" type="submit">
+              Search
+            </button>
+          </form>
         </>
       ) : (
         <>

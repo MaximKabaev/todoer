@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+// Keep the private origin intact: production also proxies to loopback addresses.
 const api = (process.env.API_URL || "http://localhost:4000").replace(/\/$/, "");
 const config: NextConfig = {
   devIndicators: false,

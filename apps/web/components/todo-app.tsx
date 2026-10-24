@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import {
@@ -8,7 +8,6 @@ import {
   ArrowUpRight,
   Check,
   CheckCheck,
-  ChevronDown,
   ImagePlus,
   ListTodo,
   LoaderCircle,
@@ -26,7 +25,7 @@ import {
   type TaskInput,
   type User,
 } from "@/lib/api";
-import { imageFiles, today } from "@/lib/utils";
+import { imageFiles } from "@/lib/utils";
 import {
   useWorkspace,
   viewContext,
@@ -38,6 +37,7 @@ import { TaskRow } from "./task-row";
 import { TaskDetail } from "./task-detail";
 import { Settings } from "./settings";
 import { Avatar, Brand, Confirm, Skeleton } from "./ui";
+import { useLocalDay } from "@/hooks/use-local-day";
 import { useToast } from "./providers";
 export function TodoApp() {
   const router = useRouter();
@@ -60,6 +60,7 @@ export function TodoApp() {
   return <Workspace user={data.user} teammate={data.teammate} />;
 }
 function Workspace({ user, teammate }: { user: User; teammate: User }) {
+  const day = useLocalDay();
   const [selection, setSelection] = useState<Selection>({ kind: "mine" });
   const [segment, setSegment] = useState(0);
   const [mobileHome, setMobileHome] = useState(true);
@@ -82,11 +83,32 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
   const composer = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
-  const store = useWorkspace(selection, segment, search, user, teammate);
+  const onMissing = useCallback(
+    (id: string) => {
+      setSelectedId((current) => (current === id ? null : current));
+      setDeleteTask((current) => (current?.id === id ? null : current));
+      toast({ message: "This task was deleted" });
+    },
+    [toast],
+  );
+  const store = useWorkspace(
+    selection,
+    segment,
+    search,
+    user,
+    teammate,
+    onMissing,
+  );
   const selected = useSWR<{ task: Task }>(
     selectedId ? `/api/tasks/${selectedId}` : null,
     request,
     {
+      shouldRetryOnError: (error) =>
+        !(error instanceof ApiError && error.status === 404),
+      onError: (error) => {
+        if (selectedId && error instanceof ApiError && error.status === 404)
+          void store.forget(selectedId);
+      },
       fallbackData:
         selectedId && store.tasks.data?.tasks.find((t) => t.id === selectedId)
           ? { task: store.tasks.data.tasks.find((t) => t.id === selectedId)! }
@@ -180,6 +202,10 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
         message: `${valid.length === 1 ? "Image" : `${valid.length} images`} added.`,
       });
     } catch (err) {
+      if (targetId && err instanceof ApiError && err.status === 404) {
+        await store.forget(targetId);
+        return;
+      }
       toast({
         message:
           err instanceof Error ? err.message : "Could not upload images.",
@@ -206,7 +232,9 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
       if (!e.dataTransfer?.types.includes("Files")) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
-      setOverDetail(!!(e.target as HTMLElement).closest(".task-detail"));
+      setOverDetail(
+        e.target instanceof Element && !!e.target.closest(".task-detail"),
+      );
     }
     function leave(e: DragEvent) {
       e.preventDefault();
@@ -226,9 +254,8 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
     }
     function paste(e: ClipboardEvent) {
       if (
-        (e.target as HTMLElement).closest(
-          "input,textarea,[contenteditable=true]",
-        )
+        e.target instanceof Element &&
+        e.target.closest("input,textarea,[contenteditable=true]")
       )
         return;
       if (e.clipboardData?.files.length) {
@@ -254,9 +281,8 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (
-        (e.target as HTMLElement).closest(
-          "input,textarea,select,[contenteditable=true]",
-        ) ||
+        (e.target instanceof Element &&
+          e.target.closest("input,textarea,select,[contenteditable=true]")) ||
         settings ||
         deleteTask
       )
@@ -373,17 +399,14 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
       : selection.kind === "mine" && !search && sort === "manual"
         ? [
             {
-              title: "Up next",
-              tasks: visible.filter(
-                (t) => t.priority > 0 || (t.dueDate && t.dueDate <= today()),
-              ),
+              title: "Today & overdue",
+              tasks: visible.filter((t) => !!t.dueDate && t.dueDate <= day),
             },
             {
-              title: "Whenever you’re ready",
-              tasks: visible.filter(
-                (t) => t.priority === 0 && (!t.dueDate || t.dueDate > today()),
-              ),
+              title: "Upcoming",
+              tasks: visible.filter((t) => !!t.dueDate && t.dueDate > day),
             },
+            { title: "No date", tasks: visible.filter((t) => !t.dueDate) },
           ]
         : [
             {
@@ -406,6 +429,12 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
     counts: store.counts.data,
     onSettings: () => setSettings(true),
     refresh: store.refreshMeta,
+    onSearch: (query: string) => {
+      select({ kind: "all" });
+      setSearchOpen(true);
+      setQuery(query);
+      setSearch(query);
+    },
   };
   return (
     <div
@@ -419,8 +448,7 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
       <main className="main-panel">
         <header className="app-toolbar">
           <div className="toolbar-location">
-            <span className="status-dot" /> Your shared space{" "}
-            <ChevronDown size={12} />
+            {user.displayName} & {teammate.displayName}
           </div>
           <button
             className="mobile-back text-button"
@@ -432,13 +460,6 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
             <ArrowLeft size={20} /> Lists
           </button>
           <div className="toolbar-actions">
-            <span className="today-label">
-              {new Date().toLocaleDateString(undefined, {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
             <button
               className={`icon-button ${searchOpen ? "is-active" : ""}`}
               aria-label="Search tasks"
@@ -587,6 +608,21 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
                         onToggle={() => toggle(task)}
                         onEdit={(input) => store.patch(task, input)}
                         onDelete={() => setDeleteTask(task)}
+                        handoffLabel={
+                          task.assignees.some((a) => a.id === user.id)
+                            ? `Pass to ${teammate.displayName}`
+                            : "Take"
+                        }
+                        onHandoff={() => {
+                          const to = task.assignees.some(
+                            (a) => a.id === user.id,
+                          )
+                            ? teammate.id
+                            : user.id;
+                          void store
+                            .patch(task, { assignees: [to] }, true)
+                            .catch(() => {});
+                        }}
                       />
                     ))}
                   </section>
@@ -652,7 +688,7 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
           </div>
         </div>
       </main>
-      {selectedId && selected.data && (
+      {selectedId && selected.data?.task && (
         <TaskDetail
           key={selectedId}
           task={selected.data.task}
@@ -681,14 +717,18 @@ function Workspace({ user, teammate }: { user: User; teammate: User }) {
           uploading={uploading}
         />
       )}
-      {selectedId && selected.error && (
-        <div className="detail-load-error">
-          <p>Couldn’t open this task.</p>
-          <button onClick={() => setSelectedId(null)} className="text-button">
-            Close
-          </button>
-        </div>
-      )}
+      {selectedId &&
+        selected.error &&
+        !(
+          selected.error instanceof ApiError && selected.error.status === 404
+        ) && (
+          <div className="detail-load-error">
+            <p>Couldn’t open this task.</p>
+            <button onClick={() => setSelectedId(null)} className="text-button">
+              Close
+            </button>
+          </div>
+        )}
       {settings && <Settings user={user} onClose={() => setSettings(false)} />}
       {deleteTask && (
         <Confirm

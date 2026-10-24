@@ -58,3 +58,9 @@ export function imageFiles(files: File[]) {
     throw new Error("Each image must be 20 MB or smaller.");
   return files;
 }
+
+export function middleFilename(name: string, maxLength = 30) {
+  if (name.length <= maxLength) return name;
+  const tail = Math.min(10, Math.floor(maxLength / 3));
+  return `${name.slice(0, maxLength - tail - 1)}…${name.slice(-tail)}`;
+}

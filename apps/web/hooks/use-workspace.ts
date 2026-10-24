@@ -3,6 +3,7 @@ import { useCallback, useRef } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import {
   api,
+  ApiError,
   type Counts,
   type Project,
   type Tag,
@@ -51,13 +52,14 @@ export function viewContext(
   if (selection.kind === "tag") return { tags: [selection.id!] };
   return { assignees: [user.id] };
 }
-type TaskCache = { tasks: Task[] } | { task: Task };
+type TaskCache = { tasks: Task[] } | { task: Task | null };
 export function useWorkspace(
   selection: Selection,
   segment: number,
   q: string,
   user: User,
   teammate: User,
+  onMissing: (id: string) => void,
 ) {
   const { mutate } = useSWRConfig();
   const toast = useToast();
@@ -67,6 +69,7 @@ export function useWorkspace(
   const projects = useSWR<{ projects: Project[] }>("/api/projects");
   const tags = useSWR<{ tags: Tag[] }>("/api/tags");
   const counts = useSWR<Counts>("/api/counts");
+  const deleted = useRef(new Set<string>());
   const queues = useRef(new Map<string, Promise<unknown>>());
   const versions = useRef(new Map<string, number>());
   const apply = useCallback(
@@ -81,9 +84,7 @@ export function useWorkspace(
                 t.id === id ? [change(t)].filter((t): t is Task => !!t) : [t],
               ),
             };
-          return data.task.id === id
-            ? { task: change(data.task) || data.task }
-            : data;
+          return data.task?.id === id ? { task: change(data.task) } : data;
         },
         { revalidate: false },
       ),
@@ -95,6 +96,17 @@ export function useWorkspace(
         ["/api/counts", "/api/projects", "/api/tags"].map((k) => mutate(k)),
       ),
     [mutate],
+  );
+  const forget = useCallback(
+    async (id: string) => {
+      if (deleted.current.has(id)) return;
+      deleted.current.add(id);
+      onMissing(id);
+      await apply(id, () => null);
+      await mutate(`/api/tasks/${id}`, undefined, { revalidate: false });
+      await refreshMeta();
+    },
+    [apply, mutate, onMissing, refreshMeta],
   );
   const revalidate = useCallback(async () => {
     await mutate((k) => typeof k === "string" && k.startsWith("/api/tasks"));
@@ -142,13 +154,22 @@ export function useWorkspace(
     };
   }
   async function patch(task: Task, input: TaskInput, handoff = false) {
+    if (deleted.current.has(task.id))
+      throw new ApiError(404, "This task was deleted");
     const version = (versions.current.get(task.id) || 0) + 1;
     versions.current.set(task.id, version);
     await apply(task.id, (t) => optimistic(t, input));
     const operation = (queues.current.get(task.id) || Promise.resolve())
       .catch(() => {})
       .then(() =>
-        handoff ? api.handoff(task.id) : api.updateTask(task.id, input),
+        deleted.current.has(task.id)
+          ? Promise.reject(new ApiError(404, "This task was deleted"))
+          : handoff
+            ? api.handoff(
+                task.id,
+                input.assignees?.[0] === user.id ? "me" : "teammate",
+              )
+            : api.updateTask(task.id, input),
       );
     queues.current.set(task.id, operation);
     try {
@@ -159,6 +180,10 @@ export function useWorkspace(
       }
       return saved;
     } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        await forget(task.id);
+        throw error;
+      }
       if (versions.current.get(task.id) === version) await revalidate();
       toast({
         message:
@@ -241,6 +266,10 @@ export function useWorkspace(
       await api.deleteTask(task.id);
       await refreshMeta();
     } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        await forget(task.id);
+        return;
+      }
       await revalidate();
       toast({
         message:
@@ -258,6 +287,7 @@ export function useWorkspace(
     create,
     remove,
     apply,
+    forget,
     revalidate,
     refreshMeta,
   };

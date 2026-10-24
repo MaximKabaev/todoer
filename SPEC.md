@@ -145,7 +145,7 @@ Unknown body fields are ignored. Everything is camelCase.
   Also accepts `addAssignees`, `removeAssignees`, `addTags`, `removeTags` (same identifier rules),
   and `position`. Setting `done: true` sets `doneAt`. → `{ task }`
 - `POST /api/tasks/:id/handoff` `{ to?: identifier }` (default: the other user) → `{ task }`.
-  Removes the current user from assignees and adds `to`.
+  Replaces assignees with exactly `[to]`.
 - `DELETE /api/tasks/:id` → `{ ok: true }` (deletes attachments' files too)
 - `POST /api/tasks/:id/attachments` multipart `files` → `{ task }`
 - `DELETE /api/attachments/:id` → `{ ok: true }`

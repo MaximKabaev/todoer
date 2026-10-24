@@ -513,14 +513,7 @@ const server = createServer(async (req, res) => {
         const { data } = await body(req);
         const to = resolveUser(data.to || "teammate", me);
         if (!to) return send({ error: "invalid_user" }, 400);
-        task.assignees = [
-          ...new Map(
-            [...task.assignees.filter((u) => u.id !== me.id), to].map((u) => [
-              u.id,
-              u,
-            ]),
-          ).values(),
-        ];
+        task.assignees = [to];
         return send({ task: shape(task) });
       }
       if (parts[3] === "attachments" && method === "POST") {

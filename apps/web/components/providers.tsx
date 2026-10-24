@@ -34,9 +34,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         refreshInterval: 10000,
         revalidateOnFocus: true,
         shouldRetryOnError: (error) =>
-          !(error instanceof ApiError && error.status === 401),
+          !(error instanceof ApiError && [401, 404].includes(error.status)),
         onError: (error) => {
-          if (!(error instanceof ApiError && error.status === 401))
+          if (!(error instanceof ApiError && [401, 404].includes(error.status)))
             notify({
               message:
                 error.message || "Connection interrupted. Please try again.",
