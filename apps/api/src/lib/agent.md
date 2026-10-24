@@ -6,7 +6,7 @@ todoer is a shared workspace for exactly two people: {{USERS}}. Both users can r
 
 {{CONNECTION}}
 
-Create a personal token in **Settings → Agent tokens** in the web app. Keep the secret private: it is shown only once. Every API request requires `Authorization: Bearer $TODOER_TOKEN`, except health, login, and this document. Tokens act as their owner. Browser clients may instead use the 90-day httpOnly `todoer_session` cookie from login.
+Create a personal token in **Settings → Agent tokens** in the web app. Keep the secret private: it is shown only once. Every API request requires `Authorization: Bearer $TODOER_TOKEN`, except health, login, and this document. Tokens act as their owner. Browser clients may instead use the non-expiring httpOnly `todoer_session` cookie from login. Tokens never expire until revoked.
 
 ```sh
 export TODOER_BASE='{{BASE}}'

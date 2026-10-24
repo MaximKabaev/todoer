@@ -117,11 +117,19 @@ test('login is case-insensitive, cookie sessions expire and logout revokes them'
   assert.match(cookie, /HttpOnly/);
   assert.match(cookie, /SameSite=Lax/);
   assert.doesNotMatch(cookie, /; Secure/);
-  const session = (await pool.query('SELECT * FROM sessions')).rows[0];
-  assert.ok(new Date(session.expires_at) - Date.now() > 89 * 86400000);
+  assert.match(cookie, /Max-Age=34560000/);
+  const session = (await pool.query("SELECT *, expires_at = 'infinity' AS forever FROM sessions")).rows[0];
+  assert.equal(session.forever, true);
   assert.notEqual(session.id, cookie.split(';')[0].split('=')[1]);
   const me = await browser.get('/api/me').expect(200);
   assert.deepEqual(me.body, { user: first, teammate: second });
+  // Each app load renews the cookie so a browser session never lapses.
+  const renewed = me.headers['set-cookie']?.[0] ?? '';
+  assert.equal(renewed.split(';')[0], cookie.split(';')[0]);
+  assert.match(renewed, /Max-Age=34560000/);
+  assert.match(renewed, /HttpOnly/);
+  const tokenMe = await request(app).get('/api/me').set('Authorization', `Bearer ${firstToken}`).expect(200);
+  assert.equal(tokenMe.headers['set-cookie'], undefined);
   await browser.post('/api/auth/logout').expect(200, { ok: true });
   await browser.get('/api/me').expect(401);
   await request(app).get('/api/me').set('Cookie', cookie.split(';')[0]).expect(401);

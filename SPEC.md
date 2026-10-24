@@ -34,7 +34,7 @@ SPEC.md               this file
     otherwise the seed generates random passwords and prints them once.
 - Passwords hashed with bcrypt (`bcryptjs`).
 - Browser auth: `POST /api/auth/login` sets an httpOnly, SameSite=Lax cookie `todoer_session`
-  (opaque random id stored in a `sessions` table, 90-day expiry). Logout deletes it.
+  (opaque random id stored in a `sessions` table, never expires; the 400-day cookie is re-issued by `GET /api/me` so it never lapses). Logout deletes it. API tokens never expire until revoked.
   Cookies use Secure when `COOKIE_SECURE=true` or `NODE_ENV=production`; otherwise it is off for local development.
 - Agent auth: `Authorization: Bearer <token>`. Each user can create personal API tokens
   (stored as sha256 hashes; plaintext shown once on creation). The seed creates one token per user

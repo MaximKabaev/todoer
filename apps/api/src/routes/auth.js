@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { pool, transaction } from '../db.js';
-import { authenticate, cookieName, cookieOptions, dummyPassword, newToken, publicUser, sessionHash, sessionLifetime, tokenHash, userColumns } from '../auth.js';
+import { authenticate, cookieName, cookieOptions, dummyPassword, newToken, publicUser, sessionHash, cookieLifetime, tokenHash, userColumns } from '../auth.js';
 import { HttpError } from '../lib/errors.js';
 import { id, z } from '../lib/validation.js';
 
@@ -30,9 +30,9 @@ authRouter.post('/auth/login', async (req, res) => {
   const secret = randomBytes(32).toString('base64url');
   await transaction(async (db) => {
     await db.query('DELETE FROM sessions WHERE expires_at <= now()');
-    await db.query('INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)', [sessionHash(secret), user.id, new Date(now + sessionLifetime)]);
+    await db.query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, 'infinity')", [sessionHash(secret), user.id]);
   });
-  res.cookie(cookieName, secret, { ...cookieOptions(), maxAge: sessionLifetime }).json({ user: publicUser(user) });
+  res.cookie(cookieName, secret, { ...cookieOptions(), maxAge: cookieLifetime }).json({ user: publicUser(user) });
 });
 
 authRouter.use(authenticate);
@@ -40,7 +40,10 @@ authRouter.post('/auth/logout', async (req, res) => {
   if (req.sessionId) await pool.query('DELETE FROM sessions WHERE id = $1', [req.sessionId]);
   res.clearCookie(cookieName, cookieOptions()).json({ ok: true });
 });
-authRouter.get('/me', (req, res) => res.json({ user: req.user, teammate: req.teammate ?? null }));
+authRouter.get('/me', (req, res) => {
+  if (req.sessionSecret) res.cookie(cookieName, req.sessionSecret, { ...cookieOptions(), maxAge: cookieLifetime });
+  res.json({ user: req.user, teammate: req.teammate ?? null });
+});
 authRouter.get('/users', (req, res) => res.json({ users: req.users }));
 authRouter.patch('/me', async (req, res) => {
   const body = z.object({

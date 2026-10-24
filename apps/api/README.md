@@ -27,7 +27,7 @@ If the credentials file is lost, existing password hashes and tokens cannot be r
 Set `PUBLIC_API_URL` to the preferred direct API origin to keep all agent examples correct even
 when the Next proxy sends a localhost Host header. Without it, the guide derives its base from the request
 protocol and Host and includes local development hints.
-Sessions last 90 days; API tokens are SHA-256 hashed and cookie secrets are HMAC hashed at rest.
+Browser sessions never expire (the 400-day cookie is renewed on every app load via GET /api/me); agent tokens never expire until revoked; API tokens are SHA-256 hashed and cookie secrets are HMAC hashed at rest.
 Rotating `SESSION_SECRET` invalidates existing browser sessions. Failed logins are limited to 20 per IP per 15 minutes.
 Session cookies have `Secure` when `COOKIE_SECURE=true` or `NODE_ENV=production`; localhost defaults to off.
 Forwarded client IP and protocol headers are trusted only from loopback connections (`127.0.0.1` / `::1`).

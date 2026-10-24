@@ -8,7 +8,9 @@ export const publicUser = (user) => ({ id: user.id, username: user.username, dis
 export const tokenHash = (secret) => createHash('sha256').update(secret).digest('hex');
 export const newToken = () => `tdr_${randomBytes(32).toString('base64url')}`;
 export const cookieName = 'todoer_session';
-export const sessionLifetime = 90 * 24 * 60 * 60 * 1000;
+// Sessions never expire server-side. Browsers cap cookies at 400 days, so GET /api/me
+// (called on every app load) re-issues the cookie to keep it alive indefinitely.
+export const cookieLifetime = 400 * 24 * 60 * 60 * 1000;
 export const cookieOptions = () => ({
   httpOnly: true, sameSite: 'lax', path: '/',
   secure: process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production',
@@ -43,6 +45,7 @@ export async function authenticate(req, res, next) {
     if (secret) {
       const { rows } = await pool.query('SELECT user_id FROM sessions WHERE id = $1 AND expires_at > now()', [req.sessionId]);
       userId = rows[0]?.user_id;
+      if (userId) req.sessionSecret = secret;
     }
   }
   if (!userId) throw new HttpError(401, 'unauthorized');
