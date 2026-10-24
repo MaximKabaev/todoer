@@ -108,9 +108,6 @@ function Login() {
             )}
           </button>
         </form>
-        <div className="login-footnote">
-          <span className="status-dot" /> Just the two of you. Always in sync.
-        </div>
       </section>
       <span className="login-wordmark">
         todoer<span>.</span>

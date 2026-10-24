@@ -1,6 +1,6 @@
 # todoer web
 
-A shared task space for two people, built with Next.js 16.4.3, React 19, TypeScript, SWR, Lucide icons, and custom CSS. All application code and the development mock live in `apps/web`.
+The todoer web app, built with Next.js 16.4.3, React 19, TypeScript, SWR, Lucide icons, and custom CSS. All application code and the development mock live in `apps/web`.
 
 ## Run with the real API
 

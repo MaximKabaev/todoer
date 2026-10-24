@@ -150,13 +150,6 @@ export function Navigation({
       ) : (
         <>
           <Brand />
-          <div className="workspace-label">
-            <span className="status-dot" /> A space for two{" "}
-            <span className="workspace-avatars">
-              <Avatar user={user} small />
-              <Avatar user={teammate} small />
-            </span>
-          </div>
         </>
       )}
       <ProjectSelector
@@ -238,12 +231,6 @@ export function Navigation({
             </span>
             <Settings2 size={17} />
           </Link>
-        </div>
-      )}
-      {home && (
-        <div className="home-footer">
-          <span className="status-dot" /> Shared with {teammate.displayName}
-          <span>Made for the two of you.</span>
         </div>
       )}
     </aside>
