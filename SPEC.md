@@ -136,6 +136,9 @@ Unknown body fields are ignored. Everything is camelCase.
   - If `assignees` is omitted entirely → defaults to `[me]`. If `[]` → unassigned.
   - multipart: same fields as form fields (`assignees` / `tags` may be repeated fields or a JSON
     array string) plus one or more `files` parts (images) → creates the task with attachments in one request.
+    To explicitly leave a multipart task unassigned, send `assignees=""` (for example,
+    `formData.append('assignees', '')`) or `assignees="[]"`; both mean an empty array.
+    Omitting the field entirely still defaults to `[me]`.
     This powers drag-and-drop: drop images → one request → one task.
   → `201 { task }`
 - `PATCH /api/tasks/:id` — any subset of the POST JSON fields. `assignees`/`tags` replace the full set.

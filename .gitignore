@@ -3,5 +3,6 @@ node_modules/
 .env
 .env.local
 apps/api/uploads/
+apps/api/.seed-credentials.txt
 *.log
 .DS_Store
