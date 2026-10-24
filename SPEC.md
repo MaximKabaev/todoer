@@ -25,7 +25,7 @@ SPEC.md               this file
 
 - Exactly two seeded users. No signup UI or endpoint.
   - `maxim` — display name "Maxim" (the owner)
-  - `teammate` — display name "Teammate"
+  - `german` — display name "German" (the teammate)
   - Usernames/display names/passwords come from env when present
     (`SEED_USER1_USERNAME`, `SEED_USER1_NAME`, `SEED_USER1_PASSWORD`, same for `USER2`);
     otherwise the seed generates random passwords and prints them once.
