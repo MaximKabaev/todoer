@@ -347,50 +347,64 @@ export function TaskDetail({
             onBlur={flush}
           />
           <div className="detail-section">
-            <label className="field-label">ASSIGNED TO</label>
-            <div className="assignee-toggles">
-              {users.map((u) => (
+            {task.list === "later" ? (
+              <div className="later-planning">
+                <p>Later items aren’t assigned yet.</p>
                 <button
-                  key={u.id}
-                  className={
-                    task.assignees.some((a) => a.id === u.id)
-                      ? "is-assigned"
-                      : ""
-                  }
-                  onClick={() =>
-                    patch({
-                      assignees: task.assignees.some((a) => a.id === u.id)
-                        ? task.assignees
-                            .filter((a) => a.id !== u.id)
-                            .map((a) => a.id)
-                        : [...task.assignees.map((a) => a.id), u.id],
-                    })
-                  }
-                  aria-pressed={task.assignees.some((a) => a.id === u.id)}
+                  className="primary-button"
+                  onClick={() => patch({ list: "now", assignees: ["me"] })}
                 >
-                  <Avatar user={u} />
-                  <span>
-                    {u.displayName}
-                    {u.id === users[0].id && <small> (you)</small>}
-                  </span>
-                  {task.assignees.some((a) => a.id === u.id) && (
-                    <Check size={14} />
-                  )}
+                  Plan it → Now
                 </button>
-              ))}
-            </div>
-            <button
-              className="handoff-button"
-              onClick={() =>
-                patch({ assignees: [users[take ? 0 : 1].id] }, true)
-              }
-            >
-              <Send size={15} />
-              <span>
-                {take ? "Take it" : `Pass to ${users[1].displayName}`}
-              </span>
-              <ArrowUpRight size={16} />
-            </button>
+              </div>
+            ) : (
+              <>
+                <label className="field-label">ASSIGNED TO</label>
+                <div className="assignee-toggles">
+                  {users.map((u) => (
+                    <button
+                      key={u.id}
+                      className={
+                        task.assignees.some((a) => a.id === u.id)
+                          ? "is-assigned"
+                          : ""
+                      }
+                      onClick={() =>
+                        patch({
+                          assignees: task.assignees.some((a) => a.id === u.id)
+                            ? task.assignees
+                                .filter((a) => a.id !== u.id)
+                                .map((a) => a.id)
+                            : [...task.assignees.map((a) => a.id), u.id],
+                        })
+                      }
+                      aria-pressed={task.assignees.some((a) => a.id === u.id)}
+                    >
+                      <Avatar user={u} />
+                      <span>
+                        {u.displayName}
+                        {u.id === users[0].id && <small> (you)</small>}
+                      </span>
+                      {task.assignees.some((a) => a.id === u.id) && (
+                        <Check size={14} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="handoff-button"
+                  onClick={() =>
+                    patch({ assignees: [users[take ? 0 : 1].id] }, true)
+                  }
+                >
+                  <Send size={15} />
+                  <span>
+                    {take ? "Take it" : `Pass to ${users[1].displayName}`}
+                  </span>
+                  <ArrowUpRight size={16} />
+                </button>
+              </>
+            )}
           </div>
           <div className="detail-fields">
             <div className="detail-field">

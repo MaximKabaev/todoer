@@ -232,6 +232,8 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
       .finally(() => nav.navigate("/my", { replace: true }));
   }, [nav, setActiveProject]);
   async function createCapture(input: TaskInput, files: File[] = []) {
+    if (selection.kind === "later" || input.list === "later")
+      input = { ...input, list: "later", assignees: [], addAssignees: [] };
     // /api/me is already cached: the optimistic row never waits for a lookup.
     const projectId = user.activeProjectId;
     try {
@@ -323,7 +325,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
         segment === 2 ? 0 : segment,
       );
     }
-    if (captureListUrl !== listUrl) nav.navigate(captureListUrl);
+    if (captureListUrl !== listUrl && !selectedId) nav.navigate(captureListUrl);
     const value = {
       ...context,
       ...input,
@@ -339,7 +341,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     if (open) {
       // Let an automatic filter reset commit before pushing the inspector, so
       // browser Back returns to the same list that is visible behind the task.
-      if (captureListUrl !== listUrl)
+      if (captureListUrl !== listUrl && !selectedId)
         setCaptureToOpen({ task, background: captureListUrl, from: listUrl });
       else openTask(task);
     }
@@ -837,6 +839,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           </div>
           <Composer
             ref={composer}
+            later={selection.kind === "later"}
             users={[user, teammate]}
             onCreate={create}
             onImages={(files) => upload(files)}

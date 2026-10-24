@@ -10,12 +10,16 @@ export const Composer = forwardRef<
     onCreate: (input: TaskInput, open?: boolean) => Promise<unknown>;
     onImages: (files: File[]) => Promise<unknown>;
     uploading: boolean;
+    later?: boolean;
   }
->(function Composer({ users, onCreate, onImages, uploading }, ref) {
+>(function Composer(
+  { users, onCreate, onImages, uploading, later = false },
+  ref,
+) {
   const [value, setValue] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const localRef = useRef<HTMLInputElement | null>(null);
-  const parsed = parseQuickSyntax(value, users);
+  const parsed = parseQuickSyntax(value, users, { assign: !later });
   async function submit(open = false) {
     if (!value.trim() && !open) return;
     const captured = value;
@@ -116,7 +120,15 @@ export const Composer = forwardRef<
       <div className="capture-hint">
         <span>Just type. We’ll keep it here.</span>
         <span>
-          <b>#</b> tag <b>@</b> assign <b>!</b> priority
+          <b>#</b> tag{" "}
+          {later ? (
+            "· Not assigned on Later ·"
+          ) : (
+            <>
+              <b>@</b> assign{" "}
+            </>
+          )}{" "}
+          <b>!</b> priority
         </span>
       </div>
     </div>

@@ -36,7 +36,12 @@ export function TaskRow({
   onHandoff: () => void;
   handoffLabel: string;
 }) {
-  const swipe = useSwipe(onToggle, !task.id.startsWith("pending-"));
+  const later = task.list === "later";
+  const swipe = useSwipe(
+    onToggle,
+    !task.id.startsWith("pending-"),
+    later ? 92 : 184,
+  );
   const day = useLocalDay();
   const placeholder = task.attachments.length ? "Image" : "New task";
   const [editing, setEditing] = useState(false);
@@ -47,7 +52,7 @@ export function TaskRow({
     if (editing) input.current?.focus();
   }, [editing]);
   const hasMeta =
-    task.assignees.length > 0 ||
+    (!later && task.assignees.length > 0) ||
     task.tags.length > 0 ||
     task.dueDate ||
     task.project ||
@@ -65,17 +70,23 @@ export function TaskRow({
       >
         <Check size={24} />
       </div>
-      <div className="swipe-actions" aria-hidden={!swipe.open}>
-        <button
-          tabIndex={swipe.open ? 0 : -1}
-          onClick={() => {
-            swipe.close();
-            onHandoff();
-          }}
-        >
-          <Send size={19} />
-          <span>{handoffLabel}</span>
-        </button>
+      <div
+        className="swipe-actions"
+        aria-hidden={!swipe.open}
+        style={{ width: later ? 92 : 184 }}
+      >
+        {!later && (
+          <button
+            tabIndex={swipe.open ? 0 : -1}
+            onClick={() => {
+              swipe.close();
+              onHandoff();
+            }}
+          >
+            <Send size={19} />
+            <span>{handoffLabel}</span>
+          </button>
+        )}
         <button
           tabIndex={swipe.open ? 0 : -1}
           onClick={() => {
@@ -176,7 +187,7 @@ export function TaskRow({
           )}
           {hasMeta && (
             <div className="task-meta">
-              {task.assignees.length > 0 && (
+              {!later && task.assignees.length > 0 && (
                 <span
                   className="assignee-stack"
                   role="img"

@@ -3,6 +3,7 @@ export type QuickResult = { title: string; fields: TaskInput; chips: string[] };
 export function parseQuickSyntax(
   raw: string,
   users: [User, User],
+  { assign = true }: { assign?: boolean } = {},
 ): QuickResult {
   const fields: TaskInput = {};
   const chips: string[] = [];
@@ -36,7 +37,7 @@ export function parseQuickSyntax(
         ) === index,
     )
     .sort((a, b) => b.name.length - a.name.length);
-  for (const alias of aliases) {
+  for (const alias of assign ? aliases : []) {
     const escaped = alias.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const expression = new RegExp(`(^|\\s)@${escaped}(?=\\s|$)`, "gi");
     title = title.replace(expression, (_, space: string) => {

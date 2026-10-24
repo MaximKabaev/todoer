@@ -2,9 +2,12 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { useMedia } from "./use-media";
 
-const actionsWidth = 184;
 // Lock direction before capturing the pointer; pan-y remains native scrolling.
-export function useSwipe(onComplete: () => void, enabled = true) {
+export function useSwipe(
+  onComplete: () => void,
+  enabled = true,
+  actionsWidth = 184,
+) {
   const mobile = useMedia("(max-width: 760px)");
   const reduced = useMedia("(prefers-reduced-motion: reduce)");
   const [x, setX] = useState(0);

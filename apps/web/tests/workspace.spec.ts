@@ -474,6 +474,7 @@ test("capture leaves the From teammate filter and appears immediately in All", a
   await page
     .getByRole("button", { name: "From Teammate", exact: true })
     .click();
+  await expect(page).toHaveURL(/\/my\?show=from-teammate$/);
   await page.route("**/api/tasks", async (route) => {
     if (route.request().method() === "POST")
       await new Promise((resolve) => setTimeout(resolve, 500));
