@@ -122,7 +122,7 @@ test('login is case-insensitive, cookie sessions expire and logout revokes them'
   assert.equal(session.forever, true);
   assert.notEqual(session.id, cookie.split(';')[0].split('=')[1]);
   const me = await browser.get('/api/me').expect(200);
-  assert.deepEqual(me.body, { user: { ...first, lastProjectId: null }, teammate: second });
+  assert.deepEqual(me.body, { user: { ...first, activeProjectId: null }, teammate: second });
   // Each app load renews the cookie so a browser session never lapses.
   const renewed = me.headers['set-cookie']?.[0] ?? '';
   assert.equal(renewed.split(';')[0], cookie.split(';')[0]);
@@ -183,7 +183,7 @@ test('remote clients cannot bypass the login rate limit by changing X-Forwarded-
 
 test('bearer tokens act as their owner, are hashed, and update last_used_at', async () => {
   const me = await api('get', '/api/me', secondToken).expect(200);
-  assert.deepEqual(me.body, { user: { ...second, lastProjectId: null }, teammate: first });
+  assert.deepEqual(me.body, { user: { ...second, activeProjectId: null }, teammate: first });
   const token = (await pool.query('SELECT token_hash, last_used_at FROM api_tokens WHERE user_id = $1', [second.id])).rows[0];
   assert.equal(token.token_hash, hash(secondToken));
   assert.ok(token.last_used_at);
@@ -492,6 +492,35 @@ test('counts match each view for each authenticated user', async () => {
   }
 });
 
+test('counts and tag counts can be scoped to one project', async () => {
+  const { project } = (await api('post', '/api/projects').send({ name: 'QA scoped counts' }).expect(201)).body;
+  const tag = `qa-scope-${randomUUID().slice(0, 8)}`;
+  const tasks = [];
+  try {
+    tasks.push(await create({ title: 'QA scoped mine', projectId: project.id, tags: [tag] }));
+    tasks.push(await create({ title: 'QA scoped later', projectId: project.id, list: 'later', assignees: [] }));
+    tasks.push(await create({ title: 'QA unscoped', tags: [tag] }));
+    const scoped = (await api('get', '/api/counts').query({ projectId: project.id }).expect(200)).body;
+    assert.deepEqual(scoped, { mine: 1, mineCreated: 1, mineFromTeammate: 0, teammate: 0, later: 1, unassigned: 0, completed: 0 });
+    for (const [key, view] of Object.entries({ mine: 'mine', later: 'later', unassigned: 'unassigned' })) {
+      const list = (await api('get', '/api/tasks').query({ view, projectId: project.id }).expect(200)).body.tasks;
+      assert.equal(scoped[key], list.length, key);
+    }
+    const all = (await api('get', '/api/counts').expect(200)).body;
+    assert.ok(all.mine >= 2);
+    const tagCount = (query) => api('get', '/api/tags').query(query).expect(200).then((r) => r.body.tags.find((t) => t.name === tag).count);
+    assert.equal(await tagCount({ projectId: project.id }), 1);
+    assert.equal(await tagCount({}), 2);
+    await api('get', '/api/counts').query({ projectId: 'nope' }).expect(400);
+  } finally {
+    for (const task of tasks) await api('delete', `/api/tasks/${task.id}`);
+    await api('delete', `/api/projects/${project.id}`);
+    const { tags } = (await api('get', '/api/tags').expect(200)).body;
+    const created = tags.find((t) => t.name === tag);
+    if (created) await api('delete', `/api/tags/${created.id}`);
+  }
+});
+
 test('agent instructions are public markdown, derive the request origin, and describe every endpoint', async () => {
   const result = await request(app).get('/api/agent').set('Host', 'localhost:3000').set('X-Forwarded-Proto', 'http').expect(200);
   assert.match(result.headers['content-type'], /^text\/markdown; charset=utf-8$/);
@@ -541,38 +570,38 @@ test('not found, invalid JSON, invalid UUID, and validation failures use consist
 });
 
 
-test('last project is an explicit per-user UI preference, validated and cleared on deletion', async () => {
-  const { project } = (await api('post', '/api/projects').send({ name: 'QA last project' }).expect(201)).body;
+test('active project is an explicit per-user UI preference, validated and cleared on deletion', async () => {
+  const { project } = (await api('post', '/api/projects').send({ name: 'QA active project' }).expect(201)).body;
   let task;
   try {
-    assert.equal((await api('get', '/api/me').expect(200)).body.user.lastProjectId, null);
-    assert.equal((await api('patch', '/api/me').send({ lastProjectId: project.id }).expect(200)).body.user.lastProjectId, project.id);
-    assert.equal((await api('get', '/api/me').expect(200)).body.user.lastProjectId, project.id);
-    assert.equal((await api('get', '/api/me', secondToken).expect(200)).body.user.lastProjectId, null);
-    for (const lastProjectId of ['invalid', randomUUID()]) {
-      await api('patch', '/api/me').send({ lastProjectId }).expect(400);
+    assert.equal((await api('get', '/api/me').expect(200)).body.user.activeProjectId, null);
+    assert.equal((await api('patch', '/api/me').send({ activeProjectId: project.id }).expect(200)).body.user.activeProjectId, project.id);
+    assert.equal((await api('get', '/api/me').expect(200)).body.user.activeProjectId, project.id);
+    assert.equal((await api('get', '/api/me', secondToken).expect(200)).body.user.activeProjectId, null);
+    for (const activeProjectId of ['invalid', randomUUID()]) {
+      await api('patch', '/api/me').send({ activeProjectId }).expect(400);
     }
     // Agent task calls neither apply nor change the preference.
     task = await create({ title: 'QA preference isolation' });
     assert.equal(task.projectId, null);
     await patch(task.id, { projectId: project.id });
     await patch(task.id, { projectId: null });
-    assert.equal((await api('get', '/api/me').expect(200)).body.user.lastProjectId, project.id);
+    assert.equal((await api('get', '/api/me').expect(200)).body.user.activeProjectId, project.id);
     await api('patch', '/api/me').send({ displayName: first.displayName }).expect(200);
-    assert.equal((await api('get', '/api/me').expect(200)).body.user.lastProjectId, project.id);
-    assert.equal((await api('patch', '/api/me').send({ lastProjectId: null }).expect(200)).body.user.lastProjectId, null);
-    await api('patch', '/api/me').send({ lastProjectId: project.id }).expect(200);
+    assert.equal((await api('get', '/api/me').expect(200)).body.user.activeProjectId, project.id);
+    assert.equal((await api('patch', '/api/me').send({ activeProjectId: null }).expect(200)).body.user.activeProjectId, null);
+    await api('patch', '/api/me').send({ activeProjectId: project.id }).expect(200);
     await api('delete', `/api/projects/${project.id}`, secondToken).expect(200);
-    assert.equal((await api('get', '/api/me').expect(200)).body.user.lastProjectId, null);
-    assert.equal((await api('get', '/api/me', secondToken).expect(200)).body.user.lastProjectId, null);
+    assert.equal((await api('get', '/api/me').expect(200)).body.user.activeProjectId, null);
+    assert.equal((await api('get', '/api/me', secondToken).expect(200)).body.user.activeProjectId, null);
     const users = (await api('get', '/api/users').expect(200)).body.users;
-    assert.ok(users.every((u) => !('lastProjectId' in u)));
-    assert.ok(!('lastProjectId' in task.createdBy));
+    assert.ok(users.every((u) => !('activeProjectId' in u)));
+    assert.ok(!('activeProjectId' in task.createdBy));
   } finally {
     if (task) await api('delete', `/api/tasks/${task.id}`);
     await api('delete', `/api/projects/${project.id}`);
-    await api('patch', '/api/me').send({ lastProjectId: null });
-    await api('patch', '/api/me', secondToken).send({ lastProjectId: null });
+    await api('patch', '/api/me').send({ activeProjectId: null });
+    await api('patch', '/api/me', secondToken).send({ activeProjectId: null });
   }
 });
 

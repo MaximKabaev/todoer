@@ -183,7 +183,12 @@ curl -sS -X DELETE "$TODOER_BASE/api/projects/PROJECT_UUID" -H "Authorization: B
 curl -sS -X DELETE "$TODOER_BASE/api/tags/TAG_UUID" -H "Authorization: Bearer $TODOER_TOKEN"
 curl -sS -X DELETE "$TODOER_BASE/api/tokens/TOKEN_UUID" -H "Authorization: Bearer $TODOER_TOKEN"
 ```
-`lastProjectId` is a UI preference; agents should ignore it when creating tasks unless the human asks.
+## Active project
+
+Each person works inside one **active project**, chosen in the web app's menu. `GET /api/me` returns it as `user.activeProjectId` (`null` = All projects). Treat it as the default context:
+- When creating a task, set `projectId` to the human's `activeProjectId` unless they name another project (or it is null).
+- When the human asks "what's on my plate" etc., scope lists with `projectId=<activeProjectId>` and mention that other projects exist if relevant. `GET /api/counts?projectId=` and `GET /api/tags?projectId=` scope counts the same way.
+- Do not change `activeProjectId` (`PATCH /api/me`) unless the human explicitly asks to switch projects.
 
 When reporting a task you created or found, include its `webUrl` as a clickable Markdown link,
 for example `[Task title](webUrl)`. This opens the task directly in the private web app.

@@ -100,21 +100,18 @@ Images only (png, jpeg, gif, webp, heic/heif, svg is NOT allowed). Max 20 MB per
 Creating a task inside a view pre-fills sensible context (assignee, list, project) but **nothing is
 required** — an empty task is valid.
 
-The UI defaults new text, empty, drop, paste, and photo tasks to the current project view,
-then the current user's `lastProjectId` if it still exists, then the only project if exactly
-one exists, otherwise no project. Wait for the project catalog before enabling capture;
-validate the selection against current projects before submitting. Teammate views retain
-teammate assignment. A deleted preference falls back without an error.
+### Active project (site-wide)
 
-Only explicit `PATCH /api/me` changes `lastProjectId` (unknown project: 400; null clears it).
-Deleting a project also nulls references via the foreign key. Task POST/PATCH never changes
-this preference, and task POST never defaults `projectId` on the server.
-The UI records last-used when picking a project (including No project) in task details,
-creating in a project view, or changing the composer project picker to a different selection.
-Automatically applying a default never records it. Outside project views the composer shows
-a color-dot, emoji, name chip with a compact project picker and an × to omit the project for
-one task only. The next capture uses the default again; × does not change the preference.
-Project controls support keyboard/touch and 44px mobile targets without disturbing typing focus.
+Each user has one **active project** (`users.active_project_id`, `null` = All projects), chosen in a
+single selector in the app menu. It is the only project control in the main UI:
+- Every view (My Tasks and its segments, the teammate's list, Later, Unassigned, Completed, tags,
+  search) and all sidebar counts are scoped to it via `projectId=` on `GET /api/tasks`,
+  `GET /api/counts`, and `GET /api/tags`. "All projects" omits the filter.
+- New tasks (typed, `+`, drop, paste, photo) get the active project; with "All projects" they get none.
+- Only `PATCH /api/me { activeProjectId }` changes it (unknown project: 400; null = All). Deleting the
+  project nulls it via the foreign key. Task POST/PATCH never change it, and the server never
+  defaults `projectId` on task POST, so API clients stay explicit.
+- A task's own project can still be changed in its detail panel (moving a task between projects).
 
 "Pass on / hand off" = exclusive reassignment to the chosen recipient (default: my teammate).
 All previous assignees are replaced with exactly `[to]`, including when `to` is `"me"`, or the
@@ -132,8 +129,8 @@ Unknown body fields are ignored. Everything is camelCase.
 ### Auth
 - `POST /api/auth/login` `{ username, password }` → `{ user }` + sets cookie. Username is case-insensitive.
 - `POST /api/auth/logout` → `{ ok: true }`
-- `GET /api/me` → `{ user, teammate }` (current `user` includes `lastProjectId: uuid | null`)
-- `PATCH /api/me` `{ displayName?, password?, currentPassword?, lastProjectId?: uuid | null }` → `{ user }` (password change requires currentPassword)
+- `GET /api/me` → `{ user, teammate }` (current `user` includes `activeProjectId: uuid | null`)
+- `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null }` → `{ user }` (password change requires currentPassword)
 - `GET /api/users` → `{ users: User[] }` (both users)
 - `GET /api/tokens` → `{ tokens: [{ id, name, createdAt, lastUsedAt }] }` (mine only)
 - `POST /api/tokens` `{ name? }` → `{ token: { id, name, createdAt }, secret: "tdr_..." }` (secret shown once)
@@ -189,7 +186,7 @@ Unknown body fields are ignored. Everything is camelCase.
 - `PATCH /api/tags/:id`, `DELETE /api/tags/:id`
 
 ### Counts (sidebar badges)
-- `GET /api/counts` → `{ mine, mineCreated, mineFromTeammate, teammate, later, unassigned, completed }`
+- `GET /api/counts?projectId=` (optional scope) → `{ mine, mineCreated, mineFromTeammate, teammate, later, unassigned, completed }`
 
 ### Task JSON shape
 ```json

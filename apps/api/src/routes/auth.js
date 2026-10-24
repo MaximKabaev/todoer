@@ -48,7 +48,7 @@ authRouter.get('/users', (req, res) => res.json({ users: req.users }));
 authRouter.patch('/me', async (req, res) => {
   const body = z.object({
     displayName: z.string().trim().min(1).max(200).optional(),
-    lastProjectId: id.nullable().optional(),
+    activeProjectId: id.nullable().optional(),
     password: z.string().min(1).max(72).optional(), currentPassword: z.string().max(1000).optional(),
   }).parse(req.body);
   const user = await transaction(async (db) => {
@@ -60,9 +60,9 @@ authRouter.patch('/me', async (req, res) => {
       hash = await bcrypt.hash(body.password, 12);
     }
     const { rows } = await db.query(`UPDATE users SET display_name = COALESCE($2, display_name), password_hash = COALESCE($3, password_hash),
-      last_project_id = CASE WHEN $4 THEN $5::uuid ELSE last_project_id END
-      WHERE id = $1 RETURNING ${userColumns}, last_project_id AS "lastProjectId"`,
-    [req.user.id, body.displayName, hash, body.lastProjectId !== undefined, body.lastProjectId ?? null]);
+      active_project_id = CASE WHEN $4 THEN $5::uuid ELSE active_project_id END
+      WHERE id = $1 RETURNING ${userColumns}, active_project_id AS "activeProjectId"`,
+    [req.user.id, body.displayName, hash, body.activeProjectId !== undefined, body.activeProjectId ?? null]);
     return rows[0];
   });
   res.json({ user });

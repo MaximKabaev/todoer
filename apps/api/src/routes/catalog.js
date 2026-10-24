@@ -35,10 +35,14 @@ catalogRouter.delete('/projects/:id', async (req, res) => {
   if (!rowCount) throw new HttpError(404, 'Project not found');
   res.json({ ok: true });
 });
+// Optional ?projectId=<uuid> scopes counts to one project (the UI's active project).
+const scopeProject = (req) => (req.query.projectId === undefined ? null : id.parse(req.query.projectId));
+
 catalogRouter.get('/tags', async (req, res) => {
   const { rows } = await pool.query(`SELECT g.id, g.name, g.color,
-    (SELECT count(*)::int FROM task_tags tt JOIN tasks t ON t.id = tt.task_id WHERE tt.tag_id = g.id AND NOT t.done) AS count
-    FROM tags g ORDER BY lower(g.name)`);
+    (SELECT count(*)::int FROM task_tags tt JOIN tasks t ON t.id = tt.task_id
+      WHERE tt.tag_id = g.id AND NOT t.done AND ($1::uuid IS NULL OR t.project_id = $1)) AS count
+    FROM tags g ORDER BY lower(g.name)`, [scopeProject(req)]);
   res.json({ tags: rows });
 });
 catalogRouter.post('/tags', async (req, res) => {
@@ -64,6 +68,7 @@ catalogRouter.get('/counts', async (req, res) => {
     SELECT t.*, EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = $1) AS mine,
       EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = $2) AS teammate,
       NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id) AS unassigned FROM tasks t
+      WHERE $3::uuid IS NULL OR t.project_id = $3
     ) SELECT
       count(*) FILTER (WHERE NOT done AND list = 'now' AND mine)::int AS mine,
       count(*) FILTER (WHERE NOT done AND list = 'now' AND mine AND created_by = $1)::int AS "mineCreated",
@@ -71,6 +76,6 @@ catalogRouter.get('/counts', async (req, res) => {
       count(*) FILTER (WHERE NOT done AND list = 'now' AND teammate)::int AS teammate,
       count(*) FILTER (WHERE NOT done AND list = 'later')::int AS later,
       count(*) FILTER (WHERE NOT done AND list = 'now' AND unassigned)::int AS unassigned,
-      count(*) FILTER (WHERE done)::int AS completed FROM flags`, [req.user.id, req.teammate?.id ?? null]);
+      count(*) FILTER (WHERE done)::int AS completed FROM flags`, [req.user.id, req.teammate?.id ?? null, scopeProject(req)]);
   res.json(counts);
 });
