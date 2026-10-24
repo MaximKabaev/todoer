@@ -65,11 +65,25 @@ User identifiers in assignees, createdBy, filters, and `to`: UUID, username, dis
 | "Put it on the later list" / "future changes" | PATCH `/api/tasks/:id` with `{ "list": "later" }` |
 | "What's on my plate" | GET `/api/tasks?view=mine` |
 | "What did German give me" | GET `/api/tasks?view=mine_from_teammate` (tasks created by the teammate and assigned to me) |
+| "What's in that screenshot?" / "look at the image on X" | GET the task, download each `attachments[].url` with the Bearer header, then view the files |
 | "Remove/delete X" | Search with `q=`, identify the task, confirm with the human, then DELETE `/api/tasks/:id` |
 
 Handoff is exclusive reassignment: after either handoff call, only the recipient is assigned, including when the task was shared or unassigned. Resolve named people against GET `/api/users` and the token owner's identity.
 
 Present tasks concisely, one line per task: title (use "Untitled" if empty), assignees (or "Unassigned"), tags, due date if present, and list (Now/Later). For example: `Fix login bug — Maxim, German · #bug · due 2026-12-01 · Now`. Avoid dumping raw JSON unless requested. `q=` searches both title and notes, case-insensitively; search before creating a task to avoid duplicates.
+
+## Images
+
+Tasks often carry screenshots or photos in `attachments`, and image-only tasks are common: someone dropped a screenshot without typing a title. **For those, the image is the task.** Look at it before summarising, acting on, or deleting the task.
+
+- Each attachment has a relative `url` (`/api/attachments/<id>/file`). Prefix it with the base URL and send the same Bearer header; it returns the raw image bytes.
+- Download to a temporary file, then open that file with your image-viewing / file-reading tool to see it:
+
+```sh
+curl -sS "$TODOER_BASE/api/attachments/ATTACHMENT_UUID/file" -H "Authorization: Bearer $TODOER_TOKEN" -o /tmp/todoer-ATTACHMENT_UUID.png
+```
+
+- Use the attachment's `mimeType` for the file extension (png, jpg, gif, webp, heic). When listing tasks, mention image counts (e.g. `· 2 images`). For an untitled task, describe it from the image, and offer to set a title.
 
 ## Task example
 
