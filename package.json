@@ -1,0 +1,14 @@
+{
+  "name": "todoer",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "npm run dev --workspace=@todoer/api & npm run dev --workspace=@todoer/web & wait",
+    "dev:api": "npm run dev --workspace=@todoer/api",
+    "dev:web": "npm run dev --workspace=@todoer/web",
+    "build": "npm run build --workspace=@todoer/web",
+    "db:migrate": "npm run db:migrate --workspace=@todoer/api",
+    "db:seed": "npm run db:seed --workspace=@todoer/api",
+    "test": "npm run test --workspace=@todoer/api"
+  }
+}

@@ -1,0 +1,217 @@
+# todoer — product & technical spec
+
+A dead-simple shared todo app for exactly **two people** (the owner and their teammate).
+This document is the contract between the backend (`apps/api`) and the frontend (`apps/web`).
+If you need to deviate, update this file in the same change and say why.
+
+## Monorepo layout
+
+```
+package.json          npm workspaces root ("apps/*")
+apps/api              @todoer/api  — Node.js (plain JavaScript, ESM), Express 5, pg, Postgres 16
+apps/web              @todoer/web  — Next.js (App Router, TypeScript, React)
+SPEC.md               this file
+```
+
+- Node 24, npm 11. Use npm workspaces, no pnpm/yarn.
+- API listens on `http://localhost:4000`. Web listens on `http://localhost:3000`.
+- The web app proxies `/api/*` → `http://localhost:4000/api/*` via Next `rewrites()` so the browser
+  only ever talks to its own origin (no CORS, cookies just work). The API base for server-side
+  rewrites comes from env `API_URL` (default `http://localhost:4000`).
+- `apps/api/.env` already exists (gitignored) with `DATABASE_URL`, `API_PORT`, `SESSION_SECRET`.
+  The database `todoer` exists on the local Postgres and is owned by role `todoer`.
+
+## Users & auth
+
+- Exactly two seeded users. No signup UI or endpoint.
+  - `maxim` — display name "Maxim" (the owner)
+  - `teammate` — display name "Teammate"
+  - Usernames/display names/passwords come from env when present
+    (`SEED_USER1_USERNAME`, `SEED_USER1_NAME`, `SEED_USER1_PASSWORD`, same for `USER2`);
+    otherwise the seed generates random passwords and prints them once.
+- Passwords hashed with bcrypt (`bcryptjs`).
+- Browser auth: `POST /api/auth/login` sets an httpOnly, SameSite=Lax cookie `todoer_session`
+  (opaque random id stored in a `sessions` table, 90-day expiry). Logout deletes it.
+- Agent auth: `Authorization: Bearer <token>`. Each user can create personal API tokens
+  (stored as sha256 hashes; plaintext shown once on creation). The seed creates one token per user
+  and prints it. A request authenticated by token acts **as that user** (so "me" = token owner).
+- Every endpoint except `POST /api/auth/login`, `GET /api/health` and `GET /api/agent` requires auth.
+  401 → `{ "error": "unauthorized" }`.
+- Both users can see and edit **everything**. There is no private data between them.
+
+## Domain model
+
+### Task
+| field | type | notes |
+|---|---|---|
+| id | uuid | |
+| title | text | may be empty string. **No field is ever required.** |
+| notes | text | may be empty |
+| done | boolean | default false |
+| doneAt | timestamptz \| null | |
+| list | `"now"` \| `"later"` | `later` = the shared "Future changes / things to look at" list. default `now` |
+| dueDate | date (`YYYY-MM-DD`) \| null | |
+| priority | 0..3 | 0 none (default), 1 low, 2 medium, 3 high |
+| projectId | uuid \| null | |
+| createdBy | user id | set server-side from the authenticated user |
+| assignees | user[] | 0, 1 or 2 users. Both people may be assigned to the same task. |
+| tags | tag[] | |
+| attachments | attachment[] | images |
+| position | double | manual ordering within lists; new tasks go on top |
+| createdAt / updatedAt | timestamptz | |
+
+### Project
+`id, name, color (one of: blue, purple, pink, red, orange, yellow, green, teal, gray), emoji (nullable text), position, createdAt`.
+Projects are shared. Deleting a project sets its tasks' `projectId` to null.
+
+### Tag
+`id, name (unique, case-insensitive), color`. Created on the fly by name. Shared.
+
+### Attachment
+`id, taskId, filename, mimeType, size, width?, height?, url, createdAt`.
+Files stored on disk under `apps/api/uploads/` (gitignored); `url` = `/api/attachments/:id/file`
+(auth required, served with correct content-type and long cache headers).
+Images only (png, jpeg, gif, webp, heic/heif, svg is NOT allowed). Max 20 MB per file.
+
+### User (public shape)
+`{ id, username, displayName, color }` — color is a UI accent (`blue` for user1, `orange` for user2).
+
+## Views (what the UI shows)
+
+"Me" = logged-in user, "Teammate" = the other user.
+
+1. **My Tasks** — `list=now`, not done, assigned to me. Two segments:
+   - *Made by me* (`createdBy = me`)
+   - *From teammate* (`createdBy = teammate`)
+   - plus an "All" segment showing both.
+2. **Teammate's Tasks** — `list=now`, not done, assigned to teammate. Fully viewable and editable,
+   either person can add to it (adding there pre-assigns the teammate).
+3. **Later** — the shared "Future changes / things to look at" list (`list=later`, regardless of assignee).
+4. **Unassigned** — `list=now`, no assignees (only shown if non-empty, or always as a small item — UI's call).
+5. **Projects** — each project shows its tasks (all lists, grouped Now / Later).
+6. **Completed** — done tasks, newest first.
+7. Tag filter — tapping a tag shows tasks with that tag.
+
+Creating a task inside a view pre-fills sensible context (assignee, list, project) but **nothing is
+required** — an empty task is valid.
+
+"Pass on / hand off" = move a task from me to my teammate (remove me, add them). If both are
+assigned, handing off leaves only the teammate.
+
+## REST API
+
+All JSON. Timestamps ISO 8601. Errors: `{ "error": string, "details"?: any }` with proper status codes.
+Unknown body fields are ignored. Everything is camelCase.
+
+### Meta
+- `GET /api/health` → `{ ok: true }`
+- `GET /api/agent` → **text/markdown** instructions for AI agents (no auth). See "Agent instructions".
+
+### Auth
+- `POST /api/auth/login` `{ username, password }` → `{ user }` + sets cookie. Username is case-insensitive.
+- `POST /api/auth/logout` → `{ ok: true }`
+- `GET /api/me` → `{ user, teammate }`
+- `PATCH /api/me` `{ displayName?, password?, currentPassword? }` → `{ user }` (password change requires currentPassword)
+- `GET /api/users` → `{ users: User[] }` (both users)
+- `GET /api/tokens` → `{ tokens: [{ id, name, createdAt, lastUsedAt }] }` (mine only)
+- `POST /api/tokens` `{ name? }` → `{ token: { id, name, createdAt }, secret: "tdr_..." }` (secret shown once)
+- `DELETE /api/tokens/:id` → `{ ok: true }`
+
+### Tasks
+- `GET /api/tasks` query params (all optional, combinable):
+  - `view` = `mine` | `mine_created` | `mine_from_teammate` | `teammate` | `later` | `unassigned` | `completed` | `all`
+  - `assignee` = username | user id | `me` | `teammate`
+  - `createdBy` = username | user id | `me` | `teammate`
+  - `list` = `now` | `later`
+  - `done` = `true` | `false` | `all` (default `false`, except `view=completed` → true)
+  - `projectId`, `tag` (tag name or id), `q` (case-insensitive search in title + notes)
+  - `limit` (default 200, max 1000)
+  → `{ tasks: Task[] }` ordered by `position desc, createdAt desc` (completed: `doneAt desc`).
+- `GET /api/tasks/:id` → `{ task }`
+- `POST /api/tasks` — **JSON or multipart/form-data**:
+  - JSON body (every field optional): `{ title, notes, list, dueDate, priority, projectId, done,
+    assignees: string[], tags: string[] }`
+  - `assignees` entries may be user ids, usernames, display names (case-insensitive), `"me"` or `"teammate"`.
+  - `tags` entries are tag names (created if missing) or tag ids.
+  - If `assignees` is omitted entirely → defaults to `[me]`. If `[]` → unassigned.
+  - multipart: same fields as form fields (`assignees` / `tags` may be repeated fields or a JSON
+    array string) plus one or more `files` parts (images) → creates the task with attachments in one request.
+    This powers drag-and-drop: drop images → one request → one task.
+  → `201 { task }`
+- `PATCH /api/tasks/:id` — any subset of the POST JSON fields. `assignees`/`tags` replace the full set.
+  Also accepts `addAssignees`, `removeAssignees`, `addTags`, `removeTags` (same identifier rules),
+  and `position`. Setting `done: true` sets `doneAt`. → `{ task }`
+- `POST /api/tasks/:id/handoff` `{ to?: identifier }` (default: the other user) → `{ task }`.
+  Removes the current user from assignees and adds `to`.
+- `DELETE /api/tasks/:id` → `{ ok: true }` (deletes attachments' files too)
+- `POST /api/tasks/:id/attachments` multipart `files` → `{ task }`
+- `DELETE /api/attachments/:id` → `{ ok: true }`
+- `GET /api/attachments/:id/file` → the image bytes
+
+### Projects
+- `GET /api/projects` → `{ projects: (Project & { openCount: number })[] }`
+- `POST /api/projects` `{ name?, color?, emoji? }` → `201 { project }` (name defaults to "New Project")
+- `PATCH /api/projects/:id` → `{ project }`
+- `DELETE /api/projects/:id` → `{ ok: true }`
+
+### Tags
+- `GET /api/tags` → `{ tags: (Tag & { count: number })[] }`
+- `POST /api/tags` `{ name, color? }` → `201 { tag }` (returns existing tag if name exists, 200)
+- `PATCH /api/tags/:id`, `DELETE /api/tags/:id`
+
+### Counts (sidebar badges)
+- `GET /api/counts` → `{ mine, mineCreated, mineFromTeammate, teammate, later, unassigned, completed }`
+
+### Task JSON shape
+```json
+{
+  "id": "uuid", "title": "", "notes": "", "done": false, "doneAt": null,
+  "list": "now", "dueDate": null, "priority": 0, "projectId": null,
+  "project": { "id": "...", "name": "...", "color": "blue", "emoji": null } | null,
+  "createdBy": { "id": "...", "username": "maxim", "displayName": "Maxim", "color": "blue" },
+  "assignees": [User], "tags": [{ "id": "...", "name": "bug", "color": "red" }],
+  "attachments": [{ "id": "...", "filename": "shot.png", "mimeType": "image/png", "size": 1234,
+                    "width": 800, "height": 600, "url": "/api/attachments/<id>/file" }],
+  "position": 1729000000000, "createdAt": "...", "updatedAt": "..."
+}
+```
+
+## Agent instructions (`GET /api/agent`)
+
+Plain markdown written for an LLM agent (e.g. Claude) that will call the API with `curl`. Must include:
+- What the app is, the two users, and that "me" means the token owner.
+- How to authenticate (Bearer token, where to get one: Settings → Agent tokens in the web app).
+- The base URL (derive from the request host, e.g. `http://localhost:4000`).
+- Every endpoint above with concise examples, emphasising the identifier shortcuts
+  (`"me"`, `"teammate"`, usernames, display names, tag names).
+- Ready-made recipes: "list everything", "list my tasks", "add a task", "assign this to my teammate"
+  (`POST /api/tasks/:id/handoff` or `PATCH` with `addAssignees`), "mark done", "delete", "move to Later",
+  "find a task by text" (`q=`), "add tags".
+- A note that destructive actions (delete) should be confirmed with the human first.
+The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/redirect to the API).
+
+## UX requirements (frontend)
+
+- **Apple-style**: feel like Apple Reminders / Things on macOS & iOS. SF Pro system font stack,
+  generous whitespace, vibrancy/blur sidebar, subtle hairline separators, rounded corners,
+  round checkbox circles, spring-y micro-animations, light **and** dark mode (follow system).
+- **Responsive & great on mobile**: sidebar on desktop; on phones a list-of-lists home screen
+  (like Reminders iOS) or bottom tab bar, large titles, safe-area insets, 44pt touch targets,
+  bottom sheets for task details, no hover-only affordances.
+- **Friction-free capture**: an always-available "new task" input at the top/bottom of each list —
+  type and hit Enter, done. Inline quick syntax is a nice bonus (e.g. `#tag`, `@teammate`/`@me`,
+  `!` priority, "later" toggle) but must never block plain text. Empty title allowed.
+  Keyboard shortcut `N` (or Cmd/Ctrl+N where possible) to focus new task. Enter on a fresh empty
+  input can still create an empty task only if the user explicitly wants (e.g. pressing the + button).
+- **Drag & drop images**: dropping image file(s) anywhere on the window shows a full-window drop
+  overlay; releasing creates a new task in the current view containing the image(s). Dropping onto
+  an open task's detail attaches to that task. Pasting an image (Cmd/Ctrl+V) creates a task too.
+  On mobile, a camera/photo button in the composer does the same.
+- Task row: checkbox, title (inline editable), metadata line (assignee avatars, tags as pills,
+  due date, project, image thumbnail count). Click → detail panel (right side on desktop, sheet on mobile)
+  with all fields editable, assignee toggles for both users, "Pass to <Teammate>" button,
+  move to Later/Now, tags editor (type to create), image gallery with lightbox, delete.
+- Completing a task animates and it leaves the list after a short delay (with undo toast).
+- Data freshness: revalidate on window focus and poll every ~10 s so the two users see each other's changes.
+- Settings: change display name/password, manage agent tokens (create, copy once, revoke),
+  link to `/agent` instructions, logout.
