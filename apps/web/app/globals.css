@@ -3539,3 +3539,8 @@ kbd {
     height: 44px;
   }
 }
+
+/* Route navigation retains the button layout and native link affordances. */
+.nav-item, .list-card, .tag-filter, .account-button { text-decoration: none; color: inherit; }
+.missing-task { position: fixed; inset: 0; z-index: 80; background: var(--canvas); color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; }
+.missing-task .primary-button { text-decoration: none; }

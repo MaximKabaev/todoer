@@ -1,7 +1,20 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import useSWR from "swr";
-import { useRouter } from "next/navigation";
+import useSWR, { useSWRConfig } from "swr";
+import {
+  notFound,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+import Link from "next/link";
+import { useAppNavigation } from "@/hooks/use-app-navigation";
+import {
+  normalizeAppUrl,
+  parseListUrl,
+  selectionUrl,
+  taskBackground,
+} from "@/lib/routes";
 import {
   ArrowDownUp,
   ArrowLeft,
@@ -44,11 +57,17 @@ import { useLocalDay } from "@/hooks/use-local-day";
 import { useToast } from "./providers";
 export function TodoApp() {
   const router = useRouter();
-  const { data, error } = useSWR<{ user: CurrentUser; teammate: User }>("/api/me");
+  const pathname = usePathname();
+  const params = useSearchParams().toString();
+  const { data, error } = useSWR<{ user: CurrentUser; teammate: User }>(
+    "/api/me",
+  );
   useEffect(() => {
     if (error instanceof ApiError && error.status === 401)
-      router.replace("/login");
-  }, [error, router]);
+      router.replace(
+        `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`,
+      );
+  }, [error, router, pathname, params]);
   if (!data || (error instanceof ApiError && error.status === 401))
     return (
       <div className="auth-loading">
@@ -65,15 +84,93 @@ export function TodoApp() {
 function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
   const day = useLocalDay();
   const rememberProject = useLastProject();
-  const [projectOverride, setProjectOverride] = useState<string | null | undefined>();
-  const [selection, setSelection] = useState<Selection>({ kind: "mine" });
-  const [segment, setSegment] = useState(0);
-  const [mobileHome, setMobileHome] = useState(true);
-  const [settings, setSettings] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [projectOverride, setProjectOverride] = useState<
+    string | null | undefined
+  >();
+  const nav = useAppNavigation();
+  const { mutate } = useSWRConfig();
+  const [captureToOpen, setCaptureToOpen] = useState<{
+    task: Task;
+    background: string;
+    from: string;
+  } | null>(null);
+  useEffect(() => {
+    if (!captureToOpen) return;
+    // Wait until the committed route and its browser history entry are in sync.
+    const frame = requestAnimationFrame(() => {
+      if (nav.url === normalizeAppUrl(captureToOpen.background)) {
+        setCaptureToOpen(null);
+        void mutate(
+          `/api/tasks/${captureToOpen.task.id}`,
+          { task: captureToOpen.task },
+          { revalidate: false },
+        );
+        nav.navigate(`/tasks/${captureToOpen.task.id}`, {
+          background: captureToOpen.background,
+        });
+      } else if (nav.url !== captureToOpen.from) {
+        setCaptureToOpen(null);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [captureToOpen, nav, mutate]);
+  const settings = nav.pathname === "/settings";
+  const selectedId = nav.pathname.startsWith("/tasks/")
+    ? decodeURIComponent(nav.pathname.slice(7))
+    : null;
+  const [missingId, setMissingId] = useState<string | null>(null);
+  const selected = useSWR<{ task: Task }>(
+    selectedId && missingId !== selectedId ? `/api/tasks/${selectedId}` : null,
+    request,
+    {
+      shouldRetryOnError: (error) =>
+        !(error instanceof ApiError && [400, 404].includes(error.status)),
+      onError: (error) => {
+        if (error instanceof ApiError && [400, 404].includes(error.status))
+          setMissingId(selectedId);
+      },
+    },
+  );
+  const background =
+    nav.background ||
+    (selectedId ? taskBackground(selected.data?.task, user) : "/my");
+  const rawListUrl = selectedId || settings ? background : nav.url;
+  const listUrl =
+    rawListUrl === `/people/${encodeURIComponent(user.username)}`
+      ? "/my"
+      : rawListUrl;
+  const { selection, segment, search } = parseListUrl(listUrl);
+  const mobileHome = listUrl === "/";
+  const setSegment = (value: number) =>
+    nav.navigate(selectionUrl({ kind: "mine" }, teammate, value));
+  const closeOverlay = useCallback(
+    () => nav.back(background, true),
+    [nav, background],
+  );
+  const setSelectedId = useCallback(
+    (id: string | null) => {
+      if (id && !id.startsWith("pending-"))
+        nav.navigate(`/tasks/${id}`, { background: listUrl });
+      else if (!id && selectedId) closeOverlay();
+    },
+    [nav, listUrl, selectedId, closeOverlay],
+  );
+  const openTask = (task: Task, background = listUrl) => {
+    if (task.id.startsWith("pending-")) return;
+    // The list/create response already contains the full task. Open immediately,
+    // then let the inspector's normal SWR revalidation check for newer edits.
+    void mutate(`/api/tasks/${task.id}`, { task }, { revalidate: false });
+    nav.navigate(`/tasks/${task.id}`, { background });
+  };
+  const setSettings = (open: boolean) =>
+    open ? nav.navigate("/settings", { background: listUrl }) : closeOverlay();
   const [deleteTask, setDeleteTask] = useState<Task | null>(null);
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState("");
+  const [queryDraft, setQueryDraft] = useState<{
+    url: string;
+    value: string;
+  } | null>(null);
+  const query = queryDraft?.url === nav.url ? queryDraft.value : search;
+  const setQuery = (value: string) => setQueryDraft({ url: nav.url, value });
   const [searchOpen, setSearchOpen] = useState(false);
   const [sort, setSort] = useState<"manual" | "priority" | "due">("manual");
   const [sortOpen, setSortOpen] = useState(false);
@@ -86,16 +183,19 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     () => new Map<string, ReturnType<typeof setTimeout>>(),
   );
   const composer = useRef<HTMLInputElement>(null);
+  const focusCapture = useRef(false);
+  useEffect(() => {
+    if (!mobileHome && !selectedId && focusCapture.current) {
+      focusCapture.current = false;
+      composer.current?.focus();
+    }
+  }, [mobileHome, selectedId]);
   const searchRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
-  const onMissing = useCallback(
-    (id: string) => {
-      setSelectedId((current) => (current === id ? null : current));
-      setDeleteTask((current) => (current?.id === id ? null : current));
-      toast({ message: "This task was deleted" });
-    },
-    [toast],
-  );
+  const onMissing = useCallback((id: string) => {
+    setMissingId(id);
+    setDeleteTask((current) => (current?.id === id ? null : current));
+  }, []);
   const store = useWorkspace(
     selection,
     segment,
@@ -104,66 +204,83 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     teammate,
     onMissing,
   );
-  const selected = useSWR<{ task: Task }>(
-    selectedId ? `/api/tasks/${selectedId}` : null,
-    request,
-    {
-      shouldRetryOnError: (error) =>
-        !(error instanceof ApiError && error.status === 404),
-      onError: (error) => {
-        if (selectedId && error instanceof ApiError && error.status === 404)
-          void store.forget(selectedId);
-      },
-      fallbackData:
-        selectedId && store.tasks.data?.tasks.find((t) => t.id === selectedId)
-          ? { task: store.tasks.data.tasks.find((t) => t.id === selectedId)! }
-          : undefined,
-    },
-  );
   const projects = store.projects.data?.projects || [];
   const tags = store.tags.data?.tags || [];
   const lists = listDefinitions(teammate, store.counts.data);
   const currentList = lists.find((l) => l.kind === selection.kind);
   const project = projects.find((p) => p.id === selection.id);
-  const tag = tags.find((t) => t.id === selection.id);
+  const tag = tags.find((t) => t.name === selection.id);
   const title =
+    (selection.kind === "all" ? `Search: ${search}` : "") ||
     currentList?.title ||
     (selection.kind === "project"
       ? project?.name
       : tag
         ? `#${tag.name}`
-        : "") ||
+        : selection.kind === "tag"
+          ? `#${selection.id}`
+          : "") ||
     "Tasks";
   const accent = currentList?.color || project?.color || "teal";
   const Icon = currentList?.icon || ListTodo;
   const context = viewContext(selection, user, teammate);
   const viewProjectId = selection.kind === "project" ? selection.id : undefined;
-  const defaultId = defaultProjectId(store.projects.data?.projects, user.lastProjectId, viewProjectId);
+  const defaultId = defaultProjectId(
+    store.projects.data?.projects,
+    user.lastProjectId,
+    viewProjectId,
+  );
   const captureId = store.projects.data
-    ? captureProjectId(projects, user.lastProjectId, viewProjectId, projectOverride)
+    ? captureProjectId(
+        projects,
+        user.lastProjectId,
+        viewProjectId,
+        projectOverride,
+      )
     : undefined;
   async function createCapture(input: TaskInput, files: File[] = []) {
-    if (defaultId === undefined) throw new Error("Projects are still loading. Please try again.");
+    if (defaultId === undefined)
+      throw new Error("Projects are still loading. Please try again.");
     const override = projectOverride;
     setProjectOverride(undefined);
     // Resolve against the cached catalog so capture stays instant. If the other person
     // deleted that project since the last poll, the API rejects it: refresh and retry once.
-    const projectId = captureProjectId(projects, user.lastProjectId, viewProjectId, override);
+    const projectId = captureProjectId(
+      projects,
+      user.lastProjectId,
+      viewProjectId,
+      override,
+    );
     let task: Task;
     try {
-      task = await store.create({ ...context, ...input, projectId }, files, { quiet: !!projectId });
+      task = await store.create({ ...context, ...input, projectId }, files, {
+        quiet: !!projectId,
+      });
     } catch (error) {
       if (!projectId || !(error instanceof ApiError && error.status === 400)) {
         if (projectId)
-          toast({ message: error instanceof Error ? error.message : "Could not create task.", error: true });
+          toast({
+            message:
+              error instanceof Error ? error.message : "Could not create task.",
+            error: true,
+          });
         throw error;
       }
       const fresh = await api.projects();
       await store.projects.mutate(fresh, { revalidate: false });
-      const retryId = captureProjectId(fresh.projects, user.lastProjectId, viewProjectId, override);
-      task = await store.create({ ...context, ...input, projectId: retryId }, files);
+      const retryId = captureProjectId(
+        fresh.projects,
+        user.lastProjectId,
+        viewProjectId,
+        override,
+      );
+      task = await store.create(
+        { ...context, ...input, projectId: retryId },
+        files,
+      );
     }
-    if (viewProjectId && task.projectId === viewProjectId) rememberProject(viewProjectId);
+    if (viewProjectId && task.projectId === viewProjectId)
+      rememberProject(viewProjectId);
     return task;
   }
   const subtitle =
@@ -181,9 +298,34 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
                 ? "Everything with a common thread."
                 : "Good ideas, waiting for a person.";
   useEffect(() => {
-    const timer = setTimeout(() => setSearch(query), 250);
+    if (
+      !queryDraft ||
+      queryDraft.url !== nav.url ||
+      queryDraft.value === search
+    )
+      return;
+    const timer = setTimeout(
+      () =>
+        nav.navigate(`/search?q=${encodeURIComponent(queryDraft.value)}`, {
+          replace: nav.pathname === "/search",
+        }),
+      250,
+    );
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [queryDraft, search, nav]);
+  const pageTitle = settings
+    ? "Settings"
+    : selectedId
+      ? missingId === selectedId
+        ? "Task not found"
+        : selected.data?.task?.title || "Untitled task"
+      : selection.kind === "teammate"
+        ? `${teammate.displayName}'s Tasks`
+        : title;
+  useEffect(() => {
+    if (nav.pathname === `/people/${encodeURIComponent(user.username)}`)
+      nav.navigate("/my", { replace: true });
+  }, [nav, user.username]);
   useEffect(() => {
     const timers = completionTimers;
     return () => {
@@ -192,19 +334,21 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
   }, [completionTimers]);
   const select = (value: Selection) => {
     setProjectOverride(undefined);
-    setSelection(value);
-    setSegment(0);
-    setMobileHome(false);
-    setSelectedId(null);
-    setQuery("");
-    setSearch("");
+    setQueryDraft(null);
+    nav.navigate(selectionUrl(value, teammate));
   };
   const create = async (input: TaskInput, open = false) => {
-    if (selection.kind === "mine" && segment === 2) setSegment(0);
+    let captureListUrl = listUrl;
+    if (selection.kind === "mine" && segment === 2) captureListUrl = "/my";
     if (search || query) {
-      setQuery("");
-      setSearch("");
+      setQueryDraft(null);
+      captureListUrl = selectionUrl(
+        selection,
+        teammate,
+        segment === 2 ? 0 : segment,
+      );
     }
+    if (captureListUrl !== listUrl) nav.navigate(captureListUrl);
     const value = {
       ...context,
       ...input,
@@ -217,7 +361,13 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
         : {}),
     };
     const task = await createCapture(value);
-    if (open) setSelectedId(task.id);
+    if (open) {
+      // Let an automatic filter reset commit before pushing the inspector, so
+      // browser Back returns to the same list that is visible behind the task.
+      if (captureListUrl !== listUrl)
+        setCaptureToOpen({ task, background: captureListUrl, from: listUrl });
+      else openTask(task);
+    }
     return task;
   };
   async function upload(files: File[], targetId?: string | null) {
@@ -230,8 +380,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
         await store.apply(targetId, () => task);
       } else {
         const task = await createCapture({}, valid);
-        setSelectedId(task.id);
-        setMobileHome(false);
+        openTask(task);
       }
       toast({
         message: `${valid.length === 1 ? "Image" : `${valid.length} images`} added.`,
@@ -329,9 +478,10 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
         !e.altKey
       ) {
         e.preventDefault();
+        if (selectedId || mobileHome) focusCapture.current = true;
         setSelectedId(null);
-        setMobileHome(false);
-        requestAnimationFrame(() => composer.current?.focus());
+        if (mobileHome) nav.navigate("/my");
+        else if (!selectedId) composer.current?.focus();
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -341,7 +491,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [settings, deleteTask]);
+  }, [settings, deleteTask, setSelectedId, selectedId, mobileHome, nav]);
   function toggle(task: Task) {
     if (task.id.startsWith("pending-")) return;
     const done = !task.done;
@@ -414,7 +564,9 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
       return t.list === "now" && t.assignees.length === 0;
     if (selection.kind === "project") return t.projectId === selection.id;
     if (selection.kind === "tag")
-      return t.tags.some((tag) => tag.id === selection.id);
+      return t.tags.some(
+        (tag) => tag.name.toLowerCase() === selection.id?.toLowerCase(),
+      );
     return true;
   });
   if (sort === "priority")
@@ -465,17 +617,23 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     onSettings: () => setSettings(true),
     refresh: store.refreshMeta,
     onSearch: (query: string) => {
-      select({ kind: "all" });
       setSearchOpen(true);
-      setQuery(query);
-      setSearch(query);
+      nav.navigate(`/search?q=${encodeURIComponent(query)}`);
     },
   };
+  if (
+    nav.pathname.startsWith("/people/") &&
+    ![user.username, teammate.username].includes(
+      decodeURIComponent(nav.pathname.slice(8)),
+    )
+  )
+    notFound();
   return (
     <div
       className={`app-shell ${mobileHome ? "show-home" : ""} ${selectedId ? "has-detail" : ""}`}
       style={{ "--view-accent": `var(--${accent})` } as React.CSSProperties}
     >
+      <title>{`${pageTitle} · todoer`}</title>
       <Navigation {...navProps} />
       <div className="mobile-home-wrap">
         <Navigation {...navProps} home />
@@ -487,10 +645,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           </div>
           <button
             className="mobile-back text-button"
-            onClick={() => {
-              setMobileHome(true);
-              setSelectedId(null);
-            }}
+            onClick={() => nav.back("/")}
           >
             <ArrowLeft size={20} /> Lists
           </button>
@@ -566,7 +721,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
             </div>
             <p>{subtitle}</p>
           </div>
-          {searchOpen && (
+          {(searchOpen || selection.kind === "all") && (
             <div className="search-field">
               <Search size={17} />
               <input
@@ -581,7 +736,8 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
                 aria-label="Clear and close search"
                 onClick={() => {
                   setSearchOpen(false);
-                  setQuery("");
+                  setQueryDraft(null);
+                  if (selection.kind === "all") nav.back("/my", true);
                 }}
               >
                 <X size={16} />
@@ -637,8 +793,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
                         selected={selectedId === task.id}
                         completing={completing.has(task.id)}
                         onOpen={() => {
-                          if (!task.id.startsWith("pending-"))
-                            setSelectedId(task.id);
+                          if (!task.id.startsWith("pending-")) openTask(task);
                         }}
                         onToggle={() => toggle(task)}
                         onEdit={(input) => store.patch(task, input)}
@@ -731,7 +886,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           </div>
         </div>
       </main>
-      {selectedId && selected.data?.task && (
+      {selectedId && missingId !== selectedId && selected.data?.task && (
         <TaskDetail
           key={selectedId}
           task={selected.data.task}
@@ -773,6 +928,22 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
             </button>
           </div>
         )}
+      {selectedId && missingId === selectedId && (
+        <div className="missing-task" role="status">
+          <h1>This task doesn’t exist (or was deleted)</h1>
+          <p>It may have been removed from your shared space.</p>
+          <Link
+            href="/my"
+            onNavigate={(e) => {
+              e.preventDefault();
+              nav.navigate("/my");
+            }}
+            className="primary-button"
+          >
+            Back to My Tasks
+          </Link>
+        </div>
+      )}
       {settings && <Settings user={user} onClose={() => setSettings(false)} />}
       {deleteTask && (
         <Confirm

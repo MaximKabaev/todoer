@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
+import { selectionUrl } from "@/lib/routes";
 import {
   Archive,
   CheckCheck,
@@ -105,13 +107,17 @@ export function Navigation({
         <>
           <div className="home-top">
             <Brand />
-            <button
+            <Link
+              href="/settings"
               className="icon-button"
               aria-label="Settings"
-              onClick={onSettings}
+              onNavigate={(e) => {
+                e.preventDefault();
+                onSettings();
+              }}
             >
               <Avatar user={user} />
-            </button>
+            </Link>
           </div>
           <h1 className="home-greeting">Your lists</h1>
           <form
@@ -153,9 +159,13 @@ export function Navigation({
         className={home ? "home-cards" : "smart-lists"}
       >
         {lists.map(({ kind, title, icon: Icon, color, count }) => (
-          <button
+          <Link
             key={kind}
-            onClick={() => onSelect({ kind })}
+            href={selectionUrl({ kind }, teammate)}
+            onNavigate={(e) => {
+              e.preventDefault();
+              onSelect({ kind });
+            }}
             className={`${home ? "list-card" : "nav-item"} ${selection.kind === kind && !home ? "active" : ""} ${kind === "unassigned" ? "unassigned-card" : ""}`}
             style={{ "--accent": `var(--${color})` } as React.CSSProperties}
           >
@@ -165,7 +175,7 @@ export function Navigation({
             <span className="nav-title">{title}</span>
             <span className="nav-count">{count}</span>
             {home && kind === "unassigned" && <ChevronRight size={17} />}
-          </button>
+          </Link>
         ))}
       </nav>
       <div className="nav-section">
@@ -185,9 +195,13 @@ export function Navigation({
         <div className={home ? "home-projects" : ""}>
           {projects.map((p) => (
             <div className="project-nav-wrap" key={p.id}>
-              <button
+              <Link
+                href={selectionUrl({ kind: "project", id: p.id }, teammate)}
                 className={`nav-item project-nav ${selection.kind === "project" && selection.id === p.id ? "active" : ""}`}
-                onClick={() => onSelect({ kind: "project", id: p.id })}
+                onNavigate={(e) => {
+                  e.preventDefault();
+                  onSelect({ kind: "project", id: p.id });
+                }}
                 style={
                   { "--accent": `var(--${p.color})` } as React.CSSProperties
                 }
@@ -198,7 +212,7 @@ export function Navigation({
                 <span className="nav-title">{p.name}</span>
                 <span className="nav-count">{p.openCount || 0}</span>
                 {home && <ChevronRight size={16} />}
-              </button>
+              </Link>
               <button
                 className="project-edit icon-button"
                 aria-label={`Edit project ${p.name}`}
@@ -222,14 +236,18 @@ export function Navigation({
         </div>
         <div className="nav-tags">
           {tags.map((tag) => (
-            <button
+            <Link
+              href={selectionUrl({ kind: "tag", id: tag.name }, teammate)}
               key={tag.id}
-              className={`tag-filter ${selection.kind === "tag" && selection.id === tag.id ? "selected" : ""}`}
-              onClick={() => onSelect({ kind: "tag", id: tag.id })}
+              className={`tag-filter ${selection.kind === "tag" && selection.id === tag.name ? "selected" : ""}`}
+              onNavigate={(e) => {
+                e.preventDefault();
+                onSelect({ kind: "tag", id: tag.name });
+              }}
             >
               <Hash size={12} />
               <span>{tag.name}</span>
-            </button>
+            </Link>
           ))}
           {!tags.length && (
             <span className="muted small">
@@ -244,14 +262,21 @@ export function Navigation({
             <Sparkles size={16} />
             <span>Big things start small.</span>
           </div>
-          <button className="account-button" onClick={onSettings}>
+          <Link
+            href="/settings"
+            className="account-button"
+            onNavigate={(e) => {
+              e.preventDefault();
+              onSettings();
+            }}
+          >
             <Avatar user={user} />
             <span>
               <strong>{user.displayName}</strong>
               <small>Settings & account</small>
             </span>
             <Settings2 size={17} />
-          </button>
+          </Link>
         </div>
       )}
       {home && (

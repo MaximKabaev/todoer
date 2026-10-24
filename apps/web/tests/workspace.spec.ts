@@ -14,7 +14,7 @@ const pixel = Buffer.from(
 );
 test("unauthenticated visitors see only the login page", async ({ page }) => {
   await page.goto("/");
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login(?:\?next=.*)?$/);
   await expect(
     page.getByRole("heading", { name: "Welcome to todoer." }),
   ).toBeVisible();
@@ -186,7 +186,7 @@ test("mobile home, contextual lists, project creation, and sheet work at 390px",
     .click();
   const { project } = await (await created).json();
   await home
-    .getByRole("button", { name: new RegExp(name) })
+    .getByRole("link", { name: new RegExp(name) })
     .filter({ hasNot: page.locator("svg.lucide-settings-2") })
     .first()
     .click();
@@ -224,7 +224,7 @@ test("settings creates a token, shows its secret once, revokes it, and logs out"
   page,
 }) => {
   await login(page);
-  await page.getByRole("button", { name: /Maxim Settings & account/ }).click();
+  await page.getByRole("link", { name: /Maxim Settings & account/ }).click();
   const settings = page.getByRole("dialog", {
     name: "Your little space",
     exact: true,
@@ -249,7 +249,7 @@ test("settings creates a token, shows its secret once, revokes it, and logs out"
     settings.locator(".token-row").filter({ hasText: tokenName }),
   ).toHaveCount(0);
   await settings.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login(?:\?next=.*)?$/);
 });
 
 test("the rewrite streams a full 20 MiB image without truncation", async ({
@@ -399,7 +399,7 @@ test("the second account gets relative mentions and teammate context too", async
   await page.getByLabel("Password", { exact: true }).fill("todoer");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.locator(".sidebar").getByRole("button", { name: /Maxim’s Tasks/ }),
+    page.locator(".sidebar").getByRole("link", { name: /Maxim’s Tasks/ }),
   ).toBeVisible();
   const title = `Relative assignment ${Date.now()}`;
   const input = page.getByRole("textbox", { name: "New task", exact: true });
@@ -415,7 +415,7 @@ test("the second account gets relative mentions and teammate context too", async
   expect(task.createdBy.username).toBe("teammate");
   await page
     .locator(".sidebar")
-    .getByRole("button", { name: /Maxim’s Tasks/ })
+    .getByRole("link", { name: /Maxim’s Tasks/ })
     .click();
   await expect(
     page.getByRole("group", { name: title, exact: true }),
@@ -500,8 +500,9 @@ test("capture in Completed creates a completed task in that context", async ({
   await login(page);
   await page
     .locator(".sidebar")
-    .getByRole("button", { name: /Completed/ })
+    .getByRole("link", { name: /Completed/ })
     .click();
+  await expect(page).toHaveURL(/\/completed$/);
   const title = `Already done ${Date.now()}`;
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/api/tasks") && r.request().method() === "POST",
@@ -556,6 +557,7 @@ test("document and text-node events are safe, and a deleted inspector retires af
       exact: true,
     })
     .click();
+  await expect(page.getByRole("dialog", { name: "Task details" })).toBeVisible();
   await page.request.delete(`/api/tasks/${task.id}`);
   // The next autosave receives the real deletion response and must not retry on unmount.
   let patches = 0;
@@ -567,7 +569,7 @@ test("document and text-node events are safe, and a deleted inspector retires af
     .getByRole("textbox", { name: "Notes", exact: true })
     .fill("A stale draft");
   await expect(
-    page.getByText("This task was deleted", { exact: true }),
+    page.getByText("This task doesn’t exist (or was deleted)", { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Task details" })).toHaveCount(
     0,
@@ -586,18 +588,15 @@ test("mobile swipes complete and reveal actions, and Take replaces the assignee"
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page
     .locator(".mobile-home")
-    .getByRole("button", { name: /My Tasks/ })
+    .getByRole("link", { name: /My Tasks/ })
     .click();
+  await expect(page).toHaveURL(/\/my$/);
   const { task } = await (
     await page.request.post("/api/tasks", {
       data: { title: "Swipe regression" },
     })
   ).json();
   await page.reload();
-  await page
-    .locator(".mobile-home")
-    .getByRole("button", { name: /My Tasks/ })
-    .click();
   const row = page.locator(`[data-task-id="${task.id}"]`);
   const swipe = async (dx: number, dy = 0) => {
     await row.evaluate(
@@ -648,7 +647,7 @@ test("mobile swipes complete and reveal actions, and Take replaces the assignee"
   await page.getByRole("button", { name: "Lists", exact: true }).click();
   await page
     .locator(".mobile-home")
-    .getByRole("button", { name: /Teammate’s Tasks/ })
+    .getByRole("link", { name: /Teammate’s Tasks/ })
     .click();
   await row
     .getByRole("button", { name: "Open Swipe regression details" })
@@ -668,7 +667,7 @@ test("mobile swipes complete and reveal actions, and Take replaces the assignee"
   await page.getByRole("button", { name: "Lists", exact: true }).click();
   await page
     .locator(".mobile-home")
-    .getByRole("button", { name: /My Tasks/ })
+    .getByRole("link", { name: /My Tasks/ })
     .click();
   await swipe(110);
   await expect

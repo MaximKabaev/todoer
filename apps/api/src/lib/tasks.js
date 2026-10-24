@@ -37,7 +37,9 @@ export async function hydrate(rows, db = pool) {
   for (const attachment of attachments.rows) attached.get(attachment.taskId).push(attachment);
   const projectMap = new Map(projects.rows.map((project) => [project.id, project]));
   return rows.map(({ creatorId, ...row }) => ({
-    ...row, project: projectMap.get(row.projectId) ?? null, createdBy: userMap.get(creatorId),
+    ...row,
+    ...(process.env.PUBLIC_WEB_URL ? { webUrl: `${process.env.PUBLIC_WEB_URL.replace(/\/+$/, '')}/tasks/${row.id}` } : {}),
+    project: projectMap.get(row.projectId) ?? null, createdBy: userMap.get(creatorId),
     assignees: assigned.get(row.id), tags: tagged.get(row.id), attachments: attached.get(row.id),
   }));
 }

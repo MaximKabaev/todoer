@@ -2,7 +2,15 @@ import type { Metadata, Viewport } from "next";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "todoer — A little more together",
+  openGraph: {
+    title: "todoer",
+    description: "A calm place for your tasks. Built for two.",
+  },
+  twitter: {
+    card: "summary",
+    title: "todoer",
+    description: "A calm place for your tasks. Built for two.",
+  },
   description: "A calm place for your tasks. Built for two.",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "todoer" },
 };

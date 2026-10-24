@@ -38,6 +38,7 @@ export type Attachment = {
 };
 export type Task = {
   id: string;
+  webUrl?: string;
   title: string;
   notes: string;
   done: boolean;

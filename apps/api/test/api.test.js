@@ -575,3 +575,27 @@ test('last project is an explicit per-user UI preference, validated and cleared 
     await api('patch', '/api/me', secondToken).send({ lastProjectId: null });
   }
 });
+
+
+test('task webUrl is omitted when unset, included on every response when configured', async () => {
+  await withEnv({ PUBLIC_WEB_URL: undefined }, async () => {
+    const task = await create({ title: 'QA no web origin' });
+    assert.equal(Object.hasOwn(task, 'webUrl'), false);
+    const found = await api('get', `/api/tasks/${task.id}`).expect(200);
+    assert.equal(Object.hasOwn(found.body.task, 'webUrl'), false);
+    const list = await api('get', '/api/tasks?view=all').expect(200);
+    assert.ok(list.body.tasks.every((t) => !Object.hasOwn(t, 'webUrl')));
+  });
+  await withEnv({ PUBLIC_WEB_URL: 'https://todo.customsai.org///' }, async () => {
+    const task = await create({ title: 'QA web link' });
+    const expected = `https://todo.customsai.org/tasks/${task.id}`;
+    assert.equal(task.webUrl, expected);
+    assert.equal((await api('get', `/api/tasks/${task.id}`).expect(200)).body.task.webUrl, expected);
+    assert.equal((await patch(task.id, { notes: 'QA edit' })).webUrl, expected);
+    assert.equal((await api('post', `/api/tasks/${task.id}/handoff`).send({}).expect(200)).body.task.webUrl, expected);
+    const list = await api('get', '/api/tasks?view=all').expect(200);
+    assert.ok(list.body.tasks.every((t) => t.webUrl === `https://todo.customsai.org/tasks/${t.id}`));
+    const instructions = await request(app).get('/api/agent').expect(200);
+    assert.match(instructions.text, /webUrl.*clickable Markdown link/);
+  });
+});

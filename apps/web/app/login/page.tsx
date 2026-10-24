@@ -1,16 +1,44 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import useSWR from "swr";
+import { safeNext } from "@/lib/routes";
+import { Brand } from "@/components/ui";
 import { useSWRConfig } from "swr";
 import { ArrowRight, CheckCheck, LoaderCircle } from "lucide-react";
 import { api } from "@/lib/api";
 export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="auth-loading">
+          <Brand />
+        </div>
+      }
+    >
+      <Login />
+    </Suspense>
+  );
+}
+function Login() {
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
+  const { data, error: authError } = useSWR("/api/me");
+  useEffect(() => {
+    if (data) router.replace(next);
+  }, [data, router, next]);
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  if (!authError || data)
+    return (
+      <div className="auth-loading">
+        <Brand />
+      </div>
+    );
   return (
     <main className="login-page">
+      <title>Sign in · todoer</title>
       <div className="login-orb orb-one" />
       <div className="login-orb orb-two" />
       <section className="login-card">
@@ -35,7 +63,7 @@ export default function LoginPage() {
                 String(form.get("password")),
               );
               await mutate("/api/me", await api.me(), { revalidate: false });
-              router.replace("/");
+              router.replace(next);
             } catch (err) {
               setError(
                 err instanceof Error ? err.message : "Could not sign in.",

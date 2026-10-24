@@ -1,6 +1,12 @@
 "use client";
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   ArrowUpRight,
   CalendarDays,
@@ -11,6 +17,8 @@ import {
   ImagePlus,
   LoaderCircle,
   MoreHorizontal,
+  Link as LinkIcon,
+  Share2,
   Send,
   Trash2,
   X,
@@ -28,6 +36,9 @@ import { useDialog } from "@/hooks/use-dialog";
 import { useMedia } from "@/hooks/use-media";
 import { Avatar, Checkbox, Confirm, Modal } from "./ui";
 import { useToast } from "./providers";
+const subscribeShare = () => () => {};
+const canShare = () => typeof navigator.share === "function";
+
 type Props = {
   task: Task;
   users: [User, User];
@@ -57,6 +68,11 @@ export function TaskDetail({
   uploading,
 }: Props) {
   const mobile = useMedia("(max-width: 760px)");
+  const nativeShare = useSyncExternalStore(
+    subscribeShare,
+    canShare,
+    () => false,
+  );
   const [draft, setDraft] = useState({ title: task.title, notes: task.notes });
   const [tagInput, setTagInput] = useState("");
   const [saving, setSaving] = useState(false);
@@ -223,6 +239,61 @@ export function TaskDetail({
               </>
             )}
           </span>
+          <button
+            className="icon-button"
+            aria-label="Copy link"
+            title="Copy link"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(
+                  `${window.location.origin}/tasks/${task.id}`,
+                );
+                toast({ message: "Link copied" });
+              } catch {
+                toast({
+                  message: "Could not copy link. Please try again.",
+                  error: true,
+                });
+              }
+            }}
+          >
+            <LinkIcon size={17} />
+          </button>
+          {(mobile || nativeShare) && (
+            <button
+              className="icon-button"
+              aria-label="Share…"
+              title="Share…"
+              onClick={async () => {
+                const url = `${window.location.origin}/tasks/${task.id}`;
+                try {
+                  if (navigator.share)
+                    await navigator.share({
+                      title: draft.title || "Untitled task",
+                      url,
+                    });
+                  else {
+                    await navigator.clipboard.writeText(url);
+                    toast({ message: "Link copied" });
+                  }
+                } catch (error) {
+                  if (error instanceof Error && error.name === "AbortError")
+                    return;
+                  try {
+                    await navigator.clipboard.writeText(url);
+                    toast({ message: "Link copied" });
+                  } catch {
+                    toast({
+                      message: "Could not share link. Please try again.",
+                      error: true,
+                    });
+                  }
+                }
+              }}
+            >
+              <Share2 size={17} />
+            </button>
+          )}
           <button
             className="icon-button"
             aria-label="Close task details"

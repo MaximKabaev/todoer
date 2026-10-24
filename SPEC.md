@@ -49,6 +49,7 @@ SPEC.md               this file
 | field | type | notes |
 |---|---|---|
 | id | uuid | |
+| webUrl | text (optional) | `${PUBLIC_WEB_URL}/tasks/${id}` when configured (trailing slashes removed); omitted when unset. Included on every task response. |
 | title | text | may be empty string. **No field is ever required.** |
 | notes | text | may be empty |
 | done | boolean | default false |
@@ -207,6 +208,7 @@ Unknown body fields are ignored. Everything is camelCase.
 ## Agent instructions (`GET /api/agent`)
 
 Plain markdown written for an LLM agent (e.g. Claude) that will call the API with `curl`. Must include:
+- Include a task’s `webUrl` as a clickable link when reporting a task created or found. The field is omitted when `PUBLIC_WEB_URL` is unset; never infer the web URL from the API origin.
 - What the app is, the two users, and that "me" means the token owner.
 - How to authenticate (Bearer token, where to get one: Settings → Agent tokens in the web app).
 - The base URL: use `PUBLIC_API_URL` when set (preferred direct production API base), otherwise
@@ -248,3 +250,31 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
 - Data freshness: revalidate on window focus and poll every ~10 s so the two users see each other's changes.
 - Settings: change display name/password, manage agent tokens (create, copy once, revoke),
   link to `/agent` instructions, logout.
+
+## Web routes
+
+The persistent App Router workspace shell uses client navigation and keeps composer state and SWR
+cache across list/detail/settings navigation. Unknown paths use Next’s not-found page.
+
+| Page | URL |
+|---|---|
+| Home (mobile lists; desktop My Tasks) | `/` |
+| My Tasks (All / Made by me / From teammate) | `/my`, `/my?show=created`, `/my?show=from-teammate` |
+| Person’s tasks | `/people/:username` (viewer canonicalizes to `/my`; unknown username is not found) |
+| Shared lists | `/later`, `/unassigned`, `/completed` |
+| Project | `/projects/:id` |
+| Tag | `/tags/:name` (URL-encoded name) |
+| Search all tasks | `/search?q=…` |
+| Task | `/tasks/:id` |
+| Settings | `/settings` |
+| Login | `/login?next=<original path+query>` |
+
+Task/settings overlays retain the originating list and close through browser Back. Direct task
+links fall back to My Tasks if assigned to the viewer, otherwise the sole other assignee’s person
+page, otherwise Later, then its project, then Unassigned. Direct settings fall back to My Tasks.
+A missing task renders a full friendly state with a My Tasks link and stops fetching that id.
+Sidebar/home entries are native anchors. Mobile Lists returns Back or pushes `/` for a deep link.
+Login accepts only same-origin relative `next` paths (starting `/`, excluding `//`, backslashes,
+control characters and `/login`); default `/`. No protected UI is shown before authentication.
+Page titles reflect the private view in the browser only. OpenGraph/Twitter metadata stays generic.
+Task details offer Copy link and mobile native Share with a copy fallback.

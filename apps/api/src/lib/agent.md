@@ -184,3 +184,8 @@ curl -sS -X DELETE "$TODOER_BASE/api/tags/TAG_UUID" -H "Authorization: Bearer $T
 curl -sS -X DELETE "$TODOER_BASE/api/tokens/TOKEN_UUID" -H "Authorization: Bearer $TODOER_TOKEN"
 ```
 `lastProjectId` is a UI preference; agents should ignore it when creating tasks unless the human asks.
+
+When reporting a task you created or found, include its `webUrl` as a clickable Markdown link,
+for example `[Task title](webUrl)`. This opens the task directly in the private web app.
+`webUrl` is included on every task when the server's `PUBLIC_WEB_URL` is configured;
+when it is absent, the field is omitted. Do not invent a URL from the API origin.
