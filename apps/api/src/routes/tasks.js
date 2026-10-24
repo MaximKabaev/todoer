@@ -45,7 +45,9 @@ tasksRouter.post('/', upload, async (req, res) => {
     const { rows: [row] } = await db.query(`INSERT INTO tasks (title, notes, list, due_date, priority, project_id, done, done_at, created_by, position)
       VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7 THEN now() ELSE NULL END,$8,$9) RETURNING id`,
     [body.title ?? '', body.notes ?? '', body.list ?? 'now', body.dueDate ?? null, body.priority ?? 0, body.projectId ?? null, body.done ?? false, req.user.id, Date.now()]);
-    await applyRelations(row.id, { ...body, assignees: body.assignees ?? ['me'] }, req, db);
+    // Later tasks are unplanned and never assigned; an explicit list wins over assignees.
+    const later = body.list === 'later';
+    await applyRelations(row.id, { ...body, assignees: later ? [] : body.assignees ?? ['me'], addAssignees: undefined }, req, db);
     await saveAttachments(db, row.id, req.files, written);
     return getTask(row.id, db);
   }));
@@ -56,8 +58,12 @@ tasksRouter.patch('/:id', async (req, res) => {
   const taskId = id.parse(req.params.id);
   const body = taskPatchSchema.parse(req.body);
   const task = await transaction(async (db) => {
-    const { rowCount } = await db.query('SELECT id FROM tasks WHERE id = $1 FOR UPDATE', [taskId]);
-    if (!rowCount) throw new HttpError(404, 'Task not found');
+    const { rows: [current] } = await db.query('SELECT list FROM tasks WHERE id = $1 FOR UPDATE', [taskId]);
+    if (!current) throw new HttpError(404, 'Task not found');
+    const assigning = Boolean(body.assignees?.length || body.addAssignees?.length);
+    // Later tasks have no assignees: assigning someone plans the task (moves it to Now),
+    // unless this same request explicitly puts it on Later, which wins.
+    if (assigning && body.list === undefined && current.list === 'later') body.list = 'now';
     const values = [taskId];
     const assignments = ['updated_at = now()'];
     for (const [field, column] of Object.entries({ title: 'title', notes: 'notes', list: 'list', dueDate: 'due_date', priority: 'priority', projectId: 'project_id', done: 'done', position: 'position' })) {
@@ -68,6 +74,7 @@ tasksRouter.patch('/:id', async (req, res) => {
     if (body.done !== undefined) assignments.push(body.done ? 'done_at = CASE WHEN done THEN done_at ELSE now() END' : 'done_at = NULL');
     await db.query(`UPDATE tasks SET ${assignments.join(', ')} WHERE id = $1`, values);
     await applyRelations(taskId, body, req, db);
+    await db.query("DELETE FROM task_assignees a USING tasks t WHERE t.id = a.task_id AND t.id = $1 AND t.list = 'later'", [taskId]);
     return getTask(taskId, db);
   });
   res.json({ task });
@@ -77,7 +84,8 @@ tasksRouter.post('/:id/handoff', async (req, res) => {
   const { to = 'teammate' } = z.object({ to: identifier.optional() }).parse(req.body ?? {});
   const userId = resolveUser(to, req);
   const task = await transaction(async (db) => {
-    const { rowCount } = await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1 RETURNING id', [taskId]);
+    // Handing a Later task to someone plans it, so it moves to Now.
+    const { rowCount } = await db.query("UPDATE tasks SET updated_at = now(), list = 'now' WHERE id = $1 RETURNING id", [taskId]);
     if (!rowCount) throw new HttpError(404, 'Task not found');
     await db.query('DELETE FROM task_assignees WHERE task_id = $1', [taskId]);
     await db.query('INSERT INTO task_assignees (task_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [taskId, userId]);

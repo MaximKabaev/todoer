@@ -91,7 +91,13 @@ Images only (png, jpeg, gif, webp, heic/heif, svg is NOT allowed). Max 20 MB per
    - plus an "All" segment showing both.
 2. **Teammate's Tasks** — `list=now`, not done, assigned to teammate. Fully viewable and editable,
    either person can add to it (adding there pre-assigns the teammate).
-3. **Later** — the shared "Future changes / things to look at" list (`list=later`, regardless of assignee).
+3. **Later** — the shared "Future changes / things to look at" list (`list=later`). These are unplanned,
+   so **Later tasks never have assignees** (enforced by the API):
+   - Creating a task with `list: "later"` ignores `assignees` (no default "me" either).
+   - Moving a task to Later (`PATCH list: "later"`) clears its assignees; an explicit `list: "later"` wins
+     over assignees sent in the same request.
+   - Assigning someone to a Later task (`assignees: [...]` non-empty, `addAssignees`, or handoff) plans it:
+     the task moves to `now`.
 4. **Unassigned** — `list=now`, no assignees (only shown if non-empty, or always as a small item — UI's call).
 5. **Projects** — each project shows its tasks (all lists, grouped Now / Later).
 6. **Completed** — done tasks, newest first.

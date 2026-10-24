@@ -55,7 +55,7 @@ try {
         ['Try passing a task to your teammate', 'Use the Pass to button to hand this over.', 'now', 0, [0, 1], 0],
         ['Add your first shared project', 'Projects and tags are shared by both people.', 'now', 1, [1], 0],
         ['Drop a screenshot to capture an idea', 'Drag or paste an image anywhere in the app.', 'now', 1, [], 1],
-        ['An idea for later ✨', 'Keep future changes here until you are ready.', 'later', 0, [1], 1],
+        ['An idea for later ✨', 'Keep future changes here until you are ready.', 'later', 0, [], 1],
       ];
       for (const [index, [title, notes, list, creator, assigned, tag]] of examples.entries()) {
         const { rows: [task] } = await db.query('INSERT INTO tasks (title, notes, list, created_by, project_id, position) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [title, notes, list, users[creator].id, project.id, Date.now() - index]);

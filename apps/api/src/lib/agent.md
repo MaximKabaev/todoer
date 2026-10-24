@@ -53,7 +53,7 @@ Task filters combine with AND: `view=mine|mine_created|mine_from_teammate|teamma
 
 User identifiers in assignees, createdBy, filters, and `to`: UUID, username, display name (case-insensitive), `me`, `teammate`. Use GET /api/users to disambiguate. Tags accept names (case-insensitive, created if missing when adding) or existing IDs. `assignees`/`tags` replace the complete set on PATCH; use `add*`/`remove*` to preserve others. Omitted assignees on create defaults to `["me"]`; `[]` is explicitly unassigned.
 
-`list` defaults to `now`; `later` is the shared Future changes / things to look at list. Priority is 0 none, 1 low, 2 medium, 3 high. dueDate is `YYYY-MM-DD` or null; projectId is a UUID or null. Transitioning from open to done records doneAt; repeating done true preserves it; false clears it. Colors: blue, purple, pink, red, orange, yellow, green, teal, gray.
+`list` defaults to `now`; `later` is the shared Future changes / things to look at list. **Later tasks never have assignees**: creating or moving a task to Later drops its assignees, and assigning anyone (assignees, addAssignees, or handoff) moves it to Now. Priority is 0 none, 1 low, 2 medium, 3 high. dueDate is `YYYY-MM-DD` or null; projectId is a UUID or null. Transitioning from open to done records doneAt; repeating done true preserves it; false clears it. Colors: blue, purple, pink, red, orange, yellow, green, teal, gray.
 
 ## Common requests → what to call
 
@@ -62,7 +62,7 @@ User identifiers in assignees, createdBy, filters, and `to`: UUID, username, dis
 | "Assign this to my teammate" / "pass to German" | POST `/api/tasks/:id/handoff` with `{ "to": "teammate" }` |
 | "Give it to me" / "I'll take it" | POST `/api/tasks/:id/handoff` with `{ "to": "me" }` |
 | "Share with both of us" | PATCH `/api/tasks/:id` with `{ "addAssignees": ["me", "teammate"] }` |
-| "Put it on the later list" / "future changes" | PATCH `/api/tasks/:id` with `{ "list": "later" }` |
+| "Put it on the later list" / "future changes" | PATCH `/api/tasks/:id` with `{ "list": "later" }`  (this unassigns it) |
 | "What's on my plate" | GET `/api/tasks?view=mine` |
 | "What did German give me" | GET `/api/tasks?view=mine_from_teammate` (tasks created by the teammate and assigned to me) |
 | "What's in that screenshot?" / "look at the image on X" | GET the task, download each `attachments[].url` with the Bearer header, then view the files |

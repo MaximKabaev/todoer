@@ -492,6 +492,42 @@ test('counts match each view for each authenticated user', async () => {
   }
 });
 
+test('Later tasks never have assignees; assigning someone moves the task to Now', async () => {
+  const ids = [];
+  const track = (task) => { ids.push(task.id); return task; };
+  const names = (task) => task.assignees.map((u) => u.username).sort();
+  try {
+    // Create in Later: default and explicit assignees are dropped (explicit list wins).
+    const a = track(await create({ title: 'QA later default', list: 'later' }));
+    assert.deepEqual([a.list, names(a)], ['later', []]);
+    const b = track(await create({ title: 'QA later explicit', list: 'later', assignees: ['me', 'teammate'] }));
+    assert.deepEqual([b.list, names(b)], ['later', []]);
+    // Moving to Later clears assignees.
+    const c = track(await create({ title: 'QA now both', assignees: ['me', 'teammate'] }));
+    assert.deepEqual(names(await patch(c.id, { list: 'later' })), []);
+    // Assigning (replace or add) plans the task: it moves to Now.
+    let moved = await patch(a.id, { addAssignees: ['teammate'] });
+    assert.deepEqual([moved.list, names(moved)], ['now', [second.username]]);
+    moved = await patch(b.id, { assignees: ['me'] });
+    assert.deepEqual([moved.list, names(moved)], ['now', [first.username]]);
+    // Same request says Later explicitly: Later wins, nobody assigned.
+    const both = await patch(c.id, { list: 'later', assignees: ['me'] });
+    assert.deepEqual([both.list, names(both)], ['later', []]);
+    // Clearing or removing assignees on a Later task keeps it on Later.
+    assert.equal((await patch(c.id, { assignees: [] })).list, 'later');
+    assert.equal((await patch(c.id, { removeAssignees: ['me'] })).list, 'later');
+    // Handoff plans it too.
+    const handed = (await api('post', `/api/tasks/${c.id}/handoff`).send({ to: 'teammate' }).expect(200)).body.task;
+    assert.deepEqual([handed.list, names(handed)], ['now', [second.username]]);
+    // Multipart create in Later also ignores assignees.
+    const upload = (await api('post', '/api/tasks').field('title', 'QA later upload').field('list', 'later').field('assignees', 'me').expect(201)).body.task;
+    track(upload);
+    assert.deepEqual([upload.list, names(upload)], ['later', []]);
+  } finally {
+    for (const id of ids) await api('delete', `/api/tasks/${id}`);
+  }
+});
+
 test('counts and tag counts can be scoped to one project', async () => {
   const { project } = (await api('post', '/api/projects').send({ name: 'QA scoped counts' }).expect(201)).body;
   const tag = `qa-scope-${randomUUID().slice(0, 8)}`;
