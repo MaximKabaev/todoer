@@ -18,6 +18,7 @@ import {
   taskKey,
 } from "@/lib/api";
 import { useToast } from "@/components/providers";
+import { taskAssignment } from "@/lib/task-assignment";
 export type Selection = { kind: View | "tag"; id?: string };
 export function viewQuery(
   selection: Selection,
@@ -49,7 +50,7 @@ export function viewContext(
   if (selection.kind === "completed")
     return { done: true, assignees: [user.id] };
   if (selection.kind === "teammate") return { assignees: [teammate.id] };
-  if (selection.kind === "later") return { list: "later" };
+  if (selection.kind === "later") return { list: "later", assignees: [] };
   if (selection.kind === "unassigned") return { assignees: [] };
   if (selection.kind === "tag") return { tags: [selection.id!] };
   return { assignees: [user.id] };
@@ -134,9 +135,7 @@ export function useWorkspace(
           ? projects.data?.projects.find((p) => p.id === input.projectId) ||
             null
           : task.project,
-      assignees: input.assignees
-        ? input.assignees.map(resolve)
-        : task.assignees,
+      ...taskAssignment(task, input, resolve),
       tags: input.tags
         ? input.tags.map(
             (name) =>
@@ -179,6 +178,8 @@ export function useWorkspace(
         await apply(task.id, () => saved);
         await refreshMeta();
       }
+      if (task.list === "later" && saved.list === "now")
+        toast({ message: "Moved to Now" });
       return saved;
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {

@@ -12,6 +12,14 @@ test("plain text and unknown mentions survive capture", () => {
     "Call @someone at 5! hello@example.com",
   );
 });
+test("Later capture leaves mentions as text without assignment chips", () => {
+  const result = parseQuickSyntax("An idea @me @both #ideas !!", users, {
+    assign: false,
+  });
+  assert.equal(result.title, "An idea @me @both");
+  assert.deepEqual(result.fields, { tags: ["ideas"], priority: 2 });
+  assert.deepEqual(result.chips, ["#ideas", "Medium priority"]);
+});
 test("all quick syntax becomes structured fields", () => {
   const result = parseQuickSyntax(
     "Review the layout #design @both !!! ^later",

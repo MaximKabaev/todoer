@@ -36,14 +36,21 @@ export function useAppNavigation() {
     (target: string, options?: { replace?: boolean; background?: string }) => {
       target = normalizeAppUrl(target);
       if (target === url || target === entry.url) return;
+      // An inspector session owns one history entry, even when another task is
+      // opened by a row, keyboard action, or capture. Keep its original exit.
+      const switchingTask =
+        url.startsWith("/tasks/") && target.startsWith("/tasks/");
+      const replace = switchingTask || options?.replace;
       setEntry({
         url: target,
-        background: options?.background,
-        back: options?.replace ? entry.back : true,
+        background: switchingTask
+          ? entry.background || options?.background
+          : options?.background,
+        back: replace ? entry.back : true,
       });
-      router[options?.replace ? "replace" : "push"](target, { scroll: false });
+      router[replace ? "replace" : "push"](target, { scroll: false });
     },
-    [router, url, entry.back, entry.url],
+    [router, url, entry.back, entry.url, entry.background],
   );
   const back = useCallback(
     (fallback: string, replace = false) => {

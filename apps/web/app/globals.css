@@ -1129,6 +1129,11 @@ kbd {
   border-top: 1px solid var(--line);
   padding: 22px 0;
 }
+.later-planning p {
+  color: var(--secondary);
+  font-size: 12px;
+  margin: 0 0 14px;
+}
 .field-label {
   display: block;
   font-size: 9px;

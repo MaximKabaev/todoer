@@ -87,6 +87,7 @@ function fixture(title, options = {}) {
     updatedAt: stamp(),
     ...options,
   };
+  if (task.list === "later") task.assignees = [];
   tasks.push(task);
   return task;
 }
@@ -293,6 +294,9 @@ function patch(task, body, me) {
     task.assignees = task.assignees.filter(
       (u) => !body.removeAssignees.some((v) => resolveUser(v, me)?.id === u.id),
     );
+  if (body.list === "later") task.assignees = [];
+  else if (body.assignees?.length || body.addAssignees?.length)
+    task.list = "now";
   if (body.addTags)
     task.tags = [
       ...new Map(
@@ -527,7 +531,7 @@ const server = createServer(async (req, res) => {
             createdBy: me,
             position: Date.now(),
           });
-          patch(task, data, me);
+          patch(task, { ...data, addAssignees: undefined }, me);
           await attach(task, uploads);
           return send({ task: shape(task) }, 201);
         }
@@ -539,6 +543,8 @@ const server = createServer(async (req, res) => {
         const to = resolveUser(data.to || "teammate", me);
         if (!to) return send({ error: "invalid_user" }, 400);
         task.assignees = [to];
+        task.list = "now";
+        task.updatedAt = stamp();
         return send({ task: shape(task) });
       }
       if (parts[3] === "attachments" && method === "POST") {
