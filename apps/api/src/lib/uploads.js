@@ -10,6 +10,7 @@ export const uploadsDirectory = path.resolve(process.env.API_UPLOAD_DIR || path.
 await mkdir(uploadsDirectory, { recursive: true });
 const extensions = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif' };
 export const upload = multer({
+  defParamCharset: 'utf8',
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024, fields: 200, fieldSize: 1024 * 1024 },
   fileFilter(req, file, callback) {

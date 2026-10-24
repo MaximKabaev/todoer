@@ -65,7 +65,7 @@ tasksRouter.patch('/:id', async (req, res) => {
       values.push(body[field]);
       assignments.push(`${column} = $${values.length}`);
     }
-    if (body.done !== undefined) assignments.push(body.done ? 'done_at = now()' : 'done_at = NULL');
+    if (body.done !== undefined) assignments.push(body.done ? 'done_at = CASE WHEN done THEN done_at ELSE now() END' : 'done_at = NULL');
     await db.query(`UPDATE tasks SET ${assignments.join(', ')} WHERE id = $1`, values);
     await applyRelations(taskId, body, req, db);
     return getTask(taskId, db);
@@ -79,7 +79,7 @@ tasksRouter.post('/:id/handoff', async (req, res) => {
   const task = await transaction(async (db) => {
     const { rowCount } = await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1 RETURNING id', [taskId]);
     if (!rowCount) throw new HttpError(404, 'Task not found');
-    await db.query('DELETE FROM task_assignees WHERE task_id = $1 AND user_id = $2', [taskId, req.user.id]);
+    await db.query('DELETE FROM task_assignees WHERE task_id = $1', [taskId]);
     await db.query('INSERT INTO task_assignees (task_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [taskId, userId]);
     return getTask(taskId, db);
   });

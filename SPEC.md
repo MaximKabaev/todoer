@@ -14,7 +14,10 @@ SPEC.md               this file
 ```
 
 - Node 24, npm 11. Use npm workspaces, no pnpm/yarn.
-- API listens on `http://localhost:4000`. Web listens on `http://localhost:3000`.
+- API binds to `API_HOST` (default `127.0.0.1`) on `API_PORT` (default `4000`). Web listens on `http://localhost:3000`.
+  Production uses Caddy at `https://api.todo.customsai.org` and the web app at `https://todo.customsai.org`.
+  Set `PUBLIC_API_URL=https://api.todo.customsai.org` to advertise the preferred direct API base in agent examples.
+  Forwarded headers are trusted only from loopback proxies (Caddy/Next), not remote clients.
 - The web app proxies `/api/*` → `http://localhost:4000/api/*` via Next `rewrites()` so the browser
   only ever talks to its own origin (no CORS, cookies just work). The API base for server-side
   rewrites comes from env `API_URL` (default `http://localhost:4000`).
@@ -32,6 +35,7 @@ SPEC.md               this file
 - Passwords hashed with bcrypt (`bcryptjs`).
 - Browser auth: `POST /api/auth/login` sets an httpOnly, SameSite=Lax cookie `todoer_session`
   (opaque random id stored in a `sessions` table, 90-day expiry). Logout deletes it.
+  Cookies use Secure when `COOKIE_SECURE=true` or `NODE_ENV=production`; otherwise it is off for local development.
 - Agent auth: `Authorization: Bearer <token>`. Each user can create personal API tokens
   (stored as sha256 hashes; plaintext shown once on creation). The seed creates one token per user
   and prints it. A request authenticated by token acts **as that user** (so "me" = token owner).
@@ -95,8 +99,9 @@ Images only (png, jpeg, gif, webp, heic/heif, svg is NOT allowed). Max 20 MB per
 Creating a task inside a view pre-fills sensible context (assignee, list, project) but **nothing is
 required** — an empty task is valid.
 
-"Pass on / hand off" = move a task from me to my teammate (remove me, add them). If both are
-assigned, handing off leaves only the teammate.
+"Pass on / hand off" = exclusive reassignment to the chosen recipient (default: my teammate).
+All previous assignees are replaced with exactly `[to]`, including when `to` is `"me"`, or the
+task was shared or unassigned.
 
 ## REST API
 
@@ -139,13 +144,17 @@ Unknown body fields are ignored. Everything is camelCase.
     To explicitly leave a multipart task unassigned, send `assignees=""` (for example,
     `formData.append('assignees', '')`) or `assignees="[]"`; both mean an empty array.
     Omitting the field entirely still defaults to `[me]`.
+    Empty optional scalar fields (`list`, `priority`, `done`, `dueDate`, `projectId`) are ignored;
+    empty `title` and `notes` remain empty strings. Literal `"null"` sets dueDate/projectId to null.
+    UTF-8 attachment filenames are preserved.
     This powers drag-and-drop: drop images → one request → one task.
   → `201 { task }`
 - `PATCH /api/tasks/:id` — any subset of the POST JSON fields. `assignees`/`tags` replace the full set.
   Also accepts `addAssignees`, `removeAssignees`, `addTags`, `removeTags` (same identifier rules),
-  and `position`. Setting `done: true` sets `doneAt`. → `{ task }`
+  and `position`. Transitioning false→true sets `doneAt`; repeating `done: true` preserves it.
+  Setting `done: false` clears `doneAt`. → `{ task }`
 - `POST /api/tasks/:id/handoff` `{ to?: identifier }` (default: the other user) → `{ task }`.
-  Removes the current user from assignees and adds `to`.
+  Replaces all assignees with exactly `[to]`.
 - `DELETE /api/tasks/:id` → `{ ok: true }` (deletes attachments' files too)
 - `POST /api/tasks/:id/attachments` multipart `files` → `{ task }`
 - `DELETE /api/attachments/:id` → `{ ok: true }`
@@ -184,13 +193,18 @@ Unknown body fields are ignored. Everything is camelCase.
 Plain markdown written for an LLM agent (e.g. Claude) that will call the API with `curl`. Must include:
 - What the app is, the two users, and that "me" means the token owner.
 - How to authenticate (Bearer token, where to get one: Settings → Agent tokens in the web app).
-- The base URL (derive from the request host, e.g. `http://localhost:4000`).
+- The base URL: use `PUBLIC_API_URL` when set (preferred direct production API base), otherwise
+  derive from the request protocol and host, e.g. `http://localhost:4000`. Omit localhost hints
+  when `PUBLIC_API_URL` is set. All examples use this chosen base.
 - Every endpoint above with concise examples, emphasising the identifier shortcuts
   (`"me"`, `"teammate"`, usernames, display names, tag names).
 - Ready-made recipes: "list everything", "list my tasks", "add a task", "assign this to my teammate"
-  (`POST /api/tasks/:id/handoff` or `PATCH` with `addAssignees`), "mark done", "delete", "move to Later",
+  (`POST /api/tasks/:id/handoff` for exclusive reassignment; `PATCH` with `addAssignees` to share), "mark done", "delete", "move to Later",
   "find a task by text" (`q=`), "add tags".
 - A note that destructive actions (delete) should be confirmed with the human first.
+- A short natural-language request → endpoint mapping, including taking a task, sharing with both,
+  Later, mine, mine_from_teammate, and search/confirm/delete. Explain that `q=` searches title + notes
+  and should be used before creating duplicates. Present tasks concisely with title, assignees, tags, due date, and list.
 The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/redirect to the API).
 
 ## UX requirements (frontend)

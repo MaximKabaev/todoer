@@ -4,7 +4,8 @@ import { pool } from './db.js';
 if (!process.env.SESSION_SECRET) throw new Error('SESSION_SECRET is required');
 await pool.query('SELECT 1');
 const port = Number(process.env.API_PORT || 4000);
-const server = app.listen(port, () => console.log(`todoer API listening on http://localhost:${port}`));
+const host = process.env.API_HOST || '127.0.0.1';
+const server = app.listen(port, host, () => console.log(`todoer API listening on http://${host.includes(':') ? `[${host}]` : host}:${port}`));
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.once(signal, () => {
     const timeout = setTimeout(() => process.exit(1), 10000).unref();

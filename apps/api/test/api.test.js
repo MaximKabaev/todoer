@@ -11,6 +11,10 @@ import bcrypt from 'bcryptjs';
 import request from 'supertest';
 
 dotenv.config({ path: new URL('../.env', import.meta.url), quiet: true });
+// Assert development defaults independently of the real deployment's .env settings.
+process.env.NODE_ENV = 'test';
+process.env.COOKIE_SECURE = '';
+process.env.PUBLIC_API_URL = '';
 const schema = `todoer_test_${randomUUID().replaceAll('-', '')}`;
 process.env.API_DB_SCHEMA = schema;
 const admin = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -22,6 +26,28 @@ const hash = (value) => createHash('sha256').update(value).digest('hex');
 const api = (method, url, token = firstToken) => request(app)[method](url).set('Authorization', `Bearer ${token}`);
 const create = async (body = {}, token = firstToken) => (await api('post', '/api/tasks', token).send(body).expect(201)).body.task;
 const patch = async (id, body) => (await api('patch', `/api/tasks/${id}`).send(body).expect(200)).body.task;
+
+async function withEnv(values, run) {
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  try {
+    for (const [key, value] of Object.entries(values)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    return await run();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+// Model a direct remote connection, rather than Supertest's loopback socket.
+const remoteClient = (req, res) => {
+  Object.defineProperty(req.socket, 'remoteAddress', { value: '203.0.113.10' });
+  app(req, res);
+};
 
 // Generate an actual 1x1 RGBA PNG with valid checksums, rather than relying on a fixture file.
 function png() {
@@ -106,6 +132,45 @@ test('login is case-insensitive, cookie sessions expire and logout revokes them'
   await browser.post('/api/auth/login').send({ username: first.username, password }).expect(200);
   await pool.query("UPDATE sessions SET expires_at = now() - interval '1 second'");
   await browser.get('/api/me').expect(401);
+});
+
+test('session cookies use Secure for COOKIE_SECURE=true or production, including logout', async (t) => {
+  for (const [name, nodeEnv, secureEnv, secure] of [
+    ['development default', 'development', undefined, false],
+    ['explicit secure cookies', 'development', 'true', true],
+    ['production default', 'production', undefined, true],
+    ['production with COOKIE_SECURE=false', 'production', 'false', true],
+  ]) {
+    await t.test(name, () => withEnv({ NODE_ENV: nodeEnv, COOKIE_SECURE: secureEnv }, async () => {
+      const login = await request(app).post('/api/auth/login').send({ username: first.username, password }).expect(200);
+      const cookie = login.headers['set-cookie'][0];
+      assert.equal(/; Secure(?:;|$)/.test(cookie), secure);
+      assert.match(cookie, /HttpOnly/); assert.match(cookie, /SameSite=Lax/);
+      const logout = await api('post', '/api/auth/logout').set('Cookie', cookie.split(';')[0]).expect(200);
+      assert.equal(/; Secure(?:;|$)/.test(logout.headers['set-cookie'][0]), secure);
+    }));
+  }
+});
+
+test('only loopback proxies can supply forwarded client IPs and protocol', async () => {
+  assert.equal(app.get('trust proxy'), 'loopback');
+  const trust = app.get('trust proxy fn');
+  for (const ip of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) assert.equal(trust(ip), true, ip);
+  for (const ip of ['203.0.113.10', '10.0.0.1', '2001:db8::1']) assert.equal(trust(ip), false, ip);
+
+  const remote = await request(remoteClient).get('/api/agent').set('Host', 'api.example.test')
+    .set('X-Forwarded-Proto', 'https').set('X-Forwarded-For', '198.51.100.1').expect(200);
+  assert.ok(remote.text.includes('**http://api.example.test**'));
+  const proxied = await request(app).get('/api/agent').set('Host', 'api.example.test')
+    .set('X-Forwarded-Proto', 'https').expect(200);
+  assert.ok(proxied.text.includes('**https://api.example.test**'));
+});
+
+test('remote clients cannot bypass the login rate limit by changing X-Forwarded-For', async () => {
+  for (let i = 0; i < 21; i++) {
+    await request(remoteClient).post('/api/auth/login').set('X-Forwarded-For', `198.51.100.${i + 1}`)
+      .send({ username: first.username, password: 'wrong' }).expect(i < 20 ? 401 : 429);
+  }
 });
 
 test('bearer tokens act as their owner, are hashed, and update last_used_at', async () => {
@@ -193,6 +258,22 @@ test('task fields validate dates and priorities, done toggles doneAt, and positi
   await api('patch', `/api/tasks/${task.id}`).send({ done: 'true' }).expect(400);
 });
 
+test('PATCH done true preserves doneAt until a false-to-true transition', async () => {
+  let task = await create({ done: true });
+  const originalDoneAt = '2001-02-03T04:05:06.000Z';
+  await pool.query('UPDATE tasks SET done_at = $2 WHERE id = $1', [task.id, originalDoneAt]);
+  task = await patch(task.id, { done: true, title: 'Still done' });
+  assert.equal(task.done, true); assert.equal(task.doneAt, originalDoneAt);
+  task = await patch(task.id, { notes: 'Edit without toggling completion' });
+  assert.equal(task.doneAt, originalDoneAt);
+  task = await patch(task.id, { done: false });
+  assert.equal(task.doneAt, null);
+  const start = Date.now();
+  task = await patch(task.id, { done: true });
+  assert.ok(Date.parse(task.doneAt) >= start);
+  assert.equal((await patch(task.id, { done: true })).doneAt, task.doneAt);
+});
+
 test('every task view matches the shared contract and all includes both lists', async () => {
   const title = 'viewfixture';
   const mine = await create({ title });
@@ -241,13 +322,20 @@ test('task lists sort by descending position and completed view by doneAt', asyn
   assert.deepEqual((await api('get', '/api/tasks').query({ q: 'orderfixture', view: 'completed' }).expect(200)).body.tasks.map((task) => task.id), [a.id, b.id]);
 });
 
-test('handoff moves a single assignment and leaves only the teammate when both were assigned', async () => {
-  for (const assignees of [['me'], ['me', 'teammate']]) {
-    const task = await create({ assignees });
-    const response = await api('post', `/api/tasks/${task.id}/handoff`).send({}).expect(200);
-    assert.deepEqual(response.body.task.assignees, [second]);
-    const returned = await api('post', `/api/tasks/${task.id}/handoff`, secondToken).send({ to: first.displayName }).expect(200);
-    assert.deepEqual(returned.body.task.assignees, [first]);
+test('handoff exclusively assigns the recipient from every initial assignment', async (t) => {
+  for (const [name, assignees, to, expected] of [
+    ['me-only → teammate (default)', ['me'], undefined, second],
+    ['both → teammate', ['me', 'teammate'], 'teammate', second],
+    ['teammate-only → me', ['teammate'], 'me', first],
+    ['unassigned → teammate', [], 'teammate', second],
+  ]) {
+    await t.test(name, async () => {
+      const task = await create({ assignees });
+      const response = await api('post', `/api/tasks/${task.id}/handoff`).send(to ? { to } : {}).expect(200);
+      assert.deepEqual(response.body.task.assignees, [expected]);
+      const returned = await api('post', `/api/tasks/${task.id}/handoff`, secondToken).send({ to: first.displayName }).expect(200);
+      assert.deepEqual(returned.body.task.assignees, [first]);
+    });
   }
 });
 
@@ -283,6 +371,32 @@ test('multipart creates an image task with JSON arrays, dimensions, and a privat
   await api('get', attachment.url).expect(404);
   await assert.rejects(stat(path.join(uploadDirectory, `${attachment.id}.png`)), { code: 'ENOENT' });
   assert.deepEqual((await api('get', `/api/tasks/${task.id}`).expect(200)).body.task.attachments, []);
+});
+
+test('multipart preserves UTF-8 macOS screenshot and non-Latin filenames on both upload routes', async () => {
+  for (const filename of ['Screenshot 2026-10-24 at 10.00.00 AM.png', 'скриншот.png']) {
+    const created = await api('post', '/api/tasks').attach('files', png(), { filename, contentType: 'image/png' }).expect(201);
+    const task = created.body.task;
+    assert.equal(task.attachments[0].filename, filename);
+    const attached = await api('post', `/api/tasks/${task.id}/attachments`)
+      .attach('files', png(), { filename, contentType: 'image/png' }).expect(200);
+    assert.deepEqual(attached.body.task.attachments.map((attachment) => attachment.filename), [filename, filename]);
+    const stored = await pool.query('SELECT filename FROM attachments WHERE task_id = $1', [task.id]);
+    assert.ok(stored.rows.every((row) => row.filename === filename));
+  }
+});
+
+test('multipart ignores empty optional scalars while preserving empty title and notes', async () => {
+  const response = await api('post', '/api/tasks').field('title', '').field('notes', '')
+    .field('list', '').field('priority', '').field('done', '').field('dueDate', '').field('projectId', '')
+    .attach('files', png(), 'empty-fields.png').expect(201);
+  const task = response.body.task;
+  assert.equal(task.title, ''); assert.equal(task.notes, '');
+  assert.equal(task.list, 'now'); assert.equal(task.priority, 0);
+  assert.equal(task.done, false); assert.equal(task.doneAt, null);
+  assert.equal(task.dueDate, null); assert.equal(task.projectId, null);
+  assert.deepEqual(task.assignees, [first]);
+  assert.equal(task.attachments.length, 1);
 });
 
 test('multipart supports repeated fields, omitted assignees, empty fields, and JSON empty arrays', async () => {
@@ -376,6 +490,33 @@ test('agent instructions are public markdown, derive the request origin, and des
   for (const text of ['http://localhost:3000', '$TODOER_TOKEN', 'view=all&done=all', 'q=', 'Confirm before deleting', 'handoff', 'Maxim Test', 'Teammate Test', 'GET /api/health', 'PATCH /api/me', 'DELETE /api/tokens/:id', 'GET /api/counts', 'POST /api/tasks/:id/attachments']) assert.ok(result.text.includes(text), text);
   const alias = await request(app).get('/agent').set('Host', 'api.example.test').set('X-Forwarded-Proto', 'https').expect(200);
   assert.match(alias.text, /https:\/\/api.example.test/);
+});
+
+test('PUBLIC_API_URL overrides proxy origins everywhere in both agent routes and drops localhost hints', async () => {
+  for (const base of ['https://api.todo.customsai.org', 'https://custom-api.example.test/']) {
+    await withEnv({ PUBLIC_API_URL: base }, async () => {
+      for (const route of ['/api/agent', '/agent']) {
+        const response = await request(app).get(route).set('Host', 'localhost:4000')
+          .set('X-Forwarded-Proto', 'http').expect(200);
+        const normalized = base.replace(/\/$/, '');
+        assert.ok(response.text.includes(`Preferred direct API base URL: **${normalized}**`));
+        assert.ok(response.text.includes(`export TODOER_BASE='${normalized}'`));
+        assert.doesNotMatch(response.text, /localhost|\{\{[A-Z]+\}\}/);
+        if (base.includes('custom-api')) assert.ok(!response.text.includes('api.todo.customsai.org'));
+      }
+    });
+  }
+});
+
+test('agent guide maps common requests to exclusive handoff, sharing, views, search, and concise task summaries', async () => {
+  const { text } = await request(app).get('/api/agent').expect(200);
+  for (const phrase of ['Common requests → what to call', 'pass to German', 'Give it to me', '"to": "me"',
+    '"to": "teammate"', '"addAssignees": ["me", "teammate"]', '"list": "later"',
+    'view=mine', 'view=mine_from_teammate', 'Remove/delete X', 'confirm with the human',
+    'exactly the recipient', 'both title and notes', 'search before creating',
+    'title (use "Untitled" if empty)', 'assignees (or "Unassigned")', 'tags, due date if present, and list']) {
+    assert.ok(text.includes(phrase), phrase);
+  }
 });
 
 test('not found, invalid JSON, invalid UUID, and validation failures use consistent JSON errors', async () => {

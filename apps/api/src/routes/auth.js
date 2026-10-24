@@ -32,13 +32,13 @@ authRouter.post('/auth/login', async (req, res) => {
     await db.query('DELETE FROM sessions WHERE expires_at <= now()');
     await db.query('INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)', [sessionHash(secret), user.id, new Date(now + sessionLifetime)]);
   });
-  res.cookie(cookieName, secret, { ...cookieOptions, maxAge: sessionLifetime }).json({ user: publicUser(user) });
+  res.cookie(cookieName, secret, { ...cookieOptions(), maxAge: sessionLifetime }).json({ user: publicUser(user) });
 });
 
 authRouter.use(authenticate);
 authRouter.post('/auth/logout', async (req, res) => {
   if (req.sessionId) await pool.query('DELETE FROM sessions WHERE id = $1', [req.sessionId]);
-  res.clearCookie(cookieName, cookieOptions).json({ ok: true });
+  res.clearCookie(cookieName, cookieOptions()).json({ ok: true });
 });
 authRouter.get('/me', (req, res) => res.json({ user: req.user, teammate: req.teammate ?? null }));
 authRouter.get('/users', (req, res) => res.json({ users: req.users }));

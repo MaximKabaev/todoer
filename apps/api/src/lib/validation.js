@@ -38,6 +38,9 @@ export const querySchema = z.object({
 export function taskBody(req) {
   if (!req.is('multipart/form-data')) return req.body ?? {};
   const body = { ...req.body };
+  for (const field of ['list', 'dueDate', 'priority', 'projectId', 'done']) {
+    if (body[field] === '') delete body[field];
+  }
   for (const field of ['assignees', 'tags']) {
     if (!(field in body)) continue;
     if (body[field] === '') { body[field] = []; continue; }
@@ -54,7 +57,7 @@ export function taskBody(req) {
   if (body.done === 'true') body.done = true;
   if (body.done === 'false') body.done = false;
   for (const field of ['dueDate', 'projectId']) {
-    if (body[field] === '' || body[field] === 'null') body[field] = null;
+    if (body[field] === 'null') body[field] = null;
   }
   return body;
 }

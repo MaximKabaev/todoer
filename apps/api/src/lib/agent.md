@@ -4,7 +4,7 @@ todoer is a shared workspace for exactly two people: {{USERS}}. Both users can r
 
 ## Connect
 
-Base URL for this request: **{{BASE}}**. Through the web proxy this is normally `http://localhost:3000`; the API server normally uses `http://localhost:4000`. Use the origin where you obtained this document.
+{{CONNECTION}}
 
 Create a personal token in **Settings → Agent tokens** in the web app. Keep the secret private: it is shown only once. Every API request requires `Authorization: Bearer $TODOER_TOKEN`, except health, login, and this document. Tokens act as their owner. Browser clients may instead use the 90-day httpOnly `todoer_session` cookie from login.
 
@@ -34,7 +34,7 @@ Use JSON and `Content-Type: application/json` unless uploading. Responses use ca
 | GET /api/tasks/:id | None | `{task}` |
 | POST /api/tasks | Every field optional: `{title,notes,list,dueDate,priority,projectId,done,assignees,tags}`; or multipart fields + repeated `files` | `201 {task}` |
 | PATCH /api/tasks/:id | Any create fields; `position`; `addAssignees`, `removeAssignees`, `addTags`, `removeTags` | `{task}` |
-| POST /api/tasks/:id/handoff | `{to?}`; defaults to teammate | `{task}`; removes me and adds recipient |
+| POST /api/tasks/:id/handoff | `{to?}`; defaults to teammate | `{task}`; replaces all assignees with exactly the recipient |
 | DELETE /api/tasks/:id | Confirm with human first | `{ok:true}`; also deletes images |
 | POST /api/tasks/:id/attachments | Multipart, repeated `files` | `{task}` |
 | DELETE /api/attachments/:id | Confirm with human first | `{ok:true}` |
@@ -53,7 +53,23 @@ Task filters combine with AND: `view=mine|mine_created|mine_from_teammate|teamma
 
 User identifiers in assignees, createdBy, filters, and `to`: UUID, username, display name (case-insensitive), `me`, `teammate`. Use GET /api/users to disambiguate. Tags accept names (case-insensitive, created if missing when adding) or existing IDs. `assignees`/`tags` replace the complete set on PATCH; use `add*`/`remove*` to preserve others. Omitted assignees on create defaults to `["me"]`; `[]` is explicitly unassigned.
 
-`list` defaults to `now`; `later` is the shared Future changes / things to look at list. Priority is 0 none, 1 low, 2 medium, 3 high. dueDate is `YYYY-MM-DD` or null; projectId is a UUID or null. Setting done true records doneAt; false clears it. Colors: blue, purple, pink, red, orange, yellow, green, teal, gray.
+`list` defaults to `now`; `later` is the shared Future changes / things to look at list. Priority is 0 none, 1 low, 2 medium, 3 high. dueDate is `YYYY-MM-DD` or null; projectId is a UUID or null. Transitioning from open to done records doneAt; repeating done true preserves it; false clears it. Colors: blue, purple, pink, red, orange, yellow, green, teal, gray.
+
+## Common requests → what to call
+
+| Human request | Call |
+| --- | --- |
+| "Assign this to my teammate" / "pass to German" | POST `/api/tasks/:id/handoff` with `{ "to": "teammate" }` |
+| "Give it to me" / "I'll take it" | POST `/api/tasks/:id/handoff` with `{ "to": "me" }` |
+| "Share with both of us" | PATCH `/api/tasks/:id` with `{ "addAssignees": ["me", "teammate"] }` |
+| "Put it on the later list" / "future changes" | PATCH `/api/tasks/:id` with `{ "list": "later" }` |
+| "What's on my plate" | GET `/api/tasks?view=mine` |
+| "What did German give me" | GET `/api/tasks?view=mine_from_teammate` (tasks created by the teammate and assigned to me) |
+| "Remove/delete X" | Search with `q=`, identify the task, confirm with the human, then DELETE `/api/tasks/:id` |
+
+Handoff is exclusive reassignment: after either handoff call, only the recipient is assigned, including when the task was shared or unassigned. Resolve named people against GET `/api/users` and the token owner's identity.
+
+Present tasks concisely, one line per task: title (use "Untitled" if empty), assignees (or "Unassigned"), tags, due date if present, and list (Now/Later). For example: `Fix login bug — Maxim, German · #bug · due 2026-12-01 · Now`. Avoid dumping raw JSON unless requested. `q=` searches both title and notes, case-insensitively; search before creating a task to avoid duplicates.
 
 ## Task example
 
@@ -101,10 +117,11 @@ curl -sS -X POST "$TODOER_BASE/api/tasks" -H "Authorization: Bearer $TODOER_TOKE
 curl -sS -X POST "$TODOER_BASE/api/tasks" -H "Authorization: Bearer $TODOER_TOKEN" -H 'Content-Type: application/json' -d '{"title":"Review the welcome screen","assignees":["teammate"]}'
 ```
 
-Pass a task to the teammate, or share it with both people:
+Pass a task exclusively to the teammate, take it yourself, or share it with both people:
 
 ```sh
 curl -sS -X POST "$TODOER_BASE/api/tasks/$TASK_ID/handoff" -H "Authorization: Bearer $TODOER_TOKEN" -H 'Content-Type: application/json' -d '{"to":"teammate"}'
+curl -sS -X POST "$TODOER_BASE/api/tasks/$TASK_ID/handoff" -H "Authorization: Bearer $TODOER_TOKEN" -H 'Content-Type: application/json' -d '{"to":"me"}'
 curl -sS -X PATCH "$TODOER_BASE/api/tasks/$TASK_ID" -H "Authorization: Bearer $TODOER_TOKEN" -H 'Content-Type: application/json' -d '{"addAssignees":["me","teammate"]}'
 ```
 
@@ -119,7 +136,7 @@ curl -sS -X PATCH "$TODOER_BASE/api/tasks/$TASK_ID" -H "Authorization: Bearer $T
 curl -sS -X PATCH "$TODOER_BASE/api/tasks/$TASK_ID" -H "Authorization: Bearer $TODOER_TOKEN" -H 'Content-Type: application/json' -d '{"removeAssignees":["me"]}'
 ```
 
-Create a task from an image, or attach images to an existing task. Images: PNG, JPEG, GIF, WebP, HEIC/HEIF; max 20 MB each. SVG is rejected. Multipart arrays may be repeated fields or JSON arrays. `-F 'assignees='` and `-F 'assignees=[]'` explicitly mean unassigned; omitting the field assigns me.
+Create a task from an image, or attach images to an existing task. Images: PNG, JPEG, GIF, WebP, HEIC/HEIF; max 20 MB each. UTF-8 filenames are preserved. SVG is rejected. Multipart arrays may be repeated fields or JSON arrays. `-F 'assignees='` and `-F 'assignees=[]'` explicitly mean unassigned; omitting the field assigns me. Empty optional scalar fields (`list`, `priority`, `done`, `dueDate`, `projectId`) are ignored; empty `title` and `notes` remain empty strings. Use the literal `null` for null dueDate/projectId.
 
 ```sh
 curl -sS -X POST "$TODOER_BASE/api/tasks" -H "Authorization: Bearer $TODOER_TOKEN" -F 'title=Review screenshot' -F 'assignees=[]' -F 'tags=["design"]' -F 'files=@screenshot.png;type=image/png'

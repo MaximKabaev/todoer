@@ -9,7 +9,10 @@ export const tokenHash = (secret) => createHash('sha256').update(secret).digest(
 export const newToken = () => `tdr_${randomBytes(32).toString('base64url')}`;
 export const cookieName = 'todoer_session';
 export const sessionLifetime = 90 * 24 * 60 * 60 * 1000;
-export const cookieOptions = { httpOnly: true, sameSite: 'lax', secure: false, path: '/' };
+export const cookieOptions = () => ({
+  httpOnly: true, sameSite: 'lax', path: '/',
+  secure: process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production',
+});
 export const sessionHash = (secret) => {
   if (!process.env.SESSION_SECRET) throw new Error('SESSION_SECRET is required');
   return createHmac('sha256', process.env.SESSION_SECRET).update(secret).digest('hex');
