@@ -5,6 +5,9 @@ import {
   api,
   ApiError,
   type Counts,
+  type CurrentUser,
+  scopeKey,
+  workspaceKey,
   type Project,
   type Tag,
   type Task,
@@ -15,25 +18,25 @@ import {
   taskKey,
 } from "@/lib/api";
 import { useToast } from "@/components/providers";
-export type Selection = { kind: View | "project" | "tag"; id?: string };
+export type Selection = { kind: View | "tag"; id?: string };
 export function viewQuery(
   selection: Selection,
   segment: number,
   q: string,
+  projectId?: string | null,
 ): TaskQuery {
   return {
-    ...(selection.kind === "project"
-      ? { projectId: selection.id, view: "all" as const }
-      : selection.kind === "tag"
-        ? { tag: selection.id, view: "all" as const }
-        : {
-            view:
-              selection.kind === "mine"
-                ? (["mine", "mine_created", "mine_from_teammate"] as const)[
-                    segment
-                  ]
-                : selection.kind,
-          }),
+    ...(selection.kind === "tag"
+      ? { tag: selection.id, view: "all" as const }
+      : {
+          view:
+            selection.kind === "mine"
+              ? (["mine", "mine_created", "mine_from_teammate"] as const)[
+                  segment
+                ]
+              : selection.kind,
+        }),
+    ...(projectId ? { projectId } : {}),
     ...(q ? { q } : {}),
     limit: 1000,
   };
@@ -48,7 +51,6 @@ export function viewContext(
   if (selection.kind === "teammate") return { assignees: [teammate.id] };
   if (selection.kind === "later") return { list: "later" };
   if (selection.kind === "unassigned") return { assignees: [] };
-  if (selection.kind === "project") return { projectId: selection.id };
   if (selection.kind === "tag") return { tags: [selection.id!] };
   return { assignees: [user.id] };
 }
@@ -57,18 +59,20 @@ export function useWorkspace(
   selection: Selection,
   segment: number,
   q: string,
-  user: User,
+  user: CurrentUser,
   teammate: User,
   onMissing: (id: string) => void,
 ) {
   const { mutate } = useSWRConfig();
   const toast = useToast();
-  const query = viewQuery(selection, segment, q);
+  const query = viewQuery(selection, segment, q, user.activeProjectId);
   const key = taskKey(query);
   const tasks = useSWR<{ tasks: Task[] }>(key);
   const projects = useSWR<{ projects: Project[] }>("/api/projects");
-  const tags = useSWR<{ tags: Tag[] }>("/api/tags");
-  const counts = useSWR<Counts>("/api/counts");
+  const tags = useSWR<{ tags: Tag[] }>(
+    scopeKey("/api/tags", user.activeProjectId),
+  );
+  const counts = useSWR<Counts>(scopeKey("/api/counts", user.activeProjectId));
   const deleted = useRef(new Set<string>());
   const queues = useRef(new Map<string, Promise<unknown>>());
   const versions = useRef(new Map<string, number>());
@@ -91,10 +95,7 @@ export function useWorkspace(
     [mutate],
   );
   const refreshMeta = useCallback(
-    () =>
-      Promise.allSettled(
-        ["/api/counts", "/api/projects", "/api/tags"].map((k) => mutate(k)),
-      ),
+    () => mutate((k) => workspaceKey(k) && !String(k).startsWith("/api/tasks")),
     [mutate],
   );
   const forget = useCallback(
@@ -229,7 +230,10 @@ export function useWorkspace(
     );
     // Also seed the unfiltered view so capture can leave a creator/search filter instantly.
     const captureKeys = [
-      ...new Set([key, taskKey(viewQuery(selection, 0, ""))]),
+      ...new Set([
+        taskKey(viewQuery(selection, segment, q, input.projectId)),
+        taskKey(viewQuery(selection, 0, "", input.projectId)),
+      ]),
     ];
     for (const captureKey of captureKeys)
       await mutate(

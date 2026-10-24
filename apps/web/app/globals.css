@@ -369,44 +369,6 @@ select:focus-visible {
   width: 24px;
   height: 24px;
 }
-.project-nav-wrap {
-  position: relative;
-}
-.project-emoji {
-  display: flex;
-  width: 19px;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-}
-.project-dot {
-  width: 9px;
-  height: 9px;
-  background: var(--accent);
-  border-radius: 3px;
-}
-.project-nav .nav-count {
-  padding-right: 19px;
-}
-.project-edit {
-  position: absolute;
-  right: 4px;
-  top: 8px;
-  width: 25px;
-  height: 25px;
-  color: var(--muted);
-}
-.project-edit:hover {
-  color: var(--secondary);
-}
-.empty-project {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--secondary);
-  padding: 10px 13px;
-}
 .nav-tags {
   display: flex;
   flex-wrap: wrap;
@@ -2269,48 +2231,6 @@ kbd {
     height: 32px;
     color: var(--blue);
   }
-  .home-projects {
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: var(--bg);
-    padding: 0 13px;
-  }
-  .home-projects .nav-item {
-    min-height: 57px;
-    border-radius: 0;
-    border-bottom: 1px solid var(--line);
-    padding: 10px 0;
-    font-size: 14px;
-    gap: 12px;
-  }
-  .home-projects .project-nav-wrap:last-child .nav-item {
-    border-bottom: 0;
-  }
-  .home-projects .project-emoji {
-    width: 29px;
-    font-size: 22px;
-  }
-  .home-projects .project-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 4px;
-  }
-  .home-projects .nav-count {
-    font-size: 12px;
-    padding-right: 36px;
-  }
-  .home-projects .nav-item > svg {
-    color: var(--muted);
-  }
-  .home-projects .project-edit {
-    right: 22px;
-    top: 7px;
-    width: 44px;
-    height: 44px;
-  }
-  .home-projects .project-edit svg {
-    width: 13px;
-  }
   .mobile-home .nav-tags {
     padding: 3px 0;
     gap: 7px;
@@ -2903,9 +2823,6 @@ kbd {
   .login-footnote {
     font-size: 10px;
   }
-  .home-projects .empty-project {
-    min-height: 57px;
-  }
   @keyframes sheet-in {
     from {
       transform: translateY(60px);
@@ -2969,11 +2886,6 @@ kbd {
   font-size: 10px;
   min-height: 30px;
   border-radius: 7px;
-}
-.project-emoji {
-  font-family:
-    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", var(--font);
-  color: var(--accent);
 }
 @media (max-width: 760px) {
   .inline-project-form {
@@ -3360,9 +3272,6 @@ kbd {
   .nav-tags .tag-filter {
     min-height: 44px;
   }
-  .project-nav-wrap .project-edit {
-    opacity: 1;
-  }
   .modal-header h2 {
     overflow-wrap: anywhere;
     min-width: 0;
@@ -3452,13 +3361,6 @@ kbd {
     width: 44px;
     height: 44px;
   }
-  .project-edit {
-    position: absolute;
-    right: 0;
-  }
-  .project-nav {
-    padding-right: 42px;
-  }
   .segmented-control button,
   .small-segment button,
   .handoff-button,
@@ -3490,57 +3392,187 @@ kbd {
   }
 }
 
-/* Project capture preference: native select keeps keyboard and touch interaction familiar. */
-.composer-project-row {
-  display: flex;
-  padding: 3px 0 4px;
+/* One quiet, site-wide project popup, shared by desktop and mobile. */
+.project-selector {
+  position: relative;
+  margin: 6px 0 20px;
+  min-width: 0;
 }
-.composer-project-chip {
-  display: inline-flex;
+.project-popup-button {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  max-width: 100%;
-  border-radius: 5px;
-  padding-left: 7px;
+  gap: 7px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px #00000006;
+}
+.project-popup-button:hover,
+.project-popup-button[aria-expanded="true"] {
   background: var(--blue-wash);
+}
+.project-popup-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.project-popup-button > svg:last-child {
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.project-popup {
+  position: fixed;
+  overflow-y: auto;
+  width: 292px;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  background: var(--elevated);
+  box-shadow:
+    0 12px 40px #00000026,
+    0 2px 8px #0000000a;
+  z-index: 80;
+}
+.project-popup-label {
+  padding: 7px 9px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  font-weight: 600;
+}
+.project-popup-options {
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.project-popup-row {
+  display: flex;
+  align-items: center;
+  border-radius: 7px;
+}
+.project-popup-row:hover,
+.project-option:hover {
+  background: var(--blue-wash);
+}
+.project-popup-row > .icon-button {
+  flex-shrink: 0;
+  width: 30px;
+  height: 32px;
+  color: var(--muted);
+}
+.project-option {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 8px 9px;
+  color: var(--text);
+  font-size: 13px;
+  border-radius: 7px;
+  text-align: left;
+}
+.project-option .nav-count {
+  font-size: 12px;
+}
+.all-projects-option {
+  margin-top: 5px;
+  border-top: 1px solid var(--line-strong);
+  border-radius: 0;
+  padding-top: 11px;
+}
+.new-project-option {
   color: var(--blue);
 }
-.composer-project-chip select {
-  min-width: 0;
-  max-width: 210px;
-  border: 0;
-  border-radius: 5px;
-  padding: 4px 2px;
-  background: transparent;
-  color: inherit;
-  font-size: 10px;
-  text-overflow: ellipsis;
+.project-popup .inline-project-form {
+  margin: 6px 0 0;
 }
-.composer-project-chip button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
+.mobile-project-control {
+  display: none;
 }
-.composer-project-chip.no-project {
-  background: var(--surface);
-  color: var(--secondary);
+.detail-project-context {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
 }
-@media (max-width: 700px) {
-  .composer-project-chip select {
-    min-height: 44px;
-    max-width: 160px;
-    font-size: 12px;
+.detail-project-context .text-button {
+  font-size: inherit;
+}
+.tag-count {
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 760px) {
+  .mobile-project-control {
+    display: block;
+    min-width: 0;
+    max-width: 48%;
+    margin-left: auto;
   }
-  .composer-project-chip button {
-    width: 44px;
-    height: 44px;
+  .mobile-project-control .project-selector {
+    margin: 0;
+  }
+  .compact-project-selector .project-popup-button {
+    font-size: 12px;
+    min-height: 32px;
+    padding: 6px 8px;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
+  .project-popup-row > .icon-button {
+    height: 40px;
+    width: 36px;
+  }
+  .project-option {
+    min-height: 42px;
+  }
+  .mobile-home > .project-selector {
+    margin: 14px 0 20px;
+  }
+  .app-toolbar .toolbar-actions {
+    margin-left: 8px;
   }
 }
 
+.project-popup .field-project-dot,
+.project-popup-button .field-project-dot {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* Route navigation retains the button layout and native link affordances. */
-.nav-item, .list-card, .tag-filter, .account-button { text-decoration: none; color: inherit; }
-.missing-task { position: fixed; inset: 0; z-index: 80; background: var(--canvas); color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; }
-.missing-task .primary-button { text-decoration: none; }
+.nav-item,
+.list-card,
+.tag-filter,
+.account-button {
+  text-decoration: none;
+  color: inherit;
+}
+.missing-task {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--canvas);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+}
+.missing-task .primary-button {
+  text-decoration: none;
+}

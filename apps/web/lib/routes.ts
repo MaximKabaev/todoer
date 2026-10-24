@@ -33,8 +33,6 @@ export function selectionUrl(
     );
   if (selection.kind === "teammate")
     return `/people/${encodeURIComponent(teammate.username)}`;
-  if (selection.kind === "project")
-    return `/projects/${encodeURIComponent(selection.id!)}`;
   if (selection.kind === "tag")
     return `/tags/${encodeURIComponent(selection.id!)}`;
   if (selection.kind === "all") return "/search";
@@ -51,17 +49,15 @@ export function parseListUrl(url: string): {
   const [kind, rawId] = path.slice(1).split("/");
   const id = rawId ? decodeURIComponent(rawId) : undefined;
   const selection: Selection =
-    kind === "projects"
-      ? { kind: "project", id }
-      : kind === "tags"
-        ? { kind: "tag", id }
-        : kind === "people"
-          ? { kind: "teammate" }
-          : kind === "search"
-            ? { kind: "all" }
-            : kind === "later" || kind === "unassigned" || kind === "completed"
-              ? { kind }
-              : { kind: "mine" };
+    kind === "tags"
+      ? { kind: "tag", id }
+      : kind === "people"
+        ? { kind: "teammate" }
+        : kind === "search"
+          ? { kind: "all" }
+          : kind === "later" || kind === "unassigned" || kind === "completed"
+            ? { kind }
+            : { kind: "mine" };
   return {
     selection,
     segment:
@@ -79,6 +75,5 @@ export function taskBackground(task: Task | undefined, viewer: User): string {
   if (task.assignees.length === 1)
     return `/people/${encodeURIComponent(task.assignees[0].username)}`;
   if (task.list === "later") return "/later";
-  if (task.projectId) return `/projects/${task.projectId}`;
   return "/unassigned";
 }

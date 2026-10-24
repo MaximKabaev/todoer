@@ -14,7 +14,7 @@ export type User = {
   displayName: string;
   color: Color;
 };
-export type CurrentUser = User & { lastProjectId: string | null };
+export type CurrentUser = User & { activeProjectId: string | null };
 export type Project = {
   id: string;
   name: string;
@@ -147,6 +147,13 @@ const json = (method: string, data?: unknown): RequestInit => ({
   method,
   ...(data === undefined ? {} : { body: JSON.stringify(data) }),
 });
+export const scopeKey = (path: string, projectId?: string | null) =>
+  projectId ? `${path}?${new URLSearchParams({ projectId })}` : path;
+export const workspaceKey = (key: unknown) =>
+  typeof key === "string" &&
+  ["/api/tasks", "/api/counts", "/api/tags", "/api/projects"].some(
+    (path) => key === path || key.startsWith(`${path}?`),
+  );
 export const taskKey = (query: TaskQuery = {}) =>
   `/api/tasks?${new URLSearchParams(
     Object.entries(query)
@@ -183,7 +190,7 @@ export const api = {
   logout: () => request<{ ok: true }>("/api/auth/logout", json("POST")),
   me: () => request<{ user: CurrentUser; teammate: User }>("/api/me"),
   updateMe: (input: {
-    lastProjectId?: string | null;
+    activeProjectId?: string | null;
     displayName?: string;
     password?: string;
     currentPassword?: string;
@@ -230,12 +237,14 @@ export const api = {
     request<{ project: Project }>(`/api/projects/${id}`, json("PATCH", input)),
   deleteProject: (id: string) =>
     request<{ ok: true }>(`/api/projects/${id}`, json("DELETE")),
-  tags: () => request<{ tags: Tag[] }>("/api/tags"),
+  tags: (projectId?: string) =>
+    request<{ tags: Tag[] }>(scopeKey("/api/tags", projectId)),
   createTag: (name: string, color?: Color) =>
     request<{ tag: Tag }>("/api/tags", json("POST", { name, color })),
   updateTag: (id: string, input: Partial<Pick<Tag, "name" | "color">>) =>
     request<{ tag: Tag }>(`/api/tags/${id}`, json("PATCH", input)),
   deleteTag: (id: string) =>
     request<{ ok: true }>(`/api/tags/${id}`, json("DELETE")),
-  counts: () => request<Counts>("/api/counts"),
+  counts: (projectId?: string) =>
+    request<Counts>(scopeKey("/api/counts", projectId)),
 };

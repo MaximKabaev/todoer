@@ -1,11 +1,15 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { selectionUrl } from "@/lib/routes";
 import {
   Archive,
   CheckCheck,
   ChevronRight,
+  ChevronsUpDown,
+  Check,
+  Layers,
   Hash,
   Inbox,
   ListTodo,
@@ -81,6 +85,8 @@ type Props = {
   counts?: Counts;
   onSettings: () => void;
   refresh: () => Promise<unknown>;
+  activeProjectId: string | null;
+  onProjectSelect: (id: string | null) => Promise<unknown>;
   home?: boolean;
   onSearch: (query: string) => void;
 };
@@ -96,11 +102,10 @@ export function Navigation({
   refresh,
   home = false,
   onSearch,
+  activeProjectId,
+  onProjectSelect,
 }: Props) {
-  const [editing, setEditing] = useState<Project | "new" | null>(null);
-  const [deleteProject, setDeleteProject] = useState<Project | null>(null);
   const lists = listDefinitions(teammate, counts);
-  const toast = useToast();
   return (
     <aside className={home ? "mobile-home" : "sidebar"}>
       {home ? (
@@ -154,6 +159,12 @@ export function Navigation({
           </div>
         </>
       )}
+      <ProjectSelector
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onSelect={onProjectSelect}
+        refresh={refresh}
+      />
       <nav
         aria-label="Task lists"
         className={home ? "home-cards" : "smart-lists"}
@@ -178,57 +189,6 @@ export function Navigation({
           </Link>
         ))}
       </nav>
-      <div className="nav-section">
-        <div className="section-label">
-          <span>Projects</span>
-          <button
-            className="icon-button"
-            aria-label="Add project"
-            onClick={() => setEditing("new")}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-        {editing === "new" && (
-          <InlineProject onClose={() => setEditing(null)} onSave={refresh} />
-        )}
-        <div className={home ? "home-projects" : ""}>
-          {projects.map((p) => (
-            <div className="project-nav-wrap" key={p.id}>
-              <Link
-                href={selectionUrl({ kind: "project", id: p.id }, teammate)}
-                className={`nav-item project-nav ${selection.kind === "project" && selection.id === p.id ? "active" : ""}`}
-                onNavigate={(e) => {
-                  e.preventDefault();
-                  onSelect({ kind: "project", id: p.id });
-                }}
-                style={
-                  { "--accent": `var(--${p.color})` } as React.CSSProperties
-                }
-              >
-                <span className="project-emoji">
-                  {p.emoji || <span className="project-dot" />}
-                </span>
-                <span className="nav-title">{p.name}</span>
-                <span className="nav-count">{p.openCount || 0}</span>
-                {home && <ChevronRight size={16} />}
-              </Link>
-              <button
-                className="project-edit icon-button"
-                aria-label={`Edit project ${p.name}`}
-                onClick={() => setEditing(p)}
-              >
-                <Settings2 size={13} />
-              </button>
-            </div>
-          ))}
-          {!projects.length && (
-            <button className="empty-project" onClick={() => setEditing("new")}>
-              <Plus size={16} /> Make a little project
-            </button>
-          )}
-        </div>
-      </div>
       <div className="nav-section tags-section">
         <div className="section-label">
           <span>Tags</span>
@@ -247,6 +207,7 @@ export function Navigation({
             >
               <Hash size={12} />
               <span>{tag.name}</span>
+              <span className="tag-count">{tag.count || 0}</span>
             </Link>
           ))}
           {!tags.length && (
@@ -284,40 +245,6 @@ export function Navigation({
           <span className="status-dot" /> Shared with {teammate.displayName}
           <span>Made for the two of you.</span>
         </div>
-      )}
-      {editing && editing !== "new" && (
-        <ProjectEditor
-          project={editing}
-          onClose={() => setEditing(null)}
-          onSave={async () => {
-            await refresh();
-            setEditing(null);
-          }}
-          onDelete={() => {
-            setDeleteProject(editing);
-            setEditing(null);
-          }}
-        />
-      )}
-      {deleteProject && (
-        <Confirm
-          title="Delete this project?"
-          text="Your tasks will stay. Only the project will be removed, for both of you."
-          onClose={() => setDeleteProject(null)}
-          onConfirm={() => {
-            api
-              .deleteProject(deleteProject.id)
-              .then(async () => {
-                await refresh();
-                if (
-                  selection.kind === "project" &&
-                  selection.id === deleteProject.id
-                )
-                  onSelect({ kind: "mine" });
-              })
-              .catch((error) => toast({ message: error.message, error: true }));
-          }}
-        />
       )}
     </aside>
   );
@@ -426,7 +353,7 @@ function InlineProject({
   onSave,
 }: {
   onClose: () => void;
-  onSave: () => Promise<unknown>;
+  onSave: (project: Project) => Promise<unknown>;
 }) {
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("");
@@ -440,12 +367,12 @@ function InlineProject({
         e.preventDefault();
         setBusy(true);
         try {
-          await api.createProject({
+          const { project } = await api.createProject({
             name: name.trim() || "New Project",
             emoji: emoji || null,
             color,
           });
-          await onSave();
+          await onSave(project);
           onClose();
         } catch (err) {
           toast({
@@ -498,5 +425,225 @@ function InlineProject({
         </button>
       </div>
     </form>
+  );
+}
+
+export function ProjectSelector({
+  projects,
+  activeProjectId,
+  onSelect,
+  refresh,
+  compact = false,
+}: {
+  projects: Project[];
+  activeProjectId: string | null;
+  onSelect: (id: string | null) => Promise<unknown>;
+  refresh: () => Promise<unknown>;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Project | "new" | null>(null);
+  const [deleting, setDeleting] = useState<Project | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const popup = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState({ top: 0, left: 0 });
+  const toast = useToast();
+  const project = projects.find((p) => p.id === activeProjectId);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: PointerEvent) => {
+      if (
+        !ref.current?.contains(e.target as Node) &&
+        !popup.current?.contains(e.target as Node)
+      )
+        setOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        setEditing(null);
+        trigger.current?.focus();
+      }
+    };
+    popup.current
+      ?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
+      ?.focus();
+    const reposition = () => setOpen(false);
+    window.addEventListener("resize", reposition);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  function pick(id: string | null) {
+    setOpen(false);
+    setEditing(null);
+    trigger.current?.focus();
+    void onSelect(id).catch(() => {});
+  }
+  return (
+    <div
+      className={`project-selector ${compact ? "compact-project-selector" : ""}`}
+      ref={ref}
+    >
+      <button
+        ref={trigger}
+        className="project-popup-button"
+        aria-label={`Active project: ${project?.name || "All projects"}`}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onClick={() => {
+          const rect = trigger.current!.getBoundingClientRect();
+          setAnchor({
+            top: rect.bottom + 6,
+            left: Math.max(16, Math.min(rect.left, window.innerWidth - 308)),
+          });
+          setOpen(!open);
+        }}
+      >
+        {project ? (
+          <>
+            <span
+              className="field-project-dot"
+              style={{ background: `var(--${project.color})` }}
+            />
+            <span>{project.emoji}</span>
+          </>
+        ) : (
+          <Layers size={15} />
+        )}
+        <span className="project-popup-name">
+          {project?.name || "All projects"}
+        </span>
+        <ChevronsUpDown size={13} />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={popup}
+            className="project-popup"
+            style={{
+              top: anchor.top,
+              left: anchor.left,
+              maxHeight: `calc(100dvh - ${anchor.top + 16}px)`,
+            }}
+            role="dialog"
+            aria-label="Choose active project"
+            onKeyDown={(e) => {
+              if (
+                !["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key) ||
+                (e.target as HTMLElement).tagName === "INPUT"
+              )
+                return;
+              e.preventDefault();
+              const buttons = Array.from(
+                popup.current!.querySelectorAll<HTMLButtonElement>("button"),
+              );
+              const index = buttons.indexOf(
+                document.activeElement as HTMLButtonElement,
+              );
+              const next =
+                e.key === "Home"
+                  ? 0
+                  : e.key === "End"
+                    ? buttons.length - 1
+                    : (index +
+                        (e.key === "ArrowDown" ? 1 : -1) +
+                        buttons.length) %
+                      buttons.length;
+              buttons[next]?.focus();
+            }}
+          >
+            <div className="project-popup-label">PROJECT</div>
+            <div className="project-popup-options">
+              {projects.map((p) => (
+                <div className="project-popup-row" key={p.id}>
+                  <button
+                    className="project-option"
+                    aria-pressed={activeProjectId === p.id}
+                    onClick={() => pick(p.id)}
+                  >
+                    <span
+                      className="field-project-dot"
+                      style={{ background: `var(--${p.color})` }}
+                    />
+                    <span>{p.emoji}</span>
+                    <span className="project-popup-name">{p.name}</span>
+                    <span className="nav-count">{p.openCount || 0}</span>
+                    {activeProjectId === p.id && <Check size={14} />}
+                  </button>
+                  <button
+                    className="icon-button"
+                    aria-label={`Edit project ${p.name}`}
+                    onClick={() => {
+                      setEditing(p);
+                      setOpen(false);
+                    }}
+                  >
+                    <Settings2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              className="project-option all-projects-option"
+              aria-pressed={!activeProjectId}
+              onClick={() => pick(null)}
+            >
+              <Layers size={16} />
+              <span className="project-popup-name">All projects</span>
+              {!activeProjectId && <Check size={14} />}
+            </button>
+            <button
+              className="project-option new-project-option"
+              onClick={() => setEditing(editing === "new" ? null : "new")}
+            >
+              <Plus size={16} /> New project…
+            </button>
+            {editing === "new" && (
+              <InlineProject
+                onClose={() => setEditing(null)}
+                onSave={async (p) => {
+                  await refresh();
+                  await onSelect(p.id);
+                  setOpen(false);
+                }}
+              />
+            )}
+          </div>,
+          document.body,
+        )}
+      {editing && editing !== "new" && (
+        <ProjectEditor
+          project={editing}
+          onClose={() => setEditing(null)}
+          onSave={async () => {
+            await refresh();
+            setEditing(null);
+          }}
+          onDelete={() => {
+            setDeleting(editing);
+            setEditing(null);
+          }}
+        />
+      )}
+      {deleting && (
+        <Confirm
+          title="Delete this project?"
+          text="Its tasks will be kept without a project. The project will be removed for both of you."
+          onClose={() => setDeleting(null)}
+          onConfirm={() => {
+            void api
+              .deleteProject(deleting.id)
+              .then(refresh)
+              .catch((error) => toast({ message: error.message, error: true }));
+          }}
+        />
+      )}
+    </div>
   );
 }

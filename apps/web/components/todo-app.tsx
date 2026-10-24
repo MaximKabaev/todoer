@@ -39,15 +39,14 @@ import {
   type TaskInput,
   type User,
 } from "@/lib/api";
-import { captureProjectId, defaultProjectId } from "@/lib/project-default";
-import { useLastProject } from "@/hooks/use-last-project";
+import { useActiveProject } from "@/hooks/use-active-project";
 import { imageFiles } from "@/lib/utils";
 import {
   useWorkspace,
   viewContext,
   type Selection,
 } from "@/hooks/use-workspace";
-import { Navigation, listDefinitions } from "./navigation";
+import { Navigation, ProjectSelector, listDefinitions } from "./navigation";
 import { Composer } from "./composer";
 import { TaskRow } from "./task-row";
 import { TaskDetail } from "./task-detail";
@@ -83,10 +82,8 @@ export function TodoApp() {
 }
 function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
   const day = useLocalDay();
-  const rememberProject = useLastProject();
-  const [projectOverride, setProjectOverride] = useState<
-    string | null | undefined
-  >();
+  const setActiveProject = useActiveProject();
+  const projectRedirect = useRef<string | null>(null);
   const nav = useAppNavigation();
   const { mutate } = useSWRConfig();
   const [captureToOpen, setCaptureToOpen] = useState<{
@@ -208,52 +205,37 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
   const tags = store.tags.data?.tags || [];
   const lists = listDefinitions(teammate, store.counts.data);
   const currentList = lists.find((l) => l.kind === selection.kind);
-  const project = projects.find((p) => p.id === selection.id);
   const tag = tags.find((t) => t.name === selection.id);
   const title =
     (selection.kind === "all" ? `Search: ${search}` : "") ||
     currentList?.title ||
-    (selection.kind === "project"
-      ? project?.name
-      : tag
-        ? `#${tag.name}`
-        : selection.kind === "tag"
-          ? `#${selection.id}`
-          : "") ||
+    (tag
+      ? `#${tag.name}`
+      : selection.kind === "tag"
+        ? `#${selection.id}`
+        : "") ||
     "Tasks";
-  const accent = currentList?.color || project?.color || "teal";
+  const accent = currentList?.color || "teal";
   const Icon = currentList?.icon || ListTodo;
   const context = viewContext(selection, user, teammate);
-  const viewProjectId = selection.kind === "project" ? selection.id : undefined;
-  const defaultId = defaultProjectId(
-    store.projects.data?.projects,
-    user.lastProjectId,
-    viewProjectId,
-  );
-  const captureId = store.projects.data
-    ? captureProjectId(
-        projects,
-        user.lastProjectId,
-        viewProjectId,
-        projectOverride,
-      )
-    : undefined;
+  const activeProject = projects.find((p) => p.id === user.activeProjectId);
+  useEffect(() => {
+    if (!nav.pathname.startsWith("/projects/")) {
+      projectRedirect.current = null;
+      return;
+    }
+    if (projectRedirect.current === nav.pathname) return;
+    projectRedirect.current = nav.pathname;
+    const id = decodeURIComponent(nav.pathname.slice(10));
+    void setActiveProject(id)
+      .catch(() => {})
+      .finally(() => nav.navigate("/my", { replace: true }));
+  }, [nav, setActiveProject]);
   async function createCapture(input: TaskInput, files: File[] = []) {
-    if (defaultId === undefined)
-      throw new Error("Projects are still loading. Please try again.");
-    const override = projectOverride;
-    setProjectOverride(undefined);
-    // Resolve against the cached catalog so capture stays instant. If the other person
-    // deleted that project since the last poll, the API rejects it: refresh and retry once.
-    const projectId = captureProjectId(
-      projects,
-      user.lastProjectId,
-      viewProjectId,
-      override,
-    );
-    let task: Task;
+    // /api/me is already cached: the optimistic row never waits for a lookup.
+    const projectId = user.activeProjectId;
     try {
-      task = await store.create({ ...context, ...input, projectId }, files, {
+      return await store.create({ ...context, ...input, projectId }, files, {
         quiet: !!projectId,
       });
     } catch (error) {
@@ -266,22 +248,18 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           });
         throw error;
       }
-      const fresh = await api.projects();
-      await store.projects.mutate(fresh, { revalidate: false });
-      const retryId = captureProjectId(
-        fresh.projects,
-        user.lastProjectId,
-        viewProjectId,
-        override,
-      );
-      task = await store.create(
-        { ...context, ...input, projectId: retryId },
-        files,
-      );
+      const [freshMe, freshProjects] = await Promise.all([
+        api.me(),
+        api.projects(),
+      ]);
+      await mutate("/api/me", freshMe, { revalidate: false });
+      await store.projects.mutate(freshProjects, { revalidate: false });
+      if (freshProjects.projects.some((p) => p.id === projectId)) {
+        toast({ message: error.message, error: true });
+        throw error;
+      }
+      return store.create({ ...context, ...input, projectId: null }, files);
     }
-    if (viewProjectId && task.projectId === viewProjectId)
-      rememberProject(viewProjectId);
-    return task;
   }
   const subtitle =
     selection.kind === "mine"
@@ -292,11 +270,9 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           ? "Future changes / things to look at"
           : selection.kind === "completed"
             ? "Small steps. Real progress. Nicely done."
-            : selection.kind === "project"
-              ? "One little step at a time."
-              : selection.kind === "tag"
-                ? "Everything with a common thread."
-                : "Good ideas, waiting for a person.";
+            : selection.kind === "tag"
+              ? "Everything with a common thread."
+              : "Good ideas, waiting for a person.";
   useEffect(() => {
     if (
       !queryDraft ||
@@ -333,7 +309,6 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     };
   }, [completionTimers]);
   const select = (value: Selection) => {
-    setProjectOverride(undefined);
     setQueryDraft(null);
     nav.navigate(selectionUrl(value, teammate));
   };
@@ -548,6 +523,8 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
       });
   }
   const visible = (store.tasks.data?.tasks || []).filter((t) => {
+    if (user.activeProjectId && t.projectId !== user.activeProjectId)
+      return false;
     if (selection.kind === "completed") return t.done;
     if (t.done && !completing.has(t.id)) return false;
     if (selection.kind === "mine")
@@ -562,7 +539,6 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     if (selection.kind === "later") return t.list === "later";
     if (selection.kind === "unassigned")
       return t.list === "now" && t.assignees.length === 0;
-    if (selection.kind === "project") return t.projectId === selection.id;
     if (selection.kind === "tag")
       return t.tags.some(
         (tag) => tag.name.toLowerCase() === selection.id?.toLowerCase(),
@@ -578,34 +554,29 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
         b.position - a.position,
     );
   const groups: { title: string; tasks: Task[] }[] =
-    selection.kind === "project"
+    selection.kind === "mine" && !search && sort === "manual"
       ? [
-          { title: "Now", tasks: visible.filter((t) => t.list === "now") },
-          { title: "Later", tasks: visible.filter((t) => t.list === "later") },
+          {
+            title: "Today & overdue",
+            tasks: visible.filter((t) => !!t.dueDate && t.dueDate <= day),
+          },
+          {
+            title: "Upcoming",
+            tasks: visible.filter((t) => !!t.dueDate && t.dueDate > day),
+          },
+          { title: "No date", tasks: visible.filter((t) => !t.dueDate) },
         ]
-      : selection.kind === "mine" && !search && sort === "manual"
-        ? [
-            {
-              title: "Today & overdue",
-              tasks: visible.filter((t) => !!t.dueDate && t.dueDate <= day),
-            },
-            {
-              title: "Upcoming",
-              tasks: visible.filter((t) => !!t.dueDate && t.dueDate > day),
-            },
-            { title: "No date", tasks: visible.filter((t) => !t.dueDate) },
-          ]
-        : [
-            {
-              title:
-                selection.kind === "completed"
-                  ? "A little more done"
-                  : search
-                    ? "Search results"
-                    : "On the list",
-              tasks: visible,
-            },
-          ];
+      : [
+          {
+            title:
+              selection.kind === "completed"
+                ? "A little more done"
+                : search
+                  ? "Search results"
+                  : "On the list",
+            tasks: visible,
+          },
+        ];
   const navProps = {
     user,
     teammate,
@@ -615,7 +586,12 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     tags,
     counts: store.counts.data,
     onSettings: () => setSettings(true),
-    refresh: store.refreshMeta,
+    refresh: async () => {
+      await mutate("/api/me");
+      await store.revalidate();
+    },
+    activeProjectId: user.activeProjectId,
+    onProjectSelect: setActiveProject,
     onSearch: (query: string) => {
       setSearchOpen(true);
       nav.navigate(`/search?q=${encodeURIComponent(query)}`);
@@ -641,7 +617,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
       <main className="main-panel">
         <header className="app-toolbar">
           <div className="toolbar-location">
-            {user.displayName} & {teammate.displayName}
+            {activeProject?.name || "All projects"}
           </div>
           <button
             className="mobile-back text-button"
@@ -649,6 +625,15 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           >
             <ArrowLeft size={20} /> Lists
           </button>
+          <div className="mobile-project-control">
+            <ProjectSelector
+              projects={projects}
+              activeProjectId={user.activeProjectId}
+              onSelect={setActiveProject}
+              refresh={navProps.refresh}
+              compact
+            />
+          </div>
           <div className="toolbar-actions">
             <button
               className={`icon-button ${searchOpen ? "is-active" : ""}`}
@@ -677,11 +662,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
         <div className="main-content">
           <div className="list-heading">
             <div className="heading-symbol">
-              {selection.kind === "project" && project?.emoji ? (
-                <span>{project.emoji}</span>
-              ) : (
-                <Icon size={30} strokeWidth={1.8} />
-              )}
+              <Icon size={30} strokeWidth={1.8} />
             </div>
             <div className="list-heading-top">
               <h1>{title}</h1>
@@ -761,7 +742,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
             </div>
           )}
           <div className="task-list">
-            {store.tasks.isLoading ? (
+            {store.tasks.isLoading && !store.tasks.data ? (
               <Skeleton />
             ) : store.tasks.error ? (
               <div className="empty-state">
@@ -860,14 +841,6 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
             onCreate={create}
             onImages={(files) => upload(files)}
             uploading={uploading}
-            projects={projects}
-            projectId={captureId}
-            projectView={selection.kind === "project"}
-            onProjectChange={(id) => {
-              setProjectOverride(id);
-              if (id !== captureId) rememberProject(id);
-            }}
-            onClearProject={() => setProjectOverride(null)}
           />
           <div className="desktop-shortcuts">
             <span>
@@ -894,10 +867,22 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           projects={projects}
           tags={tags}
           onClose={() => setSelectedId(null)}
-          onProjectPick={rememberProject}
-          onPatch={(input, handoff) =>
-            store.patch(selected.data!.task, input, handoff)
-          }
+          activeProjectId={user.activeProjectId}
+          onSwitchProject={setActiveProject}
+          onPatch={async (input, handoff) => {
+            const task = await store.patch(selected.data!.task, input, handoff);
+            if (
+              input.projectId !== undefined &&
+              user.activeProjectId &&
+              task.projectId !== user.activeProjectId
+            ) {
+              setSelectedId(null);
+              toast({
+                message: `Moved to ${task.project?.name || "No project"}`,
+              });
+            }
+            return task;
+          }}
           onToggle={() => toggle(selected.data!.task)}
           onDelete={() => setDeleteTask(selected.data!.task)}
           onImages={(files) => upload(files, selectedId)}

@@ -49,7 +49,7 @@ test("list URLs preserve names, usernames, segments and search", () => {
   assert.equal(parseListUrl(url).selection.id, "QA / café #");
   assert.equal(parseListUrl("/search?q=hello%20world").search, "hello world");
 });
-test("direct task backgrounds honor assignment, then Later/project/unassigned", () => {
+test("direct task backgrounds honor assignment, then Later/unassigned without changing project scope", () => {
   const task = {
     assignees: [me, other],
     list: "later",
@@ -63,7 +63,7 @@ test("direct task backgrounds honor assignment, then Later/project/unassigned", 
   assert.equal(taskBackground({ ...task, assignees: [] }, me), "/later");
   assert.equal(
     taskBackground({ ...task, assignees: [], list: "now" }, me),
-    "/projects/project",
+    "/unassigned",
   );
   assert.equal(
     taskBackground(

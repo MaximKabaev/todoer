@@ -17,8 +17,11 @@ const users = [
     color: "orange",
   },
 ];
-const lastProjects = new Map(users.map((u) => [u.id, null]));
-const currentUser = (u) => ({ ...u, lastProjectId: lastProjects.get(u.id) });
+const activeProjects = new Map(users.map((u) => [u.id, null]));
+const currentUser = (u) => ({
+  ...u,
+  activeProjectId: activeProjects.get(u.id),
+});
 const passwords = new Map(users.map((u) => [u.id, "todoer"]));
 const sessions = new Map();
 const tokenSecrets = new Map();
@@ -425,21 +428,34 @@ const server = createServer(async (req, res) => {
         const { data } = await body(req);
         if (data.password && passwords.get(me.id) !== data.currentPassword)
           return send({ error: "incorrect_current_password" }, 400);
-        if (data.lastProjectId !== undefined) {
-          if (data.lastProjectId !== null && !projects.some((p) => p.id === data.lastProjectId))
+        if (data.activeProjectId !== undefined) {
+          if (
+            data.activeProjectId !== null &&
+            !projects.some((p) => p.id === data.activeProjectId)
+          )
             return send({ error: "unknown_project" }, 400);
-          lastProjects.set(me.id, data.lastProjectId);
+          activeProjects.set(me.id, data.activeProjectId);
         }
         if (data.displayName) me.displayName = data.displayName;
         if (data.password) passwords.set(me.id, data.password);
         return send({ user: currentUser(me) });
       }
-      return send({ user: currentUser(me), teammate: users.find((u) => u.id !== me.id) });
+      return send({
+        user: currentUser(me),
+        teammate: users.find((u) => u.id !== me.id),
+      });
     }
     if (parts[1] === "users") return send({ users });
     if (parts[1] === "counts") {
       const count = (view) =>
-        filterTasks(new URLSearchParams({ view, limit: "1000" }), me).length;
+        filterTasks(
+          new URLSearchParams({
+            ...Object.fromEntries(url.searchParams),
+            view,
+            limit: "1000",
+          }),
+          me,
+        ).length;
       return send({
         mine: count("mine"),
         mineCreated: count("mine_created"),
@@ -504,6 +520,8 @@ const server = createServer(async (req, res) => {
           return send({ tasks: filterTasks(url.searchParams, me).map(shape) });
         if (method === "POST") {
           const { data, uploads } = await body(req);
+          if (data.projectId && !projects.some((p) => p.id === data.projectId))
+            return send({ error: "unknown_project" }, 400);
           const task = fixture("", {
             assignees: [me],
             createdBy: me,
@@ -531,6 +549,8 @@ const server = createServer(async (req, res) => {
       if (method === "GET") return send({ task: shape(task) });
       if (method === "PATCH") {
         const { data } = await body(req);
+        if (data.projectId && !projects.some((p) => p.id === data.projectId))
+          return send({ error: "unknown_project" }, 400);
         patch(task, data, me);
         return send({ task: shape(task) });
       }
@@ -570,7 +590,9 @@ const server = createServer(async (req, res) => {
                 !t.done &&
                 (isProject
                   ? t.projectId === item.id
-                  : t.tags.some((tag) => tag.id === item.id)),
+                  : t.tags.some((tag) => tag.id === item.id) &&
+                    (!url.searchParams.has("projectId") ||
+                      t.projectId === url.searchParams.get("projectId"))),
             ).length,
           })),
         });
@@ -611,8 +633,9 @@ const server = createServer(async (req, res) => {
       }
       if (method === "DELETE") {
         collection.splice(collection.indexOf(item), 1);
-        if (isProject) for (const [id, projectId] of lastProjects)
-          if (projectId === item.id) lastProjects.set(id, null);
+        if (isProject)
+          for (const [id, projectId] of activeProjects)
+            if (projectId === item.id) activeProjects.set(id, null);
         tasks.forEach((t) => {
           if (isProject && t.projectId === item.id) t.projectId = null;
           if (!isProject) t.tags = t.tags.filter((tag) => tag.id !== item.id);

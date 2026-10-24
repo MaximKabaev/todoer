@@ -46,7 +46,8 @@ type Props = {
   tags: Tag[];
   onClose: () => void;
   onPatch: (input: TaskInput, handoff?: boolean) => Promise<unknown>;
-  onProjectPick: (id: string | null) => void;
+  activeProjectId: string | null;
+  onSwitchProject: (id: string | null) => Promise<unknown>;
   onToggle: () => void;
   onDelete: () => void;
   onImages: (files: File[]) => Promise<unknown>;
@@ -60,7 +61,8 @@ export function TaskDetail({
   tags,
   onClose,
   onPatch,
-  onProjectPick,
+  activeProjectId,
+  onSwitchProject,
   onToggle,
   onDelete,
   onImages,
@@ -303,6 +305,19 @@ export function TaskDetail({
           </button>
         </div>
         <div className="detail-scroll">
+          {task.project && task.projectId !== activeProjectId && (
+            <div className="detail-project-context">
+              In {task.project.name} ·{" "}
+              <button
+                className="text-button"
+                onClick={() =>
+                  void onSwitchProject(task.projectId).catch(() => {})
+                }
+              >
+                Switch to this project
+              </button>
+            </div>
+          )}
           <div className="detail-title-row">
             <Checkbox
               checked={task.done}
@@ -460,7 +475,6 @@ export function TaskDetail({
                 value={task.projectId || ""}
                 onChange={(e) => {
                   const projectId = e.target.value || null;
-                  onProjectPick(projectId);
                   patch({ projectId });
                 }}
               >

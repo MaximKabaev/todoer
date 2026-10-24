@@ -7,14 +7,11 @@ import {
 } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
-// Run only this file with ROUTING_REAL_API=1 against the isolated development ports.
+// Run the staging suites with ROUTING_REAL_API=1 against the isolated development ports.
 // Existing suites deliberately use the in-memory mock, never the production database.
 const real = process.env.ROUTING_REAL_API === "1";
 const credentials = real
-  ? readFileSync(
-      "/home/mkabaev/.t3/projects/todoer/apps/api/.seed-credentials.txt",
-      "utf8",
-    )
+  ? readFileSync("/tmp/todoer-staging-credentials.txt", "utf8")
   : "";
 const password = real
   ? credentials.match(/Username: german\n[\s\S]*?Password: ([^\n]+)/)![1]
@@ -22,7 +19,7 @@ const password = real
 const username = real ? "german" : "maxim";
 let api: APIRequestContext;
 let me: {
-  user: { id: string; username: string; lastProjectId: string | null };
+  user: { id: string; username: string; activeProjectId: string | null };
   teammate: { username: string; displayName: string };
 };
 let project: { id: string; name: string };
@@ -73,8 +70,8 @@ test.beforeAll(async ({ baseURL }) => {
     [
       "project",
       { assignees: [], projectId: project.id },
-      `/projects/${project.id}`,
-      project.name,
+      "/unassigned",
+      "Unassigned",
     ],
     [
       "unassigned",
@@ -114,8 +111,8 @@ test.afterAll(async () => {
   if (tag) await api.delete(`/api/tags/${tag.id}`);
   if (project) await api.delete(`/api/projects/${project.id}`);
   if (me)
-    expect((await (await api.get("/api/me")).json()).user.lastProjectId).toBe(
-      me.user.lastProjectId,
+    expect((await (await api.get("/api/me")).json()).user.activeProjectId).toBe(
+      me.user.activeProjectId,
     );
   if (real) {
     const token = credentials.match(/API token for maxim: ([^\n]+)/)![1];
@@ -228,7 +225,6 @@ for (const mobile of [false, true]) {
         ["/later", "Later"],
         ["/unassigned", "Unassigned"],
         ["/completed", "Completed"],
-        [`/projects/${project.id}`, project.name],
         [`/tags/${encodeURIComponent(tag.name)}`, `#${tag.name}`],
         ["/search?q=QA%20shared", "Search: QA shared"],
         ["/settings", "Settings"],

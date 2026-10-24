@@ -1,7 +1,7 @@
 "use client";
 import { forwardRef, useRef, useState } from "react";
-import { ArrowUp, ImagePlus, LoaderCircle, Plus, X } from "lucide-react";
-import type { Project, TaskInput, User } from "@/lib/api";
+import { ArrowUp, ImagePlus, LoaderCircle, Plus } from "lucide-react";
+import type { TaskInput, User } from "@/lib/api";
 import { parseQuickSyntax } from "@/lib/quick-syntax";
 export const Composer = forwardRef<
   HTMLInputElement,
@@ -10,24 +10,14 @@ export const Composer = forwardRef<
     onCreate: (input: TaskInput, open?: boolean) => Promise<unknown>;
     onImages: (files: File[]) => Promise<unknown>;
     uploading: boolean;
-    projects: Project[];
-    projectId: string | null | undefined;
-    projectView: boolean;
-    onProjectChange: (id: string | null) => void;
-    onClearProject: () => void;
   }
->(function Composer(
-  { users, onCreate, onImages, uploading, projects, projectId, projectView, onProjectChange, onClearProject },
-  ref,
-) {
+>(function Composer({ users, onCreate, onImages, uploading }, ref) {
   const [value, setValue] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const localRef = useRef<HTMLInputElement | null>(null);
-  const project = projects.find((p) => p.id === projectId);
-  const ready = projectId !== undefined;
   const parsed = parseQuickSyntax(value, users);
   async function submit(open = false) {
-    if (!ready || (!value.trim() && !open)) return;
+    if (!value.trim() && !open) return;
     const captured = value;
     setValue("");
     localRef.current?.focus();
@@ -47,7 +37,7 @@ export const Composer = forwardRef<
         }}
         onPaste={(e) => {
           const files = Array.from(e.clipboardData.files);
-          if (files.length && ready) {
+          if (files.length) {
             e.preventDefault();
             void onImages(files);
           }
@@ -56,7 +46,6 @@ export const Composer = forwardRef<
         <button
           type="button"
           aria-label="Create an empty task and open details"
-          disabled={!ready}
           className="composer-plus"
           onClick={() => void submit(true)}
         >
@@ -79,39 +68,6 @@ export const Composer = forwardRef<
             onChange={(e) => setValue(e.target.value)}
             autoComplete="off"
           />
-          {!projectView && ready && projects.length > 0 && (
-            <div className="composer-project-row">
-              <div className={`composer-project-chip ${project ? "" : "no-project"}`}>
-                {project && (
-                  <span
-                    className="field-project-dot"
-                    style={{ background: `var(--${project.color})` }}
-                  />
-                )}
-                <select
-                  aria-label="New task project"
-                  value={project?.id || ""}
-                  onChange={(e) => onProjectChange(e.target.value || null)}
-                >
-                  <option value="">No project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.emoji ? `${p.emoji} ` : ""}{p.name}
-                    </option>
-                  ))}
-                </select>
-                {project && (
-                  <button
-                    type="button"
-                    aria-label="Remove project for this task"
-                    onClick={onClearProject}
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
           {parsed.chips.length > 0 && (
             <div className="syntax-chips">
               {parsed.chips.map((chip) => (
@@ -141,7 +97,7 @@ export const Composer = forwardRef<
           className="icon-button photo-button"
           aria-label="Add photos"
           onClick={() => fileRef.current?.click()}
-          disabled={uploading || !ready}
+          disabled={uploading}
         >
           {uploading ? (
             <LoaderCircle className="spin" size={19} />
@@ -150,12 +106,7 @@ export const Composer = forwardRef<
           )}
         </button>
         {value.trim() ? (
-          <button
-            type="submit"
-            disabled={!ready}
-            aria-label="Add task"
-            className="submit-task"
-          >
+          <button type="submit" aria-label="Add task" className="submit-task">
             <ArrowUp size={18} />
           </button>
         ) : (

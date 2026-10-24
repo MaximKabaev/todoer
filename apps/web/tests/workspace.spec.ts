@@ -169,28 +169,30 @@ test("mobile home, contextual lists, project creation, and sheet work at 390px",
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const home = page.locator(".mobile-home");
   await expect(home).toBeVisible();
-  await home.getByRole("button", { name: "Add project", exact: true }).click();
+  await home.getByRole("button", { name: /^Active project:/ }).click();
+  await page.getByRole("button", { name: "New project…", exact: true }).click();
   const name = `Little project ${Date.now()}`;
-  await home
+  await page
     .getByRole("textbox", { name: "New project name", exact: true })
     .fill(name);
-  await home
+  await page
     .getByRole("button", { name: "Project color teal", exact: true })
     .click();
   const created = page.waitForResponse(
     (r) => r.url().endsWith("/api/projects") && r.request().method() === "POST",
   );
-  await home
+  await page
     .getByRole("button", { name: "Add project", exact: true })
     .last()
     .click();
   const { project } = await (await created).json();
-  await home
-    .getByRole("link", { name: new RegExp(name) })
-    .filter({ hasNot: page.locator("svg.lucide-settings-2") })
-    .first()
-    .click();
-  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  await expect(
+    home.getByRole("button", { name: `Active project: ${name}`, exact: true }),
+  ).toBeVisible();
+  await home.getByRole("link", { name: /^My Tasks/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "My Tasks", exact: true }),
+  ).toBeVisible();
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/api/tasks") && r.request().method() === "POST",
   );
@@ -557,7 +559,9 @@ test("document and text-node events are safe, and a deleted inspector retires af
       exact: true,
     })
     .click();
-  await expect(page.getByRole("dialog", { name: "Task details" })).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Task details" }),
+  ).toBeVisible();
   await page.request.delete(`/api/tasks/${task.id}`);
   // The next autosave receives the real deletion response and must not retry on unmount.
   let patches = 0;
