@@ -23,6 +23,19 @@ deploy/redeploy.sh  # install, test, migrate, clean build, restart, health check
 Always build from a clean `apps/web/.next`. Stale generated route types fail the build, and a failed
 build must never be followed by a restart (the script uses `set -euo pipefail` for this).
 
+## Restart without deploying
+
+```sh
+sudo systemctl restart todoer-api      # or todoer-web; web serves the existing apps/web/.next build
+systemctl status todoer-api todoer-web
+```
+
+## Staging
+
+`deploy/staging.sh start|stop|status|migrate` runs the current checkout on http://localhost:3400
+(API :4400) against the `todoer_staging` database (config `apps/api/.env.staging`, logins in
+`apps/api/.staging-credentials.txt`). Use it for anything that writes data.
+
 ## First-time setup (already done)
 
 ```sh

@@ -12,7 +12,10 @@ export const metadata: Metadata = {
     description: "A calm place for your tasks. Built for two.",
   },
   description: "A calm place for your tasks. Built for two.",
+  applicationName: "todoer",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "todoer" },
+  // Older iOS versions only honour the legacy tag for full-screen launch from the Home Screen.
+  other: { "mobile-web-app-capable": "yes" },
 };
 export const viewport: Viewport = {
   width: "device-width",

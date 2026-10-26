@@ -7,7 +7,8 @@ A simple shared todo app for two people (Maxim and German). Live at **https://to
 - `apps/web`: Next.js frontend (Apple-style, responsive, drag-and-drop images → tasks)
 - `apps/api`: Express + Postgres API, including agent instructions at `/agent`
 - `SPEC.md`: the product and API contract
-- `deploy/`: production services and Caddy config ([deploy/README.md](deploy/README.md))
+- `deploy/`: production services, Caddy config, redeploy and staging scripts ([deploy/README.md](deploy/README.md))
+- [`AGENTS.md`](AGENTS.md): operations, safety rules, and context for AI agents working on this repo
 
 ## Local development
 

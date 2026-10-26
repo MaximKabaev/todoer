@@ -6,3 +6,6 @@ apps/api/uploads/
 apps/api/.seed-credentials.txt
 *.log
 .DS_Store
+apps/api/.staging-credentials.txt
+apps/api/.env.staging
+apps/api/uploads-staging/
