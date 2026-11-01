@@ -1,8 +1,14 @@
 "use client";
-import { Check, CheckCheck, X } from "lucide-react";
+import { Check, X } from "lucide-react";
+import localFont from "next/font/local";
 import { initials } from "@/lib/utils";
 import type { User } from "@/lib/api";
 import { useDialog } from "@/hooks/use-dialog";
+const brandFont = localFont({
+  src: "../assets/fonts/nunito.ttf",
+  weight: "900",
+  display: "swap",
+});
 export function Avatar({
   user,
   small = false,
@@ -23,10 +29,11 @@ export function Avatar({
 }
 export function Brand() {
   return (
-    <div className="brand">
-      <span className="brand-icon">
-        <CheckCheck size={21} strokeWidth={2.7} />
-      </span>
+    <div className={`brand ${brandFont.className}`}>
+      <svg className="brand-icon" viewBox="0 0 64 48" aria-hidden="true">
+        <rect x="25" y="4" width="39" height="18" rx="9" />
+        <rect x="0" y="26" width="52" height="18" rx="9" />
+      </svg>
       <span>
         todoer<span className="brand-period">.</span>
       </span>

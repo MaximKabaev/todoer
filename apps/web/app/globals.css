@@ -227,21 +227,14 @@ select:focus-visible {
   align-items: center;
   gap: 10px;
   font-size: 24px;
-  font-weight: 720;
+  font-weight: 900;
   letter-spacing: -1px;
 }
 .brand-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: var(--green);
-  border-radius: 10px;
-  color: white;
-  box-shadow:
-    inset 0 1px 0 #fff4,
-    0 3px 6px #34a66b12;
+  flex: none;
+  width: 28px;
+  height: 21px;
+  fill: var(--green);
 }
 .brand-period {
   color: var(--green);
@@ -1899,15 +1892,15 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  background: var(--green);
-  width: 74px;
-  height: 74px;
-  border-radius: 23px;
-  box-shadow:
-    0 10px 30px color-mix(in srgb, var(--green) 22%, transparent),
-    inset 0 1px 0 #fff5;
   margin: 0 auto 32px;
+}
+.app-icon .brand {
+  font-size: 38px;
+  gap: 12px;
+}
+.app-icon .brand-icon {
+  width: 40px;
+  height: 30px;
 }
 .login-card > .eyebrow {
   font-size: 9px;

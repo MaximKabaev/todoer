@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { safeNext } from "@/lib/routes";
 import { Brand } from "@/components/ui";
 import { useSWRConfig } from "swr";
-import { ArrowRight, CheckCheck, LoaderCircle } from "lucide-react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
 import { api } from "@/lib/api";
 export default function LoginPage() {
   return (
@@ -43,7 +43,7 @@ function Login() {
       <div className="login-orb orb-two" />
       <section className="login-card">
         <div className="app-icon">
-          <CheckCheck size={36} strokeWidth={2.8} />
+          <Brand />
         </div>
         <span className="eyebrow">A LITTLE MORE TOGETHER</span>
         <h1>Welcome to todoer.</h1>
