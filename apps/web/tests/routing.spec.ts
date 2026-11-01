@@ -166,7 +166,7 @@ for (const mobile of [false, true]) {
         new RegExp(`/login\\?next=${encodeURIComponent(`/tasks/${task.id}`)}`),
       );
       await expect(page.locator(".app-shell")).toHaveCount(0);
-      await page.getByLabel("Username", { exact: true }).fill(username);
+      await page.getByLabel("Username or email", { exact: true }).fill(username);
       await page.getByLabel("Password", { exact: true }).fill(password);
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await expect(page).toHaveURL(new RegExp(`/tasks/${task.id}$`));

@@ -15,6 +15,9 @@ dotenv.config({ path: new URL('../.env', import.meta.url), quiet: true });
 process.env.NODE_ENV = 'test';
 process.env.COOKIE_SECURE = '';
 process.env.PUBLIC_API_URL = '';
+// Never send real email from tests; notification tests enable a fake sender explicitly.
+process.env.RESEND_API_KEY = '';
+process.env.EMAIL_FROM = '';
 const schema = `todoer_test_${randomUUID().replaceAll('-', '')}`;
 process.env.API_DB_SCHEMA = schema;
 const admin = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -122,7 +125,7 @@ test('login is case-insensitive, cookie sessions expire and logout revokes them'
   assert.equal(session.forever, true);
   assert.notEqual(session.id, cookie.split(';')[0].split('=')[1]);
   const me = await browser.get('/api/me').expect(200);
-  assert.deepEqual(me.body, { user: { ...first, activeProjectId: null }, teammate: second });
+  assert.deepEqual(me.body, { user: { ...first, activeProjectId: null, email: null, emailNotifications: true }, teammate: second });
   // Each app load renews the cookie so a browser session never lapses.
   const renewed = me.headers['set-cookie']?.[0] ?? '';
   assert.equal(renewed.split(';')[0], cookie.split(';')[0]);
@@ -183,7 +186,7 @@ test('remote clients cannot bypass the login rate limit by changing X-Forwarded-
 
 test('bearer tokens act as their owner, are hashed, and update last_used_at', async () => {
   const me = await api('get', '/api/me', secondToken).expect(200);
-  assert.deepEqual(me.body, { user: { ...second, activeProjectId: null }, teammate: first });
+  assert.deepEqual(me.body, { user: { ...second, activeProjectId: null, email: null, emailNotifications: true }, teammate: first });
   const token = (await pool.query('SELECT token_hash, last_used_at FROM api_tokens WHERE user_id = $1', [second.id])).rows[0];
   assert.equal(token.token_hash, hash(secondToken));
   assert.ok(token.last_used_at);
@@ -662,5 +665,92 @@ test('task webUrl is omitted when unset, included on every response when configu
     assert.ok(list.body.tasks.every((t) => t.webUrl === `https://todo.customsai.org/tasks/${t.id}`));
     const instructions = await request(app).get('/api/agent').expect(200);
     assert.match(instructions.text, /webUrl.*clickable Markdown link/);
+  });
+});
+
+test('email is private to its owner, editable, unique, and a login identifier', async () => {
+  const me = await api('get', '/api/me').expect(200);
+  assert.equal(me.body.user.email, null);
+  assert.equal(me.body.user.emailNotifications, true);
+  assert.equal(Object.hasOwn(me.body.teammate, 'email'), false);
+  assert.equal((await api('patch', '/api/me').send({ email: 'not an email' }).expect(400)).body.error, 'Enter a valid email address');
+  const set = await api('patch', '/api/me').send({ email: '  Maxim.Test@Example.com ' }).expect(200);
+  assert.equal(set.body.user.email, 'Maxim.Test@Example.com');
+  assert.equal(set.body.user.activeProjectId, null);
+  const taken = await api('patch', '/api/me', secondToken).send({ email: 'maxim.test@example.COM' }).expect(409);
+  assert.equal(taken.body.error, 'That email is already in use');
+  const users = await api('get', '/api/users').expect(200);
+  assert.ok(users.body.users.every((user) => !Object.hasOwn(user, 'email')));
+  const login = await request(app).post('/api/auth/login').send({ username: 'MAXIM.TEST@example.com', password }).expect(200);
+  assert.equal(login.body.user.id, first.id);
+  assert.equal(Object.hasOwn(login.body.user, 'email'), false);
+  await request(app).post('/api/auth/login').send({ username: 'maxim.test@example.com', password: 'wrong' }).expect(401);
+  const off = await api('patch', '/api/me').send({ emailNotifications: false }).expect(200);
+  assert.deepEqual([off.body.user.email, off.body.user.emailNotifications], ['Maxim.Test@Example.com', false]);
+  const cleared = await api('patch', '/api/me').send({ email: '', emailNotifications: true }).expect(200);
+  assert.equal(cleared.body.user.email, null);
+  await request(app).post('/api/auth/login').send({ username: 'maxim.test@example.com', password }).expect(401);
+  await api('patch', '/api/me').send({ email: null }).expect(200);
+});
+
+test('task changes involving the teammate are batched into one email digest per recipient', async () => {
+  const { flushNotifications } = await import('../src/lib/notifications.js');
+  const outbox = [];
+  const send = async (message) => { outbox.push(message); };
+  const flush = () => flushNotifications({ send, quiet: 0, maxWait: 0 });
+  await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>', PUBLIC_WEB_URL: 'https://todo.example.com' }, async () => {
+    await pool.query('DELETE FROM notification_events');
+    // No email on file: nothing is queued.
+    await create({ title: 'QA no email yet', assignees: ['teammate'] });
+    assert.equal((await pool.query('SELECT 1 FROM notification_events')).rowCount, 0);
+    await api('patch', '/api/me', secondToken).send({ email: 'partner@example.com' }).expect(200);
+
+    const handed = await create({ title: 'QA handed over' });
+    await api('post', `/api/tasks/${handed.id}/handoff`).send({ to: 'teammate' }).expect(200);
+    await patch(handed.id, { title: 'QA handed over v2', notes: 'one' });
+    await patch(handed.id, { notes: 'two' });
+    await patch(handed.id, { position: 12345 }); // Reordering alone is not news.
+    const own = await create({ title: 'QA not involved' });
+    await patch(own.id, { done: true });
+    const theirs = await create({ title: 'QA theirs' }, secondToken);
+    await patch(theirs.id, { done: true, dueDate: '2026-11-05', priority: 3, addTags: ['qa-mail'] });
+    await api('patch', `/api/tasks/${theirs.id}`, secondToken).send({ done: false }).expect(200); // Their own edit.
+    const doomed = await create({ title: 'QA doomed', assignees: ['teammate'] });
+    await api('delete', `/api/tasks/${doomed.id}`).expect(200);
+
+    assert.equal(await flush(), 1);
+    assert.equal(outbox.length, 1);
+    const [mail] = outbox;
+    assert.equal(mail.to, 'partner@example.com');
+    assert.equal(mail.subject, 'Maxim Test updated 3 tasks');
+    assert.match(mail.idempotencyKey, /^todoer-[0-9a-f]{32}$/);
+    assert.match(mail.text, /^Hi Teammate Test,/);
+    assert.match(mail.text, /“QA handed over v2”\n  - Maxim Test assigned it to you\n  - Maxim Test dropped it\n  - Maxim Test renamed it \(was “QA handed over”\)\n  - Maxim Test edited the notes\n  https:\/\/todo\.example\.com\/tasks\//);
+    assert.equal(mail.text.match(/edited the notes/g).length, 1);
+    assert.match(mail.text, /Maxim Test completed it\n  - Maxim Test set the due date to Nov 5\n  - Maxim Test set the priority to high\n  - Maxim Test added the tag #qa-mail/);
+    assert.match(mail.text, /“QA doomed”\n  - Maxim Test created it\n  - Maxim Test assigned it to you\n  - Maxim Test deleted it\n\n/);
+    assert.doesNotMatch(mail.text, /not involved|no email yet|reopened|position/);
+    assert.match(mail.html, /<a href="https:\/\/todo\.example\.com\/tasks\/[0-9a-f-]+"/);
+    assert.equal((await pool.query('SELECT 1 FROM notification_events')).rowCount, 0);
+    assert.equal(await flush(), 0);
+
+    // Not yet quiet: held back. A failed send keeps events for a retry with the same key.
+    await patch(handed.id, { title: '<b>QA & co</b>' });
+    assert.equal(await flushNotifications({ send, quiet: 60000, maxWait: 60000 }), 0);
+    const failing = async (message) => { outbox.push(message); throw new Error('boom'); };
+    const originalError = console.error;
+    console.error = () => {};
+    try { assert.equal(await flushNotifications({ send: failing, quiet: 0, maxWait: 0 }), 0); }
+    finally { console.error = originalError; }
+    assert.equal(await flush(), 1);
+    assert.equal(outbox.at(-1).idempotencyKey, outbox.at(-2).idempotencyKey);
+    assert.equal(outbox.at(-1).subject, 'Maxim Test updated “<b>QA & co</b>”');
+    assert.match(outbox.at(-1).html, /&lt;b&gt;QA &amp; co&lt;\/b&gt;/);
+
+    // Notifications off: nothing is queued.
+    await api('patch', '/api/me', secondToken).send({ emailNotifications: false }).expect(200);
+    await patch(handed.id, { done: true });
+    assert.equal((await pool.query('SELECT 1 FROM notification_events')).rowCount, 0);
+    await api('patch', '/api/me', secondToken).send({ email: null, emailNotifications: true }).expect(200);
   });
 });

@@ -133,10 +133,10 @@ Unknown body fields are ignored. Everything is camelCase.
 - `GET /api/agent` → **text/markdown** instructions for AI agents (no auth). See "Agent instructions".
 
 ### Auth
-- `POST /api/auth/login` `{ username, password }` → `{ user }` + sets cookie. Username is case-insensitive.
+- `POST /api/auth/login` `{ username, password }` → `{ user }` + sets cookie. `username` accepts the username or the user's email, case-insensitively.
 - `POST /api/auth/logout` → `{ ok: true }`
-- `GET /api/me` → `{ user, teammate }` (current `user` includes `activeProjectId: uuid | null`)
-- `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null }` → `{ user }` (password change requires currentPassword)
+- `GET /api/me` → `{ user, teammate }` (current `user` also includes `activeProjectId: uuid | null`, `email: string | null`, `emailNotifications: boolean`; the teammate's email is never returned anywhere)
+- `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null, email?: string | null, emailNotifications?: boolean }` → `{ user }` (password change requires currentPassword; email is trimmed, `""`/`null` clears it, invalid → 400, used by the other user → 409)
 - `GET /api/users` → `{ users: User[] }` (both users)
 - `GET /api/tokens` → `{ tokens: [{ id, name, createdAt, lastUsedAt }] }` (mine only)
 - `POST /api/tokens` `{ name? }` → `{ token: { id, name, createdAt }, secret: "tdr_..." }` (secret shown once)
@@ -251,8 +251,21 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
   move to Later/Now, tags editor (type to create), image gallery with lightbox, delete.
 - Completing a task animates and it leaves the list after a short delay (with undo toast).
 - Data freshness: revalidate on window focus and poll every ~10 s so the two users see each other's changes.
-- Settings: change display name/password, manage agent tokens (create, copy once, revoke),
+- Settings: change display name/password, email and email notifications, manage agent tokens (create, copy once, revoke),
   link to `/agent` instructions, logout.
+
+## Email notifications
+
+- Each user may set an email (Settings or `PATCH /api/me`). It doubles as a login identifier.
+- When one user creates, edits, completes/reopens, hands off, adds images to, or deletes a task that
+  involves the other user (assigned to them before or after the change, or created by them), the
+  change is queued for the other user, if they have an email and `emailNotifications` is on.
+  Reordering alone is not reported, and nobody is emailed about their own changes.
+- The API process batches a recipient's queued changes into one digest email once they have been
+  quiet for 2 minutes (or 10 minutes after the first change), one block per task with each change
+  listed once and a link to `/tasks/:id`. Sent via Resend (`RESEND_API_KEY`, `EMAIL_FROM`); disabled
+  when either is unset. Failed sends are retried with the same idempotency key; undelivered changes
+  are dropped after 2 days.
 
 ## Web routes
 

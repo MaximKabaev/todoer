@@ -4,6 +4,8 @@ import { pool } from './db.js';
 import { HttpError } from './lib/errors.js';
 
 export const userColumns = 'id, username, display_name AS "displayName", color';
+// Private fields only ever returned for the current user, never the teammate.
+export const meColumns = `${userColumns}, active_project_id AS "activeProjectId", email, email_notifications AS "emailNotifications"`;
 export const publicUser = (user) => ({ id: user.id, username: user.username, displayName: user.displayName, color: user.color });
 export const tokenHash = (secret) => createHash('sha256').update(secret).digest('hex');
 export const newToken = () => `tdr_${randomBytes(32).toString('base64url')}`;
@@ -49,7 +51,7 @@ export async function authenticate(req, res, next) {
     }
   }
   if (!userId) throw new HttpError(401, 'unauthorized');
-  const { rows } = await pool.query(`SELECT ${userColumns}, active_project_id AS "activeProjectId" FROM users ORDER BY created_at, id`);
+  const { rows } = await pool.query(`SELECT ${meColumns} FROM users ORDER BY created_at, id`);
   req.users = rows.map(publicUser);
   req.user = rows.find((user) => user.id === userId);
   req.teammate = req.users.find((user) => user.id !== userId);
