@@ -72,7 +72,7 @@ function Login() {
             }
           }}
         >
-          <label htmlFor="username">Username</label>
+          <label htmlFor="username">Username or email</label>
           <input
             id="username"
             name="username"
@@ -80,7 +80,8 @@ function Login() {
             autoCapitalize="none"
             autoCorrect="off"
             required
-            placeholder="Your username"
+            placeholder="Username or email"
+            inputMode="email"
           />
           <label htmlFor="password">Password</label>
           <input
@@ -94,7 +95,7 @@ function Login() {
           {error && (
             <p className="form-error" role="alert">
               {error === "invalid_credentials"
-                ? "That username or password doesn’t look right."
+                ? "That username, email or password doesn’t look right."
                 : error}
             </p>
           )}

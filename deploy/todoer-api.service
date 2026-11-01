@@ -16,6 +16,7 @@ Environment=PUBLIC_API_URL=https://api.todo.customsai.org
 Environment=PUBLIC_WEB_URL=https://todo.customsai.org
 Environment=COOKIE_SECURE=true
 Environment="TRUST_PROXY=loopback,172.20.0.0/16"
+Environment="EMAIL_FROM=todoer <todo@todo.customsai.org>"
 ExecStart=/usr/local/bin/node src/server.js
 Restart=always
 RestartSec=3

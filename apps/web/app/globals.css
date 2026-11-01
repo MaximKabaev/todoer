@@ -3581,3 +3581,57 @@ kbd {
 .missing-task .primary-button {
   text-decoration: none;
 }
+
+.email-section .settings-section-title {
+  margin-bottom: 16px;
+}
+.email-section .settings-section-title p {
+  line-height: 1.6;
+}
+.email-section .settings-form > button {
+  margin-top: 12px;
+}
+.email-notifications {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  margin-top: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.email-notifications.is-disabled {
+  color: var(--secondary);
+  opacity: 0.65;
+  cursor: default;
+}
+.email-notifications input {
+  appearance: none;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 22px;
+  min-height: 0;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--line);
+  cursor: inherit;
+}
+.email-notifications input::before {
+  content: "";
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.15s;
+}
+.email-notifications input:checked {
+  background: var(--purple);
+  border-color: var(--purple);
+}
+.email-notifications input:checked::before {
+  transform: translateX(16px);
+}

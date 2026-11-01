@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 async function login(page: Page) {
   await page.goto("/login");
-  await page.getByLabel("Username", { exact: true }).fill("maxim");
+  await page.getByLabel("Username or email", { exact: true }).fill("maxim");
   await page.getByLabel("Password", { exact: true }).fill("todoer");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
@@ -164,7 +164,7 @@ test("mobile home, contextual lists, project creation, and sheet work at 390px",
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/login");
-  await page.getByLabel("Username", { exact: true }).fill("maxim");
+  await page.getByLabel("Username or email", { exact: true }).fill("maxim");
   await page.getByLabel("Password", { exact: true }).fill("todoer");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const home = page.locator(".mobile-home");
@@ -397,7 +397,7 @@ test("the second account gets relative mentions and teammate context too", async
   page,
 }) => {
   await page.goto("/login");
-  await page.getByLabel("Username", { exact: true }).fill("teammate");
+  await page.getByLabel("Username or email", { exact: true }).fill("teammate");
   await page.getByLabel("Password", { exact: true }).fill("todoer");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(

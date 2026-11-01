@@ -5,6 +5,7 @@ import { HttpError } from '../lib/errors.js';
 import { id, identifier, querySchema, taskBody, taskPatchSchema, taskSchema, z } from '../lib/validation.js';
 import { applyRelations, getTask, hydrate, taskColumns } from '../lib/tasks.js';
 import { removeFiles, saveAttachments, upload, withUploadCleanup } from '../lib/uploads.js';
+import { recordChange } from '../lib/notifications.js';
 
 export const tasksRouter = Router();
 
@@ -49,7 +50,9 @@ tasksRouter.post('/', upload, async (req, res) => {
     const later = body.list === 'later';
     await applyRelations(row.id, { ...body, assignees: later ? [] : body.assignees ?? ['me'], addAssignees: undefined }, req, db);
     await saveAttachments(db, row.id, req.files, written);
-    return getTask(row.id, db);
+    const created = await getTask(row.id, db);
+    await recordChange(db, req, null, created);
+    return created;
   }));
   res.status(201).json({ task });
 });
@@ -60,6 +63,7 @@ tasksRouter.patch('/:id', async (req, res) => {
   const task = await transaction(async (db) => {
     const { rows: [current] } = await db.query('SELECT list FROM tasks WHERE id = $1 FOR UPDATE', [taskId]);
     if (!current) throw new HttpError(404, 'Task not found');
+    const before = await getTask(taskId, db);
     const assigning = Boolean(body.assignees?.length || body.addAssignees?.length);
     // Later tasks have no assignees: assigning someone plans the task (moves it to Now),
     // unless this same request explicitly puts it on Later, which wins.
@@ -75,7 +79,9 @@ tasksRouter.patch('/:id', async (req, res) => {
     await db.query(`UPDATE tasks SET ${assignments.join(', ')} WHERE id = $1`, values);
     await applyRelations(taskId, body, req, db);
     await db.query("DELETE FROM task_assignees a USING tasks t WHERE t.id = a.task_id AND t.id = $1 AND t.list = 'later'", [taskId]);
-    return getTask(taskId, db);
+    const updated = await getTask(taskId, db);
+    await recordChange(db, req, before, updated);
+    return updated;
   });
   res.json({ task });
 });
@@ -84,12 +90,16 @@ tasksRouter.post('/:id/handoff', async (req, res) => {
   const { to = 'teammate' } = z.object({ to: identifier.optional() }).parse(req.body ?? {});
   const userId = resolveUser(to, req);
   const task = await transaction(async (db) => {
+    const { rowCount: found } = await db.query('SELECT id FROM tasks WHERE id = $1 FOR UPDATE', [taskId]);
+    if (!found) throw new HttpError(404, 'Task not found');
+    const before = await getTask(taskId, db);
     // Handing a Later task to someone plans it, so it moves to Now.
-    const { rowCount } = await db.query("UPDATE tasks SET updated_at = now(), list = 'now' WHERE id = $1 RETURNING id", [taskId]);
-    if (!rowCount) throw new HttpError(404, 'Task not found');
+    await db.query("UPDATE tasks SET updated_at = now(), list = 'now' WHERE id = $1", [taskId]);
     await db.query('DELETE FROM task_assignees WHERE task_id = $1', [taskId]);
     await db.query('INSERT INTO task_assignees (task_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [taskId, userId]);
-    return getTask(taskId, db);
+    const updated = await getTask(taskId, db);
+    await recordChange(db, req, before, updated);
+    return updated;
   });
   res.json({ task });
 });
@@ -98,6 +108,7 @@ tasksRouter.delete('/:id', async (req, res) => {
   const names = await transaction(async (db) => {
     const { rowCount } = await db.query('SELECT id FROM tasks WHERE id = $1 FOR UPDATE', [taskId]);
     if (!rowCount) throw new HttpError(404, 'Task not found');
+    await recordChange(db, req, await getTask(taskId, db), null);
     const { rows } = await db.query('SELECT storage_name FROM attachments WHERE task_id = $1', [taskId]);
     await db.query('DELETE FROM tasks WHERE id = $1', [taskId]);
     return rows.map((row) => row.storage_name);
@@ -109,10 +120,14 @@ tasksRouter.post('/:id/attachments', upload, async (req, res) => {
   const taskId = id.parse(req.params.id);
   if (!req.files?.length) throw new HttpError(400, 'At least one files image part is required');
   const task = await withUploadCleanup((written) => transaction(async (db) => {
-    const { rowCount } = await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1 RETURNING id', [taskId]);
+    const { rowCount } = await db.query('SELECT id FROM tasks WHERE id = $1 FOR UPDATE', [taskId]);
     if (!rowCount) throw new HttpError(404, 'Task not found');
+    const before = await getTask(taskId, db);
+    await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [taskId]);
     await saveAttachments(db, taskId, req.files, written);
-    return getTask(taskId, db);
+    const updated = await getTask(taskId, db);
+    await recordChange(db, req, before, updated);
+    return updated;
   }));
   res.json({ task });
 });

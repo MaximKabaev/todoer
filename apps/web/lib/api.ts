@@ -14,7 +14,11 @@ export type User = {
   displayName: string;
   color: Color;
 };
-export type CurrentUser = User & { activeProjectId: string | null };
+export type CurrentUser = User & {
+  activeProjectId: string | null;
+  email?: string | null;
+  emailNotifications?: boolean;
+};
 export type Project = {
   id: string;
   name: string;
@@ -191,6 +195,8 @@ export const api = {
   me: () => request<{ user: CurrentUser; teammate: User }>("/api/me"),
   updateMe: (input: {
     activeProjectId?: string | null;
+    email?: string | null;
+    emailNotifications?: boolean;
     displayName?: string;
     password?: string;
     currentPassword?: string;

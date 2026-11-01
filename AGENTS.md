@@ -55,7 +55,9 @@ The web app proxies `/api/*` and `/agent` to the API via Next rewrites. `API_URL
 **baked in at build time**, so changing them requires a rebuild.
 
 Production API env (in the unit): `NODE_ENV=production`, `API_HOST=172.20.0.1`, `API_PORT=4200`,
-`PUBLIC_API_URL`, `PUBLIC_WEB_URL`, `COOKIE_SECURE=true`, `TRUST_PROXY=loopback,172.20.0.0/16`.
+`PUBLIC_API_URL`, `PUBLIC_WEB_URL`, `COOKIE_SECURE=true`, `TRUST_PROXY=loopback,172.20.0.0/16`,
+`EMAIL_FROM`. `RESEND_API_KEY` (email digests via Resend, domain `todo.customsai.org`) lives in `apps/api/.env`.
+On staging, use `delivered+<label>@resend.dev` addresses so test digests never reach real inboxes.
 All variables are documented in `apps/api/.env.example` and `apps/web/.env.example`.
 
 ## Operations

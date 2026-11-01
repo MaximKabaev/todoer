@@ -932,7 +932,13 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           </Link>
         </div>
       )}
-      {settings && <Settings user={user} onClose={() => setSettings(false)} />}
+      {settings && (
+        <Settings
+          user={user}
+          teammate={teammate}
+          onClose={() => setSettings(false)}
+        />
+      )}
       {deleteTask && (
         <Confirm
           title="Delete this task?"

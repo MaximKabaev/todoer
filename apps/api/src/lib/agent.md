@@ -22,10 +22,10 @@ Use JSON and `Content-Type: application/json` unless uploading. Responses use ca
 | --- | --- | --- |
 | GET /api/health | Public | `{ok:true}` |
 | GET /api/agent, GET /agent | Public | This markdown document |
-| POST /api/auth/login | `{username,password}`; username is case-insensitive | `{user}` + session cookie |
+| POST /api/auth/login | `{username,password}`; username or email, case-insensitive | `{user}` + session cookie |
 | POST /api/auth/logout | None | `{ok:true}`; clears session |
-| GET /api/me | None | `{user,teammate}` |
-| PATCH /api/me | `{displayName?,password?,currentPassword?}`; currentPassword required to change password | `{user}` |
+| GET /api/me | None | `{user,teammate}`; `user` includes your `email` and `emailNotifications` |
+| PATCH /api/me | `{displayName?,password?,currentPassword?,email?,emailNotifications?}`; currentPassword required to change password; `email: ""` or `null` clears it | `{user}` |
 | GET /api/users | None | `{users:[User]}` |
 | GET /api/tokens | None | `{tokens:[{id,name,createdAt,lastUsedAt}]}`; yours only |
 | POST /api/tokens | `{name?}` | `201 {token:{id,name,createdAt},secret:"tdr_..."}` |

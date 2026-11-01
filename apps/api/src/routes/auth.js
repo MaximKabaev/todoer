@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { pool, transaction } from '../db.js';
-import { authenticate, cookieName, cookieOptions, dummyPassword, newToken, publicUser, sessionHash, cookieLifetime, tokenHash, userColumns } from '../auth.js';
+import { authenticate, cookieName, cookieOptions, dummyPassword, meColumns, newToken, publicUser, sessionHash, cookieLifetime, tokenHash, userColumns } from '../auth.js';
 import { HttpError } from '../lib/errors.js';
 import { id, z } from '../lib/validation.js';
 
@@ -15,7 +15,8 @@ authRouter.post('/auth/login', async (req, res) => {
   const now = Date.now();
   const bucket = failures.get(key);
   if (bucket && bucket.until > now && bucket.count >= 20) throw new HttpError(429, 'Too many login attempts; try again in 15 minutes');
-  const { rows } = await pool.query(`SELECT ${userColumns}, password_hash FROM users WHERE lower(username) = lower($1)`, [body.username]);
+  // The username field also accepts the user's email address.
+  const { rows } = await pool.query(`SELECT ${userColumns}, password_hash FROM users WHERE lower(username) = lower($1) OR lower(email) = lower($1)`, [body.username]);
   const user = rows[0];
   const valid = await bcrypt.compare(body.password, user?.password_hash || dummyPassword);
   if (!user || !valid) {
@@ -50,7 +51,15 @@ authRouter.patch('/me', async (req, res) => {
     displayName: z.string().trim().min(1).max(200).optional(),
     activeProjectId: id.nullable().optional(),
     password: z.string().min(1).max(72).optional(), currentPassword: z.string().max(1000).optional(),
+    // "" or null clears the email.
+    email: z.string().trim().max(320).nullable().optional().transform((value) => (value === '' ? null : value)),
+    emailNotifications: z.boolean().optional(),
   }).parse(req.body);
+  if (body.email) {
+    if (!z.email().safeParse(body.email).success) throw new HttpError(400, 'Enter a valid email address');
+    const { rowCount } = await pool.query('SELECT 1 FROM users WHERE lower(email) = lower($1) AND id <> $2', [body.email, req.user.id]);
+    if (rowCount) throw new HttpError(409, 'That email is already in use');
+  }
   const user = await transaction(async (db) => {
     const { rows: [current] } = await db.query('SELECT password_hash FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
     let hash;
@@ -60,9 +69,11 @@ authRouter.patch('/me', async (req, res) => {
       hash = await bcrypt.hash(body.password, 12);
     }
     const { rows } = await db.query(`UPDATE users SET display_name = COALESCE($2, display_name), password_hash = COALESCE($3, password_hash),
-      active_project_id = CASE WHEN $4 THEN $5::uuid ELSE active_project_id END
-      WHERE id = $1 RETURNING ${userColumns}, active_project_id AS "activeProjectId"`,
-    [req.user.id, body.displayName, hash, body.activeProjectId !== undefined, body.activeProjectId ?? null]);
+      active_project_id = CASE WHEN $4 THEN $5::uuid ELSE active_project_id END,
+      email = CASE WHEN $6 THEN $7 ELSE email END, email_notifications = COALESCE($8, email_notifications)
+      WHERE id = $1 RETURNING ${meColumns}`,
+    [req.user.id, body.displayName, hash, body.activeProjectId !== undefined, body.activeProjectId ?? null,
+      body.email !== undefined, body.email ?? null, body.emailNotifications ?? null]);
     return rows[0];
   });
   res.json({ user });

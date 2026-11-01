@@ -12,14 +12,16 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { api, type AgentToken, type User } from "@/lib/api";
+import { api, type AgentToken, type CurrentUser, type User } from "@/lib/api";
 import { Avatar, Confirm, Modal } from "./ui";
 import { useToast } from "./providers";
 export function Settings({
   user,
+  teammate,
   onClose,
 }: {
-  user: User;
+  user: CurrentUser;
+  teammate: User;
   onClose: () => void;
 }) {
   const { data, mutate: refresh } = useSWR<{ tokens: AgentToken[] }>(
@@ -29,6 +31,13 @@ export function Settings({
   const router = useRouter();
   const toast = useToast();
   const [name, setName] = useState(user.displayName);
+  const [email, setEmail] = useState(user.email || "");
+  const [savedEmail, setSavedEmail] = useState(user.email || "");
+  const [notifications, setNotifications] = useState(
+    user.emailNotifications ?? false,
+  );
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState("");
   const [busy, setBusy] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
   const [tokenName, setTokenName] = useState("");
@@ -73,6 +82,32 @@ export function Settings({
       });
     } finally {
       setBusy(false);
+    }
+  }
+  async function saveEmail(input: {
+    email?: string;
+    emailNotifications?: boolean;
+  }) {
+    const previousNotifications = notifications;
+    if (input.emailNotifications !== undefined)
+      setNotifications(input.emailNotifications);
+    setEmailBusy(true);
+    setEmailError("");
+    try {
+      const { user: updated } = await api.updateMe(input);
+      setSavedEmail(updated.email || "");
+      if (input.email !== undefined) setEmail(updated.email || "");
+      setNotifications(updated.emailNotifications ?? false);
+      await mutate("/api/me");
+      toast({ message: "Your email preferences are up to date." });
+    } catch (err) {
+      if (input.emailNotifications !== undefined)
+        setNotifications(previousNotifications);
+      setEmailError(
+        err instanceof Error ? err.message : "Could not update email preferences.",
+      );
+    } finally {
+      setEmailBusy(false);
     }
   }
   return (
@@ -123,6 +158,63 @@ export function Settings({
           {busy ? "Saving…" : "Save changes"}
         </button>
       </form>
+      <div className="settings-divider" />
+      <section className="email-section" aria-labelledby="email-heading">
+        <div className="settings-section-title">
+          <div>
+            <h3 id="email-heading">Email</h3>
+            <p id="email-help">
+              Batched every few minutes. You can also log in with this email.
+            </p>
+          </div>
+        </div>
+        <form
+          className="settings-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void saveEmail({ email: email.trim() });
+          }}
+        >
+          <label>
+            Email address
+            <input
+              type="email"
+              autoComplete="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              aria-describedby="email-help"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <button className="secondary-button" disabled={emailBusy}>
+            {emailBusy ? "Saving…" : "Save email"}
+          </button>
+        </form>
+        <label
+          className={`email-notifications ${!savedEmail ? "is-disabled" : ""}`}
+        >
+          <span>Email me when {teammate.displayName} changes my tasks</span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={notifications}
+            disabled={!savedEmail || emailBusy}
+            aria-describedby={!savedEmail ? "email-notifications-hint" : undefined}
+            onChange={(e) =>
+              void saveEmail({ emailNotifications: e.target.checked })
+            }
+          />
+        </label>
+        {!savedEmail && (
+          <p className="small muted" id="email-notifications-hint">
+            Save an email address to receive notifications.
+          </p>
+        )}
+        {emailError && (
+          <p className="form-error" role="alert">{emailError}</p>
+        )}
+      </section>
       <div className="settings-divider" />
       <section className="agent-section">
         <div className="settings-section-title">

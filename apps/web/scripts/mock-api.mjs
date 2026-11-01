@@ -18,9 +18,13 @@ const users = [
   },
 ];
 const activeProjects = new Map(users.map((u) => [u.id, null]));
+const emails = new Map(users.map((u) => [u.id, `${u.username}@example.com`]));
+const emailNotifications = new Map(users.map((u) => [u.id, true]));
 const currentUser = (u) => ({
   ...u,
   activeProjectId: activeProjects.get(u.id),
+  email: emails.get(u.id),
+  emailNotifications: emailNotifications.get(u.id),
 });
 const passwords = new Map(users.map((u) => [u.id, "todoer"]));
 const sessions = new Map();
@@ -397,7 +401,12 @@ const server = createServer(async (req, res) => {
     if (url.pathname === "/api/auth/login" && method === "POST") {
       const { data } = await body(req);
       const u = users.find(
-        (u) => u.username.toLowerCase() === String(data.username).toLowerCase(),
+        (u) =>
+          [u.username, emails.get(u.id)].some(
+            (value) =>
+              value &&
+              value.toLowerCase() === String(data.username).trim().toLowerCase(),
+          ),
       );
       if (!u || passwords.get(u.id) !== data.password)
         return send({ error: "invalid_credentials" }, 401);
@@ -432,6 +441,27 @@ const server = createServer(async (req, res) => {
         const { data } = await body(req);
         if (data.password && passwords.get(me.id) !== data.currentPassword)
           return send({ error: "incorrect_current_password" }, 400);
+        let email;
+        if (data.email !== undefined) {
+          if (data.email !== null && typeof data.email !== "string")
+            return send({ error: "Enter a valid email address" }, 400);
+          email = data.email?.trim() || null;
+          if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+            return send({ error: "Enter a valid email address" }, 400);
+          if (
+            email &&
+            users.some(
+              (u) => u.id !== me.id &&
+                emails.get(u.id)?.toLowerCase() === email.toLowerCase(),
+            )
+          )
+            return send({ error: "That email is already in use" }, 409);
+        }
+        if (
+          data.emailNotifications !== undefined &&
+          typeof data.emailNotifications !== "boolean"
+        )
+          return send({ error: "emailNotifications must be a boolean" }, 400);
         if (data.activeProjectId !== undefined) {
           if (
             data.activeProjectId !== null &&
@@ -440,6 +470,9 @@ const server = createServer(async (req, res) => {
             return send({ error: "unknown_project" }, 400);
           activeProjects.set(me.id, data.activeProjectId);
         }
+        if (data.email !== undefined) emails.set(me.id, email);
+        if (data.emailNotifications !== undefined)
+          emailNotifications.set(me.id, data.emailNotifications);
         if (data.displayName) me.displayName = data.displayName;
         if (data.password) passwords.set(me.id, data.password);
         return send({ user: currentUser(me) });
