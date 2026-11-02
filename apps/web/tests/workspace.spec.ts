@@ -154,6 +154,18 @@ test("photo capture uses one multipart task request and detail uploads attach to
     .click();
   const lightbox = page.getByRole("dialog", { name: "one.png", exact: true });
   await expect(lightbox).toBeVisible();
+  const zoomable = lightbox.locator(".zoomable");
+  const box = (await zoomable.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -400);
+  await expect(zoomable).toHaveAttribute("data-zoomed", "true");
+  await zoomable.dblclick();
+  await expect(zoomable).not.toHaveAttribute("data-zoomed");
+  await zoomable.dblclick();
+  await expect(zoomable).toHaveAttribute("data-zoomed", "true");
+  await expect(
+    lightbox.getByRole("link", { name: "Open original" }),
+  ).toHaveAttribute("target", "_blank");
   await page.keyboard.press("Escape");
   await expect(detail).toBeVisible();
   await expect(lightbox).toHaveCount(0);

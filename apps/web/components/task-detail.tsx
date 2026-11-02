@@ -13,6 +13,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Flag,
   ImagePlus,
   LoaderCircle,
@@ -36,6 +37,7 @@ import { useDialog } from "@/hooks/use-dialog";
 import { useMedia } from "@/hooks/use-media";
 import { Avatar, Checkbox, Confirm, Modal } from "./ui";
 import { useToast } from "./providers";
+import { ZoomableImage } from "./zoomable-image";
 const subscribeShare = () => () => {};
 const canShare = () => typeof navigator.share === "function";
 
@@ -639,16 +641,13 @@ export function TaskDetail({
           className="lightbox"
           onClose={() => setLightbox(null)}
         >
-          <div className="lightbox-image">
-            <Image
-              unoptimized
-              width={task.attachments[lightbox].width || 800}
-              height={task.attachments[lightbox].height || 600}
-              style={{ width: "auto", height: "auto" }}
-              src={task.attachments[lightbox].url}
-              alt={task.attachments[lightbox].filename}
-            />
-          </div>
+          <ZoomableImage
+            key={task.attachments[lightbox].id}
+            width={task.attachments[lightbox].width || 800}
+            height={task.attachments[lightbox].height || 600}
+            src={task.attachments[lightbox].url}
+            alt={task.attachments[lightbox].filename}
+          />
           <div className="lightbox-actions">
             <button
               className="icon-button"
@@ -669,6 +668,16 @@ export function TaskDetail({
             >
               <ChevronRight />
             </button>
+            <a
+              className="icon-button"
+              href={task.attachments[lightbox].url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open original"
+              title="Open original"
+            >
+              <ExternalLink size={18} />
+            </a>
             <button
               className="text-danger"
               onClick={() => {
