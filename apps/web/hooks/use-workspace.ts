@@ -5,6 +5,7 @@ import {
   api,
   ApiError,
   type Counts,
+  type Score,
   type CurrentUser,
   scopeKey,
   workspaceKey,
@@ -18,6 +19,7 @@ import {
   taskKey,
 } from "@/lib/api";
 import { useToast } from "@/components/providers";
+import { defaultDueDate, transitionDueDate } from "@/lib/task-dates";
 import { taskAssignment } from "@/lib/task-assignment";
 export type Selection = { kind: View | "tag"; id?: string };
 export function viewQuery(
@@ -74,6 +76,9 @@ export function useWorkspace(
     scopeKey("/api/tags", user.activeProjectId),
   );
   const counts = useSWR<Counts>(scopeKey("/api/counts", user.activeProjectId));
+  const score = useSWR<Score>("/api/score", {
+    onError: () => {}, // Scores are optional; never toast over the task list.
+  });
   const deleted = useRef(new Set<string>());
   const queues = useRef(new Map<string, Promise<unknown>>());
   const versions = useRef(new Map<string, number>());
@@ -126,6 +131,7 @@ export function useWorkspace(
                 (x) => x.toLowerCase() === identifier.toLowerCase(),
               ),
             ) || (identifier === "teammate" ? teammate : user);
+    const assignment = taskAssignment(task, input, resolve);
     return {
       ...task,
       ...input,
@@ -135,7 +141,8 @@ export function useWorkspace(
           ? projects.data?.projects.find((p) => p.id === input.projectId) ||
             null
           : task.project,
-      ...taskAssignment(task, input, resolve),
+      ...assignment,
+      dueDate: transitionDueDate(task, input, assignment.list),
       tags: input.tags
         ? input.tags.map(
             (name) =>
@@ -215,7 +222,7 @@ export function useWorkspace(
         done: false,
         doneAt: null,
         list: "now",
-        dueDate: null,
+        dueDate: input.list === "later" ? null : defaultDueDate(),
         priority: 0,
         projectId: null,
         project: null,
@@ -293,6 +300,7 @@ export function useWorkspace(
     projects,
     tags,
     counts,
+    score,
     patch,
     create,
     remove,

@@ -1,4 +1,5 @@
 /** Development-only, in-memory SPEC.md API. Never imported by the app. */
+import { defaultDate, scoreEntry } from "./mock-score.mjs";
 import { createServer } from "node:http";
 import { randomUUID, randomBytes } from "node:crypto";
 const port = Number(process.env.MOCK_PORT || 4000);
@@ -86,7 +87,9 @@ function fixture(title, options = {}) {
     attachments: [],
     position: Date.now() - tasks.length * 1000,
     createdAt: new Date(
-      Date.now() - (tasks.length + 1) * 3600000,
+      options.doneAt
+        ? Math.min(Date.now() - (tasks.length + 1) * 3600000, Date.parse(options.doneAt) - 3600000)
+        : Date.now() - (tasks.length + 1) * 3600000,
     ).toISOString(),
     updatedAt: stamp(),
     ...options,
@@ -258,6 +261,7 @@ function filterTasks(params, me) {
   return result.slice(0, Math.min(Number(params.get("limit") || 200), 1000));
 }
 function patch(task, body, me) {
+  const previousList = task.list;
   for (const field of [
     "title",
     "notes",
@@ -268,7 +272,7 @@ function patch(task, body, me) {
     "position",
   ])
     if (body[field] !== undefined) task[field] = body[field];
-  if (body.done !== undefined) {
+  if (body.done !== undefined && body.done !== task.done) {
     task.done = body.done;
     task.doneAt = body.done ? stamp() : null;
   }
@@ -314,6 +318,8 @@ function patch(task, body, me) {
           (v) => v === t.id || String(v).toLowerCase() === t.name.toLowerCase(),
         ),
     );
+  if (previousList === "later" && task.list === "now" && body.dueDate === undefined && (!task.dueDate || task.dueDate < localDate(new Date())))
+    task.dueDate = defaultDate();
   task.updatedAt = stamp();
 }
 async function body(req) {
@@ -483,6 +489,14 @@ const server = createServer(async (req, res) => {
       });
     }
     if (parts[1] === "users") return send({ users });
+    if (parts[1] === "score" && method === "GET") {
+      const now = Date.now();
+      const own = scoreEntry(tasks, me, now);
+      const otherUser = users.find((u) => u.id !== me.id);
+      const other = otherUser ? scoreEntry(tasks, otherUser, now) : null;
+      const difference = other ? own.score - other.score : 0;
+      return send({ me: own, teammate: other, leader: difference > 0 ? "me" : difference < 0 ? "teammate" : null, lead: Math.abs(difference) });
+    }
     if (parts[1] === "counts") {
       const count = (view) =>
         filterTasks(
@@ -562,9 +576,11 @@ const server = createServer(async (req, res) => {
           const task = fixture("", {
             assignees: [me],
             createdBy: me,
+            createdAt: stamp(),
             position: Date.now(),
           });
           patch(task, { ...data, addAssignees: undefined }, me);
+          if (task.list === "now" && data.dueDate === undefined) task.dueDate = defaultDate();
           await attach(task, uploads);
           return send({ task: shape(task) }, 201);
         }
@@ -575,9 +591,7 @@ const server = createServer(async (req, res) => {
         const { data } = await body(req);
         const to = resolveUser(data.to || "teammate", me);
         if (!to) return send({ error: "invalid_user" }, 400);
-        task.assignees = [to];
-        task.list = "now";
-        task.updatedAt = stamp();
+        patch(task, { assignees: [to.id] }, me);
         return send({ task: shape(task) });
       }
       if (parts[3] === "attachments" && method === "POST") {

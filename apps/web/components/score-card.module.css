@@ -1,0 +1,13 @@
+.slot { min-height: 132px; margin: 12px 0 0; }
+.card { min-height: 132px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 16px 18px; border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface); }
+.eyebrow { font-size: 10px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary); }
+.eyebrow span { font-weight: 400; letter-spacing: 0; text-transform: none; }
+.label { font-size: 23px; font-weight: 700; letter-spacing: -.7px; line-height: 1.25; margin: 5px 0; }
+.comparison { font-size: 12px; color: var(--secondary); }
+.rating { text-align: right; align-self: center; }
+.number strong { font-size: 34px; font-weight: 700; letter-spacing: -1.5px; }
+.number span { color: var(--secondary); font-size: 11px; margin-left: 3px; }
+.trend { display: flex; justify-content: flex-end; align-items: center; gap: 3px; font-size: 10px; color: var(--secondary); }
+.stats { grid-column: 1 / -1; border-top: 1px solid var(--line-strong); padding-top: 9px; font-size: 11px; color: var(--secondary); display: flex; gap: 14px; }
+.overdue { color: var(--red); }
+@media (max-width: 420px) { .card { padding: 14px; gap: 8px; } .label { font-size: 21px; } .eyebrow { font-size: 9px; } .number strong { font-size: 31px; } }
