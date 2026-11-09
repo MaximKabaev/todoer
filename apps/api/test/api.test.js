@@ -21,7 +21,10 @@ process.env.EMAIL_FROM = '';
 const schema = `todoer_test_${randomUUID().replaceAll('-', '')}`;
 process.env.API_DB_SCHEMA = schema;
 const admin = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+// Modules that load src/db.js are imported dynamically in before(): a static import would build the
+// connection pool before API_DB_SCHEMA is set, and the tests would run against the real schema.
 let app, pool, uploadDirectory, first, second;
+let dateFromToday, foldScore, gradeDone, gradeOpen, labelFor, scoreFor;
 const password = 'test-only-password';
 const firstToken = `tdr_${randomUUID().replaceAll('-', '')}`;
 const secondToken = `tdr_${randomUUID().replaceAll('-', '')}`;
@@ -80,6 +83,10 @@ before(async () => {
   uploadDirectory = await mkdtemp(path.join(uploadsRoot, 'integration-'));
   process.env.API_UPLOAD_DIR = uploadDirectory;
   ({ pool } = await import('../src/db.js'));
+  // Safety net: every test writes and deletes rows, so refuse to run unless the pool is confined to the throwaway schema.
+  const { rows: [{ search_path: searchPath }] } = await pool.query('SHOW search_path');
+  if (searchPath !== schema) throw new Error(`Refusing to run: connection search_path is "${searchPath}", expected the isolated test schema "${schema}"`);
+  ({ dateFromToday, foldScore, gradeDone, gradeOpen, labelFor, scoreFor } = await import('../src/lib/score.js'));
   const { migrate } = await import('../scripts/migrate.js');
   await migrate();
   await migrate(); // Applied migrations are safe to rerun.
@@ -221,7 +228,7 @@ test('create accepts no body at all and returns a fully hydrated default task', 
   assert.equal(task.title, ''); assert.equal(task.notes, '');
   assert.equal(task.done, false); assert.equal(task.doneAt, null);
   assert.equal(task.list, 'now'); assert.equal(task.priority, 0);
-  assert.equal(task.dueDate, null); assert.equal(task.projectId, null); assert.equal(task.project, null);
+  assert.equal(task.dueDate, dateFromToday(7)); assert.equal(task.projectId, null); assert.equal(task.project, null);
   assert.deepEqual(task.assignees, [first]); assert.deepEqual(task.createdBy, first);
   assert.deepEqual(task.tags, []); assert.deepEqual(task.attachments, []);
   assert.ok(task.position >= start && task.position <= Date.now());
@@ -405,7 +412,7 @@ test('multipart ignores empty optional scalars while preserving empty title and 
   assert.equal(task.title, ''); assert.equal(task.notes, '');
   assert.equal(task.list, 'now'); assert.equal(task.priority, 0);
   assert.equal(task.done, false); assert.equal(task.doneAt, null);
-  assert.equal(task.dueDate, null); assert.equal(task.projectId, null);
+  assert.equal(task.dueDate, dateFromToday(7)); assert.equal(task.projectId, null);
   assert.deepEqual(task.assignees, [first]);
   assert.equal(task.attachments.length, 1);
 });
@@ -752,5 +759,126 @@ test('task changes involving the teammate are batched into one email digest per 
     await patch(handed.id, { done: true });
     assert.equal((await pool.query('SELECT 1 FROM notification_events')).rowCount, 0);
     await api('patch', '/api/me', secondToken).send({ email: null, emailNotifications: true }).expect(200);
+  });
+});
+
+const backdate = (id, days) => pool.query("UPDATE tasks SET created_at = created_at - $2 * interval '1 day' WHERE id = $1", [id, days]);
+const board = async (token = firstToken) => (await api('get', '/api/score', token).expect(200)).body;
+
+test('tasks planned for Now default to a one-week due date; Later stays undated until planned', async () => {
+  assert.equal((await create({ title: 'QA default due' })).dueDate, dateFromToday(7));
+  assert.equal((await create({ title: 'QA explicit', dueDate: '2030-01-02' })).dueDate, '2030-01-02');
+  assert.equal((await create({ title: 'QA no date wanted', dueDate: null })).dueDate, null);
+  const later = await create({ title: 'QA later', list: 'later' });
+  assert.equal(later.dueDate, null);
+  // Assigning someone plans it: it moves to Now with a fresh week.
+  assert.equal((await patch(later.id, { assignees: ['me'] })).dueDate, dateFromToday(7));
+  // Planning an old task with a past date refreshes it; an explicit date in the same request wins.
+  const stale = await create({ title: 'QA stale', list: 'later' });
+  await pool.query("UPDATE tasks SET due_date = '2020-01-01' WHERE id = $1", [stale.id]);
+  assert.equal((await patch(stale.id, { list: 'now' })).dueDate, dateFromToday(7));
+  await patch(stale.id, { list: 'later' });
+  assert.equal((await patch(stale.id, { list: 'now', dueDate: '2031-05-06' })).dueDate, '2031-05-06');
+  // A future date survives planning, and handoff plans a Later task the same way.
+  await patch(stale.id, { list: 'later', dueDate: '2031-05-06' });
+  assert.equal((await patch(stale.id, { list: 'now' })).dueDate, '2031-05-06');
+  const handed = await create({ title: 'QA handoff later', list: 'later' });
+  assert.equal((await api('post', `/api/tasks/${handed.id}/handoff`).send({ to: 'teammate' }).expect(200)).body.task.dueDate, dateFromToday(7));
+});
+
+test('score grading, weighting and labels', () => {
+  assert.deepEqual([0, 1, 2, 7, 30].map(gradeDone), [100, 80, 70, 30, 30]);
+  assert.deepEqual([1, 2, 6, 9].map(gradeOpen), [50, 40, 0, 0]);
+  assert.equal(foldScore([]), 50);
+  // Only weight and grade matter, not insertion order; zero-weight events are ignored.
+  const events = [{ key: 'a', time: 2, weight: 1, grade: 100 }, { key: 'b', time: 1, weight: 1, grade: 0 }, { key: 'c', time: 3, weight: 0, grade: 0 }];
+  assert.equal(foldScore(events), foldScore([...events].reverse()));
+  assert.equal(foldScore([{ key: 'a', time: 1, weight: 1, grade: 100 }]), 58); // one task can't swing a fresh score
+  assert.ok(foldScore(Array.from({ length: 40 }, (_, i) => ({ key: `${i}`, time: i, weight: 1, grade: 100 }))) > 95);
+  assert.deepEqual([95, 80, 65, 50, 35, 10].map(labelFor), ['Best boy ever', 'Very good boy', 'Good boy', 'Doing okay', 'Naughty', 'Bad boy']);
+  // Replay: tasks created after asOf are ignored and later completions count as still open.
+  const day = 86400000, now = new Date('2026-06-15T12:00:00Z');
+  const row = { id: 't', userId: 'u', done: true, doneAt: now, createdAt: new Date(now - 3 * day), priority: 0, empty: false, deadline: new Date(now - 1 * day) };
+  assert.equal(scoreFor([row], 'u', now), foldScore([{ key: 't', time: now, weight: 1, grade: 80 }]));
+  assert.equal(scoreFor([row], 'u', new Date(now - 2 * day)), 50);
+  assert.equal(scoreFor([row], 'u', new Date(now - 4 * day)), 50);
+  assert.equal(scoreFor([{ ...row, done: false, doneAt: null }], 'u', now), foldScore([{ key: 't', time: now, weight: 1, grade: 50 }]));
+});
+
+test('scoreboard: idle people keep their score, completions on time win, neglect and reopening are reflected', async () => {
+  await pool.query('DELETE FROM tasks');
+  let state = await board();
+  assert.deepEqual([state.me.score, state.teammate.score, state.leader, state.lead, state.me.label], [50, 50, null, 0, 'Doing okay']);
+  assert.deepEqual(state.me.user, first);
+  assert.deepEqual(state.teammate.user, second);
+
+  // German works through 3 tasks on time: German rises, Maxim (nothing assigned) does not move.
+  const theirs = [];
+  for (const title of ['QA one', 'QA two', 'QA three']) {
+    const task = await create({ title, assignees: ['partner_test'] });
+    await backdate(task.id, 1);
+    theirs.push(task);
+  }
+  assert.equal((await board()).teammate.score, 50); // open and on time is neutral
+  for (const task of theirs) await api('patch', `/api/tasks/${task.id}`, secondToken).send({ done: true }).expect(200);
+  state = await board();
+  assert.equal(state.me.score, 50);
+  assert.equal(state.teammate.score, 69);
+  assert.deepEqual([state.leader, state.lead, state.teammate.label], ['teammate', 19, 'Good boy']);
+  assert.deepEqual([state.teammate.doneThisWeek, state.teammate.trend, state.teammate.overdue, state.me.doneThisWeek], [3, 19, 0, 0]);
+  // The mirror view for German.
+  const mirror = await board(secondToken);
+  assert.deepEqual([mirror.me.score, mirror.teammate.score, mirror.leader, mirror.lead], [69, 50, 'me', 19]);
+
+  // Maxim sits on an overdue task: his score drops while it is open, recovers (not fully) once done,
+  // and reopening brings the penalty back.
+  const late = await create({ title: 'QA overdue', dueDate: dateFromToday(-3) });
+  state = await board();
+  assert.equal(state.me.overdue, 1);
+  assert.ok(state.me.score < 50, `expected a penalty, got ${state.me.score}`);
+  const penalized = state.me.score;
+  await patch(late.id, { done: true });
+  const redeemed = (await board()).me.score;
+  assert.ok(redeemed > penalized && redeemed <= 50, `done late should beat open overdue: ${penalized} -> ${redeemed}`);
+  await patch(late.id, { done: false });
+  assert.equal((await board()).me.score, penalized);
+  await patch(late.id, { dueDate: dateFromToday(7) });
+  assert.equal((await board()).me.score, 50);
+
+  // Quick-add-and-done, empty tasks and Later tasks barely or never count; a shared task counts for both.
+  const before = (await board()).me.score;
+  await create({ title: 'QA instant', done: true });
+  await create({ done: true });
+  await create({ title: 'QA parked', list: 'later' });
+  assert.ok(Math.abs((await board()).me.score - before) <= 2);
+  const shared = await create({ title: 'QA shared', assignees: ['me', 'partner_test'], dueDate: dateFromToday(-4) });
+  state = await board();
+  assert.equal(state.me.overdue, 1); assert.equal(state.teammate.overdue, 1);
+});
+
+test('email digests carry the good boy score when a task is completed', async () => {
+  const { flushNotifications } = await import('../src/lib/notifications.js');
+  const outbox = [];
+  await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>', PUBLIC_WEB_URL: 'https://todo.example.com' }, async () => {
+    await pool.query('DELETE FROM tasks'); await pool.query('DELETE FROM notification_events');
+    await api('patch', '/api/me', secondToken).send({ email: 'partner@example.com' }).expect(200);
+    // German creates a task for Maxim, who finishes it a day after creating it, on time.
+    const task = await create({ title: 'QA score mail', assignees: [first.username] }, secondToken);
+    await backdate(task.id, 1);
+    await pool.query('DELETE FROM notification_events');
+    await patch(task.id, { title: 'QA score mail!' }); // not a completion: no score yet
+    await patch(task.id, { done: true });
+    const send = async (message) => { outbox.push(message); };
+    assert.equal(await flushNotifications({ send, quiet: 0, maxWait: 0 }), 1);
+    const [mail] = outbox;
+    assert.match(mail.text, /Good boy score\n  Teammate Test \(you\): 50 · Doing okay \(±0\)\n  Maxim Test: 58 · Doing okay \(\+8\)\n  Maxim Test leads by 8\n/);
+    assert.match(mail.html, /Good boy score/);
+    assert.match(mail.html, /<strong[^>]*>58<\/strong> · Doing okay \(\+8\)/);
+    // Edits and reopening alone carry no score block.
+    await patch(task.id, { done: false });
+    outbox.length = 0;
+    assert.equal(await flushNotifications({ send, quiet: 0, maxWait: 0 }), 1);
+    assert.doesNotMatch(outbox[0].text, /Good boy score/);
+    await api('patch', '/api/me', secondToken).send({ email: null }).expect(200);
   });
 });

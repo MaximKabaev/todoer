@@ -4,6 +4,7 @@ import { pool } from './db.js';
 import { errorHandler, HttpError } from './lib/errors.js';
 import { authRouter } from './routes/auth.js';
 import { tasksRouter } from './routes/tasks.js';
+import { scoreRouter } from './routes/score.js';
 import { catalogRouter } from './routes/catalog.js';
 import { attachmentsRouter } from './routes/attachments.js';
 
@@ -29,6 +30,7 @@ app.get(['/api/agent', '/agent'], async (req, res) => {
 app.use('/api', authRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/attachments', attachmentsRouter);
+app.use('/api/score', scoreRouter);
 app.use('/api', catalogRouter);
 app.use((req, res, next) => next(new HttpError(404, 'Not found')));
 app.use(errorHandler);

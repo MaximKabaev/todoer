@@ -5,7 +5,8 @@ import { HttpError } from '../lib/errors.js';
 import { id, identifier, querySchema, taskBody, taskPatchSchema, taskSchema, z } from '../lib/validation.js';
 import { applyRelations, getTask, hydrate, taskColumns } from '../lib/tasks.js';
 import { removeFiles, saveAttachments, upload, withUploadCleanup } from '../lib/uploads.js';
-import { recordChange } from '../lib/notifications.js';
+import { notificationsConfigured, recordChange } from '../lib/notifications.js';
+import { dateFromToday, scoreSnapshot, SCORE } from '../lib/score.js';
 
 export const tasksRouter = Router();
 
@@ -43,15 +44,18 @@ tasksRouter.get('/:id', async (req, res) => res.json({ task: await getTask(id.pa
 tasksRouter.post('/', upload, async (req, res) => {
   const body = taskSchema.parse(taskBody(req));
   const task = await withUploadCleanup((written) => transaction(async (db) => {
+    const scoresBefore = body.done && notificationsConfigured() ? await scoreSnapshot(db) : null;
+    // Tasks planned for Now get a one-week deadline unless the caller says otherwise (null = no date).
+    const dueDate = body.dueDate === undefined && body.list !== 'later' ? dateFromToday(SCORE.defaultDays) : body.dueDate ?? null;
     const { rows: [row] } = await db.query(`INSERT INTO tasks (title, notes, list, due_date, priority, project_id, done, done_at, created_by, position)
       VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7 THEN now() ELSE NULL END,$8,$9) RETURNING id`,
-    [body.title ?? '', body.notes ?? '', body.list ?? 'now', body.dueDate ?? null, body.priority ?? 0, body.projectId ?? null, body.done ?? false, req.user.id, Date.now()]);
+    [body.title ?? '', body.notes ?? '', body.list ?? 'now', dueDate, body.priority ?? 0, body.projectId ?? null, body.done ?? false, req.user.id, Date.now()]);
     // Later tasks are unplanned and never assigned; an explicit list wins over assignees.
     const later = body.list === 'later';
     await applyRelations(row.id, { ...body, assignees: later ? [] : body.assignees ?? ['me'], addAssignees: undefined }, req, db);
     await saveAttachments(db, row.id, req.files, written);
     const created = await getTask(row.id, db);
-    await recordChange(db, req, null, created);
+    await recordChange(db, req, null, created, scoresBefore);
     return created;
   }));
   res.status(201).json({ task });
@@ -61,13 +65,17 @@ tasksRouter.patch('/:id', async (req, res) => {
   const taskId = id.parse(req.params.id);
   const body = taskPatchSchema.parse(req.body);
   const task = await transaction(async (db) => {
-    const { rows: [current] } = await db.query('SELECT list FROM tasks WHERE id = $1 FOR UPDATE', [taskId]);
+    const { rows: [current] } = await db.query("SELECT list, to_char(due_date, 'YYYY-MM-DD') AS \"dueDate\" FROM tasks WHERE id = $1 FOR UPDATE", [taskId]);
     if (!current) throw new HttpError(404, 'Task not found');
     const before = await getTask(taskId, db);
+    const scoresBefore = body.done === true && !before.done && notificationsConfigured() ? await scoreSnapshot(db) : null;
     const assigning = Boolean(body.assignees?.length || body.addAssignees?.length);
     // Later tasks have no assignees: assigning someone plans the task (moves it to Now),
     // unless this same request explicitly puts it on Later, which wins.
     if (assigning && body.list === undefined && current.list === 'later') body.list = 'now';
+    // Planning a Later task gives it a fresh one-week deadline when it has none or it already passed.
+    const planned = current.list === 'later' && (body.list ?? current.list) === 'now';
+    if (planned && body.dueDate === undefined && (!current.dueDate || current.dueDate < dateFromToday())) body.dueDate = dateFromToday(SCORE.defaultDays);
     const values = [taskId];
     const assignments = ['updated_at = now()'];
     for (const [field, column] of Object.entries({ title: 'title', notes: 'notes', list: 'list', dueDate: 'due_date', priority: 'priority', projectId: 'project_id', done: 'done', position: 'position' })) {
@@ -80,7 +88,7 @@ tasksRouter.patch('/:id', async (req, res) => {
     await applyRelations(taskId, body, req, db);
     await db.query("DELETE FROM task_assignees a USING tasks t WHERE t.id = a.task_id AND t.id = $1 AND t.list = 'later'", [taskId]);
     const updated = await getTask(taskId, db);
-    await recordChange(db, req, before, updated);
+    await recordChange(db, req, before, updated, scoresBefore);
     return updated;
   });
   res.json({ task });
@@ -94,7 +102,9 @@ tasksRouter.post('/:id/handoff', async (req, res) => {
     if (!found) throw new HttpError(404, 'Task not found');
     const before = await getTask(taskId, db);
     // Handing a Later task to someone plans it, so it moves to Now.
-    await db.query("UPDATE tasks SET updated_at = now(), list = 'now' WHERE id = $1", [taskId]);
+    await db.query(`UPDATE tasks SET updated_at = now(), list = 'now',
+      due_date = CASE WHEN list = 'later' AND (due_date IS NULL OR due_date < $2::date) THEN $3::date ELSE due_date END WHERE id = $1`,
+    [taskId, dateFromToday(), dateFromToday(SCORE.defaultDays)]);
     await db.query('DELETE FROM task_assignees WHERE task_id = $1', [taskId]);
     await db.query('INSERT INTO task_assignees (task_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [taskId, userId]);
     const updated = await getTask(taskId, db);

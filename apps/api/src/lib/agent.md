@@ -47,13 +47,14 @@ Use JSON and `Content-Type: application/json` unless uploading. Responses use ca
 | POST /api/tags | `{name,color?}` | `201 {tag}`, or `200 {tag}` if existing |
 | PATCH /api/tags/:id | `{name?,color?}` | `{tag}` |
 | DELETE /api/tags/:id | Confirm first; removes tag associations, keeps tasks | `{ok:true}` |
+| GET /api/score | None | `{me,teammate,leader,lead}`: each entry `{user,score,label,trend,doneThisWeek,overdue}`. The 0-100 "good boy" score of how well each person handles assigned tasks (on-time completions raise it, overdue tasks lower it) |
 | GET /api/counts | None | `{mine,mineCreated,mineFromTeammate,teammate,later,unassigned,completed}` |
 
 Task filters combine with AND: `view=mine|mine_created|mine_from_teammate|teammate|later|unassigned|completed|all`, `assignee=IDENTIFIER`, `createdBy=IDENTIFIER`, `list=now|later`, `done=true|false|all`, `projectId=UUID`, `tag=NAME_OR_ID`, `q=TEXT`, `limit=1..1000` (default 200). Default `done=false`, except `view=completed` defaults true. **To list absolutely everything, use `view=all&done=all`**, and raise limit if needed. Results order by position descending, then createdAt descending; completed view uses doneAt descending. There is no pagination cursor; at most 1000 tasks per response.
 
 User identifiers in assignees, createdBy, filters, and `to`: UUID, username, display name (case-insensitive), `me`, `teammate`. Use GET /api/users to disambiguate. Tags accept names (case-insensitive, created if missing when adding) or existing IDs. `assignees`/`tags` replace the complete set on PATCH; use `add*`/`remove*` to preserve others. Omitted assignees on create defaults to `["me"]`; `[]` is explicitly unassigned.
 
-`list` defaults to `now`; `later` is the shared Future changes / things to look at list. **Later tasks never have assignees**: creating or moving a task to Later drops its assignees, and assigning anyone (assignees, addAssignees, or handoff) moves it to Now. Priority is 0 none, 1 low, 2 medium, 3 high. dueDate is `YYYY-MM-DD` or null; projectId is a UUID or null. Transitioning from open to done records doneAt; repeating done true preserves it; false clears it. Colors: blue, purple, pink, red, orange, yellow, green, teal, gray.
+`list` defaults to `now`; `later` is the shared Future changes / things to look at list. **Later tasks never have assignees**: creating or moving a task to Later drops its assignees, and assigning anyone (assignees, addAssignees, or handoff) moves it to Now. Priority is 0 none, 1 low, 2 medium, 3 high. dueDate is `YYYY-MM-DD` or null (tasks created in Now default to a due date one week out; pass `dueDate: null` for none; Later tasks stay undated until planned); projectId is a UUID or null. Transitioning from open to done records doneAt; repeating done true preserves it; false clears it. Colors: blue, purple, pink, red, orange, yellow, green, teal, gray.
 
 ## Common requests → what to call
 

@@ -55,7 +55,7 @@ SPEC.md               this file
 | done | boolean | default false |
 | doneAt | timestamptz \| null | |
 | list | `"now"` \| `"later"` | `later` = the shared "Future changes / things to look at" list. default `now` |
-| dueDate | date (`YYYY-MM-DD`) \| null | |
+| dueDate | date (`YYYY-MM-DD`) \| null | Tasks created in Now default to today + 7 days when `dueDate` is omitted (explicit `null` = no date; tasks created in Later stay undated). Planning a Later task (list → now, assigning, handoff) sets today + 7 days if it has no due date or it is already past, unless the same request sets one. Dates and "today" use `SCORE_TIMEZONE` (default `UTC`). |
 | priority | 0..3 | 0 none (default), 1 low, 2 medium, 3 high |
 | projectId | uuid \| null | |
 | createdBy | user id | set server-side from the authenticated user |
@@ -194,6 +194,12 @@ Unknown body fields are ignored. Everything is camelCase.
 ### Counts (sidebar badges)
 - `GET /api/counts?projectId=` (optional scope) → `{ mine, mineCreated, mineFromTeammate, teammate, later, unassigned, completed }`
 
+### Good boy score
+- `GET /api/score` → `{ me: Entry, teammate: Entry | null, leader: "me" | "teammate" | null, lead: number }`
+  where `Entry = { user, score (0-100 integer), label, trend, doneThisWeek, overdue }`. Not scoped by project.
+  `leader` is null when tied; `lead` is the integer point gap.
+- See the **Good boy score** section for how it is computed.
+
 ### Task JSON shape
 ```json
 {
@@ -266,6 +272,34 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
   listed once and a link to `/tasks/:id`. Sent via Resend (`RESEND_API_KEY`, `EMAIL_FROM`); disabled
   when either is unset. Failed sends are retried with the same idempotency key; undelivered changes
   are dropped after 2 days.
+
+## Good boy score
+
+A competition between the two users: each has a 0-100 rating of how well they handle the tasks
+assigned to them, shown on My Tasks and on the teammate's tasks view and included in emails when a
+task is completed. It is derived on the fly from the tasks (nothing stored), so reopening a task or
+editing a due date is always reflected.
+
+- **Scored tasks**: `list=now` tasks the user is assigned to (done or open). A task assigned to both
+  people counts for both. Later tasks have no assignees and never count.
+- **Deadline** of a task = the end of its due date; with no due date, the end of the day 7 days after it
+  was created (in `SCORE_TIMEZONE`).
+- **Grade** of one task: completed on time = 100; completed late = `max(30, 90 - 10 * lateDays)`;
+  still open and overdue = `max(0, 60 - 10 * overdueDays)` (so completing an overdue task always
+  improves the score). Open tasks that are not overdue are neutral.
+- **Weight** = `1 + 0.5 * priority`; ×0.25 for a task completed within 10 minutes of being created;
+  0 for a task with an empty title and notes.
+- **Score** = running weighted average of the grades in chronological order, starting from a neutral
+  50 that counts as 5 tasks and capped at a memory of 15 task-weights:
+  `W = min(W + weight, 15); score += weight / W * (grade - score)`. Someone with no task events keeps
+  exactly their score; the other person's workload never changes it.
+- **Label** by score: ≥90 Best boy ever, ≥75 Very good boy, ≥60 Good boy, ≥45 Doing okay,
+  ≥30 Naughty, otherwise Bad boy.
+- `trend` = score now minus the score computed as of 7 days ago; `doneThisWeek` = tasks completed in the
+  last 7 days; `overdue` = open assigned Now tasks past their deadline.
+- **Emails**: a digest that contains a task completion ends with a "Good boy score" block: each
+  person's score and label, the net change across the batch, and who leads. Edits and reopening alone
+  carry no score block.
 
 ## Web routes
 
