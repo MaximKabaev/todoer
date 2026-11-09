@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Task, TaskInput } from "@/lib/api";
+import { showDueChip } from "@/lib/task-dates";
 import { dueLabel, taskAccent } from "@/lib/utils";
 import { useSwipe } from "@/hooks/use-swipe";
 import { useLocalDay } from "@/hooks/use-local-day";
@@ -51,10 +52,11 @@ export function TaskRow({
   useEffect(() => {
     if (editing) input.current?.focus();
   }, [editing]);
+  const showDate = showDueChip(task, day);
   const hasMeta =
     (!later && task.assignees.length > 0) ||
     task.tags.length > 0 ||
-    task.dueDate ||
+    showDate ||
     task.project ||
     task.priority > 0 ||
     task.attachments.length > 0;
@@ -212,7 +214,7 @@ export function TaskRow({
                 </span>
               ))}
               {task.tags.length > 2 && <span>+{task.tags.length - 2}</span>}
-              {task.dueDate && (
+              {showDate && task.dueDate && (
                 <span
                   className={`meta-date ${!task.done && day && task.dueDate < day ? "overdue" : task.dueDate === day ? "due-today" : ""}`}
                 >

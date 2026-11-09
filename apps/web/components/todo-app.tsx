@@ -47,6 +47,7 @@ import {
   type Selection,
 } from "@/hooks/use-workspace";
 import { Navigation, ProjectSelector, listDefinitions } from "./navigation";
+import { ScoreCard } from "./score-card";
 import { Composer } from "./composer";
 import { TaskRow } from "./task-row";
 import { TaskDetail } from "./task-detail";
@@ -355,6 +356,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
       if (targetId) {
         const { task } = await api.attach(targetId, valid);
         await store.apply(targetId, () => task);
+        void store.refreshMeta();
       } else {
         const task = await createCapture({}, valid);
         openTask(task);
@@ -704,6 +706,12 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
             </div>
             <p>{subtitle}</p>
           </div>
+          {(selection.kind === "mine" || selection.kind === "teammate") && (
+            <ScoreCard
+              score={store.score.error ? undefined : store.score.data}
+              viewed={selection.kind === "mine" ? "me" : "teammate"}
+            />
+          )}
           {(searchOpen || selection.kind === "all") && (
             <div className="search-field">
               <Search size={17} />

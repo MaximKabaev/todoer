@@ -109,6 +109,20 @@ export type Counts = {
   unassigned: number;
   completed: number;
 };
+export type ScoreEntry = {
+  user: User;
+  score: number;
+  label: string;
+  trend: number;
+  doneThisWeek: number;
+  overdue: number;
+};
+export type Score = {
+  me: ScoreEntry;
+  teammate: ScoreEntry | null;
+  leader: "me" | "teammate" | null;
+  lead: number;
+};
 export type AgentToken = {
   id: string;
   name: string;
@@ -155,7 +169,7 @@ export const scopeKey = (path: string, projectId?: string | null) =>
   projectId ? `${path}?${new URLSearchParams({ projectId })}` : path;
 export const workspaceKey = (key: unknown) =>
   typeof key === "string" &&
-  ["/api/tasks", "/api/counts", "/api/tags", "/api/projects"].some(
+  ["/api/tasks", "/api/counts", "/api/score", "/api/tags", "/api/projects"].some(
     (path) => key === path || key.startsWith(`${path}?`),
   );
 export const taskKey = (query: TaskQuery = {}) =>
