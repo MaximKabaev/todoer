@@ -328,6 +328,27 @@ test("window drops create one task, detail drops attach, and composer paste capt
   await drag(".task-detail", "drop");
   await attached;
   await expect(detail.locator(".image-gallery button")).toHaveCount(2);
+  const notePasted = page.waitForResponse((r) =>
+    r.url().endsWith(`/api/tasks/${task.id}/attachments`),
+  );
+  await detail
+    .getByRole("textbox", { name: "Notes", exact: true })
+    .evaluate((element, base64) => {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const clipboard = new DataTransfer();
+      clipboard.items.add(
+        new File([bytes], "note-paste.png", { type: "image/png" }),
+      );
+      element.dispatchEvent(
+        new ClipboardEvent("paste", {
+          clipboardData: clipboard,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    }, pixel.toString("base64"));
+  await notePasted;
+  await expect(detail.locator(".image-gallery button")).toHaveCount(3);
   await detail
     .getByRole("button", { name: "Close task details", exact: true })
     .click();
@@ -445,37 +466,21 @@ test("the second account gets relative mentions and teammate context too", async
   await page.request.delete(`/api/tasks/${second.task.id}`);
 });
 
-test("a title edits inline without opening the inspector", async ({ page }) => {
+test("clicking a row title opens the task", async ({ page }) => {
   await login(page);
-  const title = `Inline title ${Date.now()}`;
+  const title = `Row title ${Date.now()}`;
   const { task } = await (
     await page.request.post("/api/tasks", { data: { title } })
   ).json();
   await page.reload();
   const row = page.getByRole("group", { name: title, exact: true });
-  await row
-    .getByRole("button", { name: `Edit title: ${title}`, exact: true })
-    .click();
-  const input = row.getByRole("textbox", {
-    name: "Edit task title",
-    exact: true,
-  });
-  await expect(input).toBeFocused();
-  await input.fill(`${title} updated`);
-  await input.press("Enter");
+  await row.getByText(title, { exact: true }).click();
+  const detail = page.getByRole("dialog", { name: "Task details" });
+  await expect(detail).toBeVisible();
   await expect(
-    page.getByRole("group", { name: `${title} updated`, exact: true }),
-  ).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "Task details" })).toHaveCount(
-    0,
-  );
-  await expect
-    .poll(
-      async () =>
-        (await (await page.request.get(`/api/tasks/${task.id}`)).json()).task
-          .title,
-    )
-    .toBe(`${title} updated`);
+    detail.getByRole("textbox", { name: "Task title", exact: true }),
+  ).toHaveValue(title);
+  await expect(row.getByRole("textbox")).toHaveCount(0);
   await page.request.delete(`/api/tasks/${task.id}`);
 });
 

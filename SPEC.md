@@ -249,9 +249,10 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
   input can still create an empty task only if the user explicitly wants (e.g. pressing the + button).
 - **Drag & drop images**: dropping image file(s) anywhere on the window shows a full-window drop
   overlay; releasing creates a new task in the current view containing the image(s). Dropping onto
-  an open task's detail attaches to that task. Pasting an image (Cmd/Ctrl+V) creates a task too.
+  an open task's detail attaches to that task. Pasting an image (Cmd/Ctrl+V) creates a task too;
+  pasting inside an open task's detail (including its notes) attaches to that task.
   On mobile, a camera/photo button in the composer does the same.
-- Task row: checkbox, title (inline editable), metadata line (assignee avatars, tags as pills,
+- Task row: checkbox, title (clicking it opens the task, like the rest of the row), metadata line (assignee avatars, tags as pills,
   due date, project, image thumbnail count). Click → detail panel (right side on desktop, sheet on mobile)
   with all fields editable, assignee toggles for both users, "Pass to <Teammate>" button,
   move to Later/Now, tags editor (type to create), image gallery with lightbox, delete.

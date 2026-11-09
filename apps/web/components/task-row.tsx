@@ -1,6 +1,5 @@
 "use client";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronRight,
@@ -10,7 +9,7 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
-import type { Task, TaskInput } from "@/lib/api";
+import type { Task } from "@/lib/api";
 import { showDueChip } from "@/lib/task-dates";
 import { dueLabel, taskAccent } from "@/lib/utils";
 import { useSwipe } from "@/hooks/use-swipe";
@@ -22,7 +21,6 @@ export function TaskRow({
   completing,
   onOpen,
   onToggle,
-  onEdit,
   onDelete,
   onHandoff,
   handoffLabel,
@@ -32,7 +30,6 @@ export function TaskRow({
   completing: boolean;
   onOpen: () => void;
   onToggle: () => void;
-  onEdit: (input: TaskInput) => Promise<unknown>;
   onDelete: () => void;
   onHandoff: () => void;
   handoffLabel: string;
@@ -45,13 +42,6 @@ export function TaskRow({
   );
   const day = useLocalDay();
   const placeholder = task.attachments.length ? "Image" : "New task";
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(task.title);
-  const input = useRef<HTMLInputElement>(null);
-  const original = useRef(task.title);
-  useEffect(() => {
-    if (editing) input.current?.focus();
-  }, [editing]);
   const showDate = showDueChip(task, day);
   const hasMeta =
     (!later && task.assignees.length > 0) ||
@@ -150,43 +140,9 @@ export function TaskRow({
           color={taskAccent(task)}
         />
         <div className="task-content">
-          {editing ? (
-            <input
-              ref={input}
-              className="inline-title"
-              aria-label="Edit task title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onBlur={() => {
-                setEditing(false);
-                if (title !== original.current)
-                  void onEdit({ title }).catch(() => {});
-              }}
-              onKeyDown={(e) => {
-                e.stopPropagation();
-                if (e.key === "Enter") input.current?.blur();
-                if (e.key === "Escape") {
-                  setTitle(original.current);
-                  setEditing(false);
-                }
-              }}
-            />
-          ) : (
-            <button
-              aria-label={`Edit title: ${task.title || placeholder}`}
-              className={`row-title ${!task.title ? "untitled" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (task.id.startsWith("pending-")) return;
-                original.current = task.title;
-                setTitle(task.title);
-                setEditing(true);
-              }}
-            >
-              {task.title || placeholder}
-            </button>
-          )}
+          <span className={`row-title ${!task.title ? "untitled" : ""}`}>
+            {task.title || placeholder}
+          </span>
           {hasMeta && (
             <div className="task-meta">
               {!later && task.assignees.length > 0 && (

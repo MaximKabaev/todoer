@@ -691,16 +691,6 @@ select:focus-visible {
 .untitled {
   color: var(--muted);
 }
-.inline-title {
-  border: 0;
-  padding: 0;
-  border-radius: 0;
-  box-shadow: none !important;
-  background: none;
-  font-size: 14px;
-  width: 100%;
-  line-height: 1.5;
-}
 .task-meta {
   display: flex;
   align-items: center;
@@ -3004,9 +2994,6 @@ kbd {
   .search-field input {
     font-size: 16px;
   }
-  .inline-title {
-    font-size: 17px;
-  }
   .detail-notes {
     font-size: 16px;
   }
@@ -3084,19 +3071,6 @@ kbd {
   .project-form-actions .text-danger,
   .secret-card .text-button {
     min-height: 44px;
-  }
-}
-.task-content > button.row-title {
-  width: 100%;
-  padding: 0;
-  text-align: left;
-  position: relative;
-}
-@media (max-width: 760px) {
-  .task-content > button.row-title:after {
-    content: "";
-    position: absolute;
-    inset: -10px 0;
   }
 }
 

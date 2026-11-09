@@ -209,6 +209,21 @@ export function TaskDetail({
           if (e.dataTransfer.files.length)
             void onImages(Array.from(e.dataTransfer.files));
         }}
+        onPaste={(e) => {
+          const images = Array.from(e.clipboardData.files).filter((f) =>
+            f.type.startsWith("image/"),
+          );
+          if (!images.length) return;
+          // Keep the native paste when the clipboard also carries text and the
+          // user is typing (e.g. a copy from a doc with an embedded image).
+          const typing =
+            e.target instanceof Element &&
+            e.target.closest("input,textarea,[contenteditable=true]");
+          if (!typing || !e.clipboardData.getData("text/plain"))
+            e.preventDefault();
+          e.stopPropagation();
+          void onImages(images);
+        }}
       >
         <div
           className="sheet-handle"

@@ -787,7 +787,6 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
                           if (!task.id.startsWith("pending-")) openTask(task);
                         }}
                         onToggle={() => toggle(task)}
-                        onEdit={(input) => store.patch(task, input)}
                         onDelete={() => setDeleteTask(task)}
                         handoffLabel={
                           task.assignees.some((a) => a.id === user.id)
