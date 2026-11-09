@@ -24,7 +24,7 @@ export function ScoreCard({
         >
           <div>
             <div className={styles.eyebrow}>
-              Good boy score <span>· All projects</span>
+              {viewed === "me" ? "Your" : `${entry.user.displayName}’s`} good boy score <span>· All projects</span>
             </div>
             <div className={styles.label}>{entry.label}</div>
             <div className={styles.comparison}>
