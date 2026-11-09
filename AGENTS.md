@@ -76,7 +76,9 @@ sudo docker logs --since 10m infra-caddy-1
 sudo systemctl restart todoer-api            # API only
 sudo systemctl restart todoer-web            # web only (serves the existing build in apps/web/.next)
 
-# Deploy code changes (install, tests, clean build, migrate, restart, health check; stops on first failure)
+# Deploy: automatic on every push to origin/main (GitHub Actions → deploy/ci-deploy.sh → redeploy.sh).
+# It refuses if this checkout is off main, dirty, or diverged, so keep WIP in a worktree.
+# By hand (install, tests, clean build, migrate, restart, health check; stops on first failure):
 deploy/redeploy.sh
 
 # Database
@@ -144,4 +146,4 @@ cd apps/web && npm run lint && npm run typecheck && npm test && npm run build
 - Plain JS (ESM) in the API, TypeScript in the web app. Match the surrounding style.
 - Commit on a branch or worktree with clear messages. The owner usually has UI work built by
   OpenAI Sol agents, with Claude reviewing, testing end to end, and deploying.
-- Don't push or deploy unless asked. When you deploy, verify on the live site afterwards.
+- Don't push to `main` or deploy unless asked: **pushing to main deploys to production.** When you deploy, verify on the live site afterwards (and check the Deploy workflow run).

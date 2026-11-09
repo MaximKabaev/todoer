@@ -12,7 +12,27 @@ Production runs on the VPS as two systemd services behind the shared Docker Cadd
 the services while they stay off the public interface. ufw allows only `172.20.0.0/16` → ports 3200/4200.
 Postgres is the local `todoer` database. Uploaded images live in `apps/api/uploads/`, so back them up with the DB.
 
-## Redeploy after changes
+## Automatic deploys (GitHub Actions)
+
+Every push to `main` on GitHub runs `.github/workflows/deploy.yml` (it can also be started by hand from the
+Actions tab). The workflow SSHes in as `mkabaev` with a key that can only run `deploy/ci-deploy.sh`: it's a
+forced command in `~/.ssh/authorized_keys` (`restrict,command="…/deploy/ci-deploy.sh"`, comment
+`github-actions-todoer-deploy`). That script:
+
+- refuses to deploy if this checkout isn't on `main`, has uncommitted changes to tracked files
+  (`apps/web/next-env.d.ts` is reset, since builds regenerate it), or has diverged from `origin/main`.
+  **Don't leave work in progress in the production checkout.** Use a branch or a worktree.
+- fast-forwards to `origin/main` and runs `deploy/redeploy.sh`, then records the SHA in
+  `~/.local/state/todoer-deploy/deployed-sha`. It skips the deploy if that SHA is already deployed.
+- runs detached from the SSH session (a dropped connection can't kill a half-done build), streams the log
+  back to the Action, and holds a lock so pushes deploy one at a time. Logs: `~/.local/state/todoer-deploy/`.
+
+Repository secrets: `DEPLOY_HOST` (VPS IP), `DEPLOY_USER`, `DEPLOY_SSH_KEY` (private key),
+`DEPLOY_KNOWN_HOSTS` (the host's ed25519 key). To rotate the key, generate a new one, replace the
+`github-actions-todoer-deploy` line in `authorized_keys`, and run `gh secret set DEPLOY_SSH_KEY < key`.
+To pause auto-deploys, disable the workflow: `gh workflow disable deploy.yml`.
+
+## Redeploy by hand
 
 ```sh
 cd ~/.t3/projects/todoer

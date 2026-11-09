@@ -1,0 +1,45 @@
+name: Deploy to production
+
+# Every push to main deploys to the VPS. The SSH key can only run deploy/ci-deploy.sh (forced
+# command), which fast-forwards the production checkout and runs deploy/redeploy.sh
+# (install, API tests, clean build, migrate, restart, health check). See deploy/README.md.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "$GITHUB_SHA"
+
+      - name: Verify live site
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors https://api.todo.customsai.org/api/health
+          echo
+          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors -o /dev/null -w 'web %{http_code}\n' https://todo.customsai.org/login
