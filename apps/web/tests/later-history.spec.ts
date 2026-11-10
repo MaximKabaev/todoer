@@ -263,7 +263,7 @@ for (const mobile of [false, true])
             r.request().method() === "PATCH",
         );
         await detail
-          .getByRole("button", { name: "Send it back to Later", exact: true })
+          .getByRole("button", { name: "I ain’t doing all that rn", exact: true })
           .click();
         await expect(detail.locator(".assignee-toggles")).toHaveCount(0, {
           timeout: 600,

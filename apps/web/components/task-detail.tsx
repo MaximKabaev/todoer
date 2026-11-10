@@ -428,11 +428,11 @@ export function TaskDetail({
                 className="snooze-task"
                 onClick={() => patch(task.list === "later" ? { list: "now", assignees: ["me"] } : { list: "later" })}
               >
-                {task.list === "later" ? "Okay, let’s do this" : "Send it back to Later"}
+                {task.list === "later" ? "Okay, let’s do this" : "I ain’t doing all that rn"}
               </button>
               <p>{task.done ? "Completed tasks stay put. Reopen it to bring it back into rotation." : task.list === "later"
                 ? "Chilling in Later. Back to one of you after two weeks."
-                : "Send to Later. We’ll randomly pick one of you to review it in two weeks."}</p>
+                : "Send it back to Later. We’ll randomly pick one of you to review it in two weeks."}</p>
             </div>
             <label className="detail-field">
               <span>
