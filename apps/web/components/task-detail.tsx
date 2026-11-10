@@ -353,6 +353,12 @@ export function TaskDetail({
               style={{ height: "auto" }}
             />
           </div>
+          <button className={`detail-finish ${task.done ? "finished" : ""}`}
+            disabled={task.id.startsWith("pending-")}
+            onClick={onToggle}>
+            <Check size={20} strokeWidth={2.5} />
+            {task.done ? "Done and dusted · Reopen" : "Nailed it. Mark as done"}
+          </button>
           <textarea
             ref={notesRef}
             rows={3}

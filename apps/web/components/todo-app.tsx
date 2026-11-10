@@ -47,6 +47,7 @@ import {
   type Selection,
 } from "@/hooks/use-workspace";
 import { Navigation, ProjectSelector, listDefinitions } from "./navigation";
+import { CompletionRun, completionMessage, completionMilestone } from "./completion-run";
 import { ScoreCard } from "./score-card";
 import { Composer } from "./composer";
 import { TaskRow } from "./task-row";
@@ -176,6 +177,15 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
   const [overDetail, setOverDetail] = useState(false);
   const dragDepth = useRef(0);
   const [uploading, setUploading] = useState(false);
+  const [runTasks] = useState(() => new Set<string>());
+  const [completionPending] = useState(() => new Set<string>());
+  const [runCount, setRunCount] = useState(0);
+  function recordWin(id: string, done: boolean) {
+    if (done) runTasks.add(id);
+    else runTasks.delete(id);
+    setRunCount(runTasks.size);
+    return runTasks.size;
+  }
   const [completing, setCompleting] = useState<Set<string>>(new Set());
   const [completionTimers] = useState(
     () => new Map<string, ReturnType<typeof setTimeout>>(),
@@ -471,8 +481,10 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [settings, deleteTask, setSelectedId, selectedId, mobileHome, nav]);
-  function toggle(task: Task) {
-    if (task.id.startsWith("pending-")) return;
+  function handleToggle(task: Task) {
+    if (task.id.startsWith("pending-") || completionPending.has(task.id)) return;
+    completionPending.add(task.id);
+    const wasCredited = runTasks.has(task.id);
     const done = !task.done;
     if (done && selection.kind !== "completed") {
       setCompleting((s) => new Set(s).add(task.id));
@@ -499,11 +511,15 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     void store
       .patch(task, { done })
       .then(() => {
+        const count = recordWin(task.id, done);
         toast({
-          message: done ? "One less thing. Nicely done." : "Task reopened.",
+          message: done ? completionMessage(count) : "Task reopened.",
+          celebration: done ? (completionMilestone(count) ? "milestone" : "win") : undefined,
           action: {
             label: "Undo",
             run: () => {
+              if (completionPending.has(task.id)) return;
+              completionPending.add(task.id);
               clearTimeout(completionTimers.get(task.id));
               setCompleting((s) => {
                 const next = new Set(s);
@@ -512,19 +528,25 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
               });
               void store
                 .patch({ ...task, done }, { done: !done })
-                .then(() => store.revalidate())
-                .catch(() => {});
+                .then(() => {
+                  recordWin(task.id, done ? false : wasCredited);
+                  return store.revalidate();
+                })
+                .catch(() => {})
+                .finally(() => completionPending.delete(task.id));
             },
           },
         });
       })
       .catch(() => {
+        clearTimeout(completionTimers.get(task.id));
         setCompleting((s) => {
           const next = new Set(s);
           next.delete(task.id);
           return next;
         });
-      });
+      })
+      .finally(() => completionPending.delete(task.id));
   }
   const visible = (store.tasks.data?.tasks || []).filter((t) => {
     if (user.activeProjectId && t.projectId !== user.activeProjectId)
@@ -714,6 +736,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
               viewed={selection.kind === "mine" ? "me" : "teammate"}
             />
           )}
+          {selection.kind === "mine" && <CompletionRun count={runCount} />}
           {(searchOpen || selection.kind === "all") && (
             <div className="search-field">
               <Search size={17} />
@@ -788,7 +811,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
                         onOpen={() => {
                           if (!task.id.startsWith("pending-")) openTask(task);
                         }}
-                        onToggle={() => toggle(task)}
+                        onToggle={() => handleToggle(task)}
                         onDelete={() => setDeleteTask(task)}
                         handoffLabel={
                           task.assignees.some((a) => a.id === user.id)
@@ -895,7 +918,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
             }
             return task;
           }}
-          onToggle={() => toggle(selected.data!.task)}
+          onToggle={() => handleToggle(selected.data!.task)}
           onDelete={() => setDeleteTask(selected.data!.task)}
           onImages={(files) => upload(files, selectedId)}
           onDeleteImage={async (id) => {

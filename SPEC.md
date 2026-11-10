@@ -339,3 +339,8 @@ Task details offer Copy link and mobile native Share with a copy fallback.
 - The visible task count sits beside the list title. Task details has a prominent heading.
 - The detail panel uses “I don’t wanna do all that rn” to move to Later, explains the two-week random review, and offers “Okay, let’s do this” to move back to Now and assign it to yourself.
 - Priority uses named None/Low/Medium/High choices, coloured badges, and orange/red row accents for medium/high priority. Existing sorting and scoring semantics remain unchanged.
+
+### Completion rewards
+- Tasks have a visible Done button in their row and a “Nailed it. Mark as done” action in details, alongside the existing checkbox, Space shortcut, and swipe gesture. Completed details offer Reopen.
+- Completing a task gives immediate green row feedback and a short “Nailed it!” stamp. After a successful save, a celebratory toast offers Undo; milestones get a larger confetti burst. Reduced-motion preferences disable animation and confetti.
+- My Tasks shows a victory run for this visit across all projects: 3, 5, 10, then every 10 tasks. Only distinct tasks successfully completed through the UI count. Reopening or undoing a completion removes its credit; undoing a reopen restores credit only if it was previously earned this visit. Failed saves never earn credit. This is temporary UI progress, reset on reload, independent of the Good boy score, with no XP or persistent rewards.

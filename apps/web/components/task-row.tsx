@@ -201,6 +201,13 @@ export function TaskRow({
             <Image unoptimized fill src={task.attachments[0].url} alt="" />
           </span>
         )}
+        {!task.done && <button
+          className="row-finish"
+          aria-label={`Finish ${task.title || "task"}`}
+          disabled={task.id.startsWith("pending-") || completing}
+          onClick={onToggle}
+        ><Check size={15} strokeWidth={2.5} /><span>Done</span></button>}
+        {completing && <span className="row-win-stamp" aria-hidden="true">Nailed it!</span>}
         <button
           className="icon-button row-open"
           aria-label={`Open ${task.title || "task"} details`}
