@@ -487,7 +487,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
             return next;
           });
           void store.revalidate();
-        }, 1050),
+        }, 2500),
       );
     }
     if (!done) {
