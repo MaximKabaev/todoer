@@ -50,16 +50,27 @@ export function Providers({ children }: { children: React.ReactNode }) {
     >
       <ToastContext.Provider value={notify}>
         {children}
+        {toast?.celebration && (
+          <div key={`confetti-${toast.id}`} className="completion-confetti" aria-hidden="true">
+            {Array.from({ length: 200 }, (_, i) => (
+              <i key={i} style={{
+                "--x": `${((i * 73) % 200) / 2}%`,
+                "--drift": `${((i * 43) % 160) - 80}px`,
+                "--spin": `${(i % 2 ? 1 : -1) * (360 + (i * 53) % 720)}deg`,
+                "--duration": `${1800 + (i * 37) % 1200}ms`,
+                "--delay": `${(i * 29) % 500}ms`,
+                "--width": `${5 + (i % 4) * 2}px`,
+                "--height": `${8 + (i % 3) * 3}px`,
+              } as React.CSSProperties} />
+            ))}
+          </div>
+        )}
         {toast && (
           <div
             key={toast.id}
             className={`toast ${toast.error ? "toast-error" : ""} ${toast.celebration ? "toast-celebration" : ""}`}
             role={toast.error ? "alert" : "status"}
           >
-            {toast.celebration && <div className="completion-confetti" aria-hidden="true">
-              {Array.from({ length: 10 }, (_, i) =>
-                <i key={i} style={{ "--piece": i } as React.CSSProperties} />)}
-            </div>}
             {toast.error ? <AlertCircle size={18} /> : toast.celebration ? <PartyPopper size={21} /> : <Check size={18} />}
             <span className="toast-copy">
               <span>{toast.message}</span>

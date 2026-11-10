@@ -139,7 +139,7 @@ export function TaskRow({
           checked={task.done}
           label={`${task.done ? "Reopen" : "Complete"} ${task.title || "task"}`}
           onClick={onToggle}
-          color={taskAccent(task)}
+          color={task.done ? "var(--blue)" : taskAccent(task)}
         />
         <div className="task-content">
           <span className={`row-title ${!task.title ? "untitled" : ""}`}>

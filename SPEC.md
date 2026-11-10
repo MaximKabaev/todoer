@@ -343,7 +343,7 @@ Task details offer Copy link and mobile native Share with a copy fallback.
 
 ### Completion rewards
 - Tasks have a visible Done button in their row and a “Nailed it. Mark as done” action in details, alongside the existing checkbox, Space shortcut, and swipe gesture. Completed details offer Reopen.
-- Completing a task gives immediate green row feedback and a short “Nailed it!” stamp. After a successful save, a celebratory toast offers Undo and a short confetti burst. Reduced-motion preferences disable animation and confetti.
+- Completing a task crosses out its title, shows a blue tick and a short “Nailed it!” stamp, without colouring the row green. After a successful save, a celebratory toast offers Undo alongside a screen-wide shower of 200 confetti pieces lasting up to 3.5 seconds. The confetti layer never intercepts clicks. Reduced-motion preferences disable animation and confetti.
 
 Completing an open task with `PATCH /api/tasks/:id {done:true}` also returns `scoreChange: {before, after, delta}` for the authenticated user's Good boy rating. The comparison holds all other tasks and the scoring time constant, isolating this task edit's contribution; it is not a fixed points award. Zero and negative deltas are valid. Already-completed tasks, reopening, and unrelated edits omit this field. Completing a teammate-only or Later task does not raise your own rating.
 

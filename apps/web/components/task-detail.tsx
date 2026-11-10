@@ -338,7 +338,7 @@ export function TaskDetail({
             <Checkbox
               checked={task.done}
               onClick={onToggle}
-              color={taskAccent(task)}
+              color={task.done ? "var(--blue)" : taskAccent(task)}
               label={task.done ? "Reopen task" : "Complete task"}
             />
             <textarea

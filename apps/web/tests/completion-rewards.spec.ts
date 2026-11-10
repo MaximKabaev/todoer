@@ -15,10 +15,16 @@ for (const mobile of [false, true]) {
       await expect(page.getByRole("region", { name: "Your victory run" })).toHaveCount(0);
       const savedDone = async (id: string) => (await (await page.request.get(`/api/tasks/${id}`)).json()).task.done;
       for (let i = 0; i < 2; i++) {
-        await page.locator(`[data-task-id="${tasks[i].id}"]`).getByRole("button", { name: `Finish ${tasks[i].title}`, exact: true }).click();
+        const row = page.locator(`[data-task-id="${tasks[i].id}"]`);
+        await row.getByRole("button", { name: `Finish ${tasks[i].title}`, exact: true }).click();
         await expect.poll(() => savedDone(tasks[i].id)).toBe(true);
         await expect(page.getByRole("status")).toContainText("Who’s a good boy?");
+        const confetti = page.locator(".completion-confetti");
+        await expect(confetti).toHaveCSS("pointer-events", "none");
+        expect(await confetti.boundingBox()).toEqual({ x: 0, y: 0, ...page.viewportSize()! });
+        await expect(confetti.locator("i")).toHaveCount(200);
         await page.getByRole("button", { name: "Dismiss notification" }).click();
+        await expect(confetti).toHaveCount(0);
       }
       // The larger completion action in details shares the same rewards and Undo path.
       await page.locator(`[data-task-id="${tasks[2].id}"] .row-open`).click();
