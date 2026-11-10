@@ -3684,27 +3684,7 @@ kbd {
   .detail-toolbar .detail-heading { font-size: 16px; }
 }
 
-/* Completion rewards: useful progress, a short celebration, and an obvious action. */
-.completion-run {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  margin: 12px 0 20px;
-  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--line));
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--green) 5%, var(--bg));
-}
-.run-icon { color: var(--green); display: grid; place-items: center; }
-.run-copy { display: grid; gap: 4px; min-width: 0; flex: 1; }
-.run-copy strong { font-size: 13px; color: var(--text); }
-.run-copy > span { font-size: 11px; color: var(--secondary); }
-.run-progress { display: grid; gap: 5px; min-width: 66px; text-align: right; font-weight: 750; color: var(--green); }
-.run-progress small { font-weight: 500; color: var(--muted); }
-.run-progress progress { width: 66px; height: 5px; accent-color: var(--green); border: 0; border-radius: 5px; overflow: hidden; }
-.run-progress progress::-webkit-progress-bar { background: color-mix(in srgb, var(--green) 15%, var(--bg)); }
-.run-progress progress::-webkit-progress-value { background: var(--green); transition: width 250ms ease; }
-.run-milestone { border-color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--bg)); }
+/* Completion actions and celebrations. */
 .row-finish { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 7px 10px; border-radius: 9px; color: var(--green); background: color-mix(in srgb, var(--green) 9%, var(--bg)); font-size: 12px; font-weight: 700; }
 .row-finish:hover { background: var(--green); color: white; }
 .row-finish:active { transform: scale(.94); }
@@ -3718,8 +3698,6 @@ kbd {
 .row-win-stamp { pointer-events: none; position: absolute; right: 44px; top: 50%; padding: 6px 12px; border: 2px solid var(--green); border-radius: 7px; color: var(--green); background: var(--bg); font-weight: 800; font-size: 14px; transform: translateY(-50%) rotate(-8deg); animation: stamp-in 300ms ease both; }
 .toast.toast-celebration { border: 1px solid var(--green); background: var(--bg); color: var(--text); box-shadow: 0 10px 40px #0002; }
 .toast-celebration > svg { color: var(--green); flex-shrink: 0; }
-.toast.toast-celebration.milestone { border-color: var(--orange); }
-.toast-celebration.milestone > svg { color: var(--orange); }
 .completion-confetti { position: absolute; pointer-events: none; inset: 0; overflow: visible; }
 .completion-confetti i { position: absolute; left: 50%; top: 0; width: 6px; height: 10px; border-radius: 2px; background: var(--green); opacity: 0; animation: completion-burst 850ms ease-out both; animation-delay: calc(var(--piece) * 14ms); }
 .completion-confetti i:nth-child(3n) { background: var(--orange); }
@@ -3730,8 +3708,6 @@ kbd {
 @keyframes task-victory { 0%, 65% { opacity: 1; } 100% { opacity: .4; } }
 @media (max-width: 760px) {
   .row-finish { min-height: 44px; padding: 8px; }
-  .completion-run { padding: 12px; gap: 9px; }
-  .run-copy strong { font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .completion-confetti { display: none; }
@@ -3746,7 +3722,6 @@ kbd {
 .rating-reward { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--secondary); font-size: 12px; }
 .rating-reward.rating-up { color: #19764b; }
 .rating-reward small { font-size: 11px; font-weight: 500; color: var(--secondary); }
-.toast-detail { font-size: 11px; color: var(--secondary); }
 @media (prefers-color-scheme: dark) { .rating-reward.rating-up { color: var(--green); } }
 .rating-reward { width: fit-content; padding: 4px 7px; border-radius: 7px; background: var(--surface); }
 .rating-reward.rating-up { background: color-mix(in srgb, var(--green) 10%, var(--bg)); }

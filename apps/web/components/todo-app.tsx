@@ -47,7 +47,6 @@ import {
   type Selection,
 } from "@/hooks/use-workspace";
 import { Navigation, ProjectSelector, listDefinitions } from "./navigation";
-import { CompletionRun, completionMessage, completionMilestone } from "./completion-run";
 import { ScoreCard } from "./score-card";
 import { Composer } from "./composer";
 import { TaskRow } from "./task-row";
@@ -177,15 +176,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
   const [overDetail, setOverDetail] = useState(false);
   const dragDepth = useRef(0);
   const [uploading, setUploading] = useState(false);
-  const [runTasks] = useState(() => new Set<string>());
   const [completionPending] = useState(() => new Set<string>());
-  const [runCount, setRunCount] = useState(0);
-  function recordWin(id: string, done: boolean) {
-    if (done) runTasks.add(id);
-    else runTasks.delete(id);
-    setRunCount(runTasks.size);
-    return runTasks.size;
-  }
   const [completing, setCompleting] = useState<Set<string>>(new Set());
   const [completionTimers] = useState(
     () => new Map<string, ReturnType<typeof setTimeout>>(),
@@ -484,7 +475,6 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
   function handleToggle(task: Task) {
     if (task.id.startsWith("pending-") || completionPending.has(task.id)) return;
     completionPending.add(task.id);
-    const wasCredited = runTasks.has(task.id);
     const done = !task.done;
     if (done && selection.kind !== "completed") {
       setCompleting((s) => new Set(s).add(task.id));
@@ -511,12 +501,10 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     void store
       .patch(task, { done })
       .then((result) => {
-        const count = recordWin(task.id, done);
         toast({
           message: done ? "Who’s a good boy?" : "Task reopened.",
-          detail: done ? completionMessage(count) : undefined,
           scoreChange: done ? result.scoreChange : undefined,
-          celebration: done ? (completionMilestone(count) ? "milestone" : "win") : undefined,
+          celebration: done,
           action: {
             label: "Undo",
             run: () => {
@@ -531,7 +519,6 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
               void store
                 .patch({ ...task, done }, { done: !done })
                 .then(() => {
-                  recordWin(task.id, done ? false : wasCredited);
                   return store.revalidate();
                 })
                 .catch(() => {})
@@ -738,7 +725,6 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
               viewed={selection.kind === "mine" ? "me" : "teammate"}
             />
           )}
-          {selection.kind === "mine" && <CompletionRun count={runCount} />}
           {(searchOpen || selection.kind === "all") && (
             <div className="search-field">
               <Search size={17} />

@@ -7,14 +7,13 @@ import {
   useState,
 } from "react";
 import { SWRConfig } from "swr";
-import { Check, X, AlertCircle, PartyPopper, Trophy } from "lucide-react";
+import { Check, X, AlertCircle, PartyPopper } from "lucide-react";
 import { ApiError, request, type ScoreChange } from "@/lib/api";
 type Toast = {
   message: string;
-  detail?: string;
   scoreChange?: ScoreChange;
   error?: boolean;
-  celebration?: "win" | "milestone";
+  celebration?: boolean;
   action?: { label: string; run: () => void };
 };
 const ToastContext = createContext<(toast: Toast) => void>(() => {});
@@ -54,21 +53,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
         {toast && (
           <div
             key={toast.id}
-            className={`toast ${toast.error ? "toast-error" : ""} ${toast.celebration ? `toast-celebration ${toast.celebration}` : ""}`}
+            className={`toast ${toast.error ? "toast-error" : ""} ${toast.celebration ? "toast-celebration" : ""}`}
             role={toast.error ? "alert" : "status"}
           >
             {toast.celebration && <div className="completion-confetti" aria-hidden="true">
-              {Array.from({ length: toast.celebration === "milestone" ? 18 : 10 }, (_, i) =>
+              {Array.from({ length: 10 }, (_, i) =>
                 <i key={i} style={{ "--piece": i } as React.CSSProperties} />)}
             </div>}
-            {toast.error ? <AlertCircle size={18} /> : toast.celebration === "milestone" ? <Trophy size={23} /> : toast.celebration ? <PartyPopper size={21} /> : <Check size={18} />}
+            {toast.error ? <AlertCircle size={18} /> : toast.celebration ? <PartyPopper size={21} /> : <Check size={18} />}
             <span className="toast-copy">
               <span>{toast.message}</span>
               {toast.scoreChange && <strong className={`rating-reward ${toast.scoreChange.delta > 0 ? "rating-up" : ""}`}>
                 {toast.scoreChange.delta === 0 ? "Goodboy rating unchanged" : `${toast.scoreChange.delta > 0 ? "+" : ""}${toast.scoreChange.delta} Goodboy rating`}
                 <small>{toast.scoreChange.before} → {toast.scoreChange.after}</small>
               </strong>}
-              {toast.detail && <small className="toast-detail">{toast.detail}</small>}
             </span>
             {toast.action && (
               <button
