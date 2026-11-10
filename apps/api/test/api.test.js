@@ -957,3 +957,56 @@ test('rating delta isolates the edited task from unrelated concurrent completion
   assert.ok(result.after > 50);
   assert.equal(result.delta, 0);
 });
+
+test('Later assignments email each assignee once, including self-claims and automatic reviews', async () => {
+  const { resurfaceLaterTasks } = await import('../src/lib/later-review.js');
+  const { flushNotifications } = await import('../src/lib/notifications.js');
+  await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>', PUBLIC_WEB_URL: 'https://todo.example.com' }, async () => {
+    await pool.query('DELETE FROM notification_events');
+    await pool.query("UPDATE users SET email = username || '@example.com', email_notifications = true");
+    try {
+      for (const [method, body, recipient] of [
+        ['patch', { assignees: ['teammate'] }, second.id],
+        ['handoff', { to: 'teammate' }, second.id],
+        ['patch', { assignees: ['me'] }, first.id],
+        ['handoff', { to: 'me' }, first.id],
+      ]) {
+        const task = await create({ title: 'QA manual Later assignment', list: 'later' });
+        await api(method === 'handoff' ? 'post' : 'patch', `/api/tasks/${task.id}${method === 'handoff' ? '/handoff' : ''}`).send(body).expect(200);
+        const { rows } = await pool.query('SELECT recipient_id, actor_id FROM notification_events WHERE task_id = $1', [task.id]);
+        assert.deepEqual(rows, [{ recipient_id: recipient, actor_id: first.id }]);
+      }
+      await pool.query('DELETE FROM notification_events');
+      const task = await create({ title: 'QA automatic Later review', list: 'later' });
+      const age = () => pool.query("UPDATE tasks SET later_since = now() - interval '337 hours' WHERE id = $1", [task.id]);
+      await age();
+      await Promise.all([resurfaceLaterTasks(), resurfaceLaterTasks()]);
+      const { rows } = await pool.query(`SELECT e.recipient_id, e.actor_id, a.user_id FROM notification_events e
+        JOIN task_assignees a ON a.task_id = e.task_id WHERE e.task_id = $1`, [task.id]);
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].recipient_id, rows[0].user_id);
+      assert.equal(rows[0].actor_id, null);
+      const outbox = [];
+      await flushNotifications({ send: async (mail) => outbox.push(mail), quiet: 0, maxWait: 0 });
+      const mail = outbox.find((mail) => mail.text.includes('QA automatic Later review'));
+      assert.ok(mail);
+      assert.match(mail.text, /todoer brought it back from Later after two weeks/);
+      assert.match(mail.text, /todoer assigned it to you for review/);
+      assert.ok(mail.text.includes(`https://todo.example.com/tasks/${task.id}`));
+      await patch(task.id, { list: 'later' });
+      await pool.query('DELETE FROM notification_events');
+      await age();
+      await resurfaceLaterTasks();
+      assert.equal((await pool.query('SELECT 1 FROM notification_events WHERE task_id = $1', [task.id])).rowCount, 1);
+      await patch(task.id, { list: 'later' });
+      await pool.query('DELETE FROM notification_events');
+      await pool.query('UPDATE users SET email_notifications = false');
+      await age();
+      await resurfaceLaterTasks();
+      assert.equal((await pool.query('SELECT 1 FROM notification_events')).rowCount, 0);
+    } finally {
+      await pool.query('UPDATE users SET email = NULL, email_notifications = true');
+      await pool.query('DELETE FROM notification_events');
+    }
+  });
+});

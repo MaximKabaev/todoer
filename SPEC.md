@@ -268,7 +268,11 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
 - When one user creates, edits, completes/reopens, hands off, adds images to, or deletes a task that
   involves the other user (assigned to them before or after the change, or created by them), the
   change is queued for the other user, if they have an email and `emailNotifications` is on.
-  Reordering alone is not reported, and nobody is emailed about their own changes.
+  Reordering alone is not reported. Own changes are not emailed except when taking a task from Later.
+- Every Later-to-person assignment queues an email for the assignee, including manual self-assignment
+  and automatic two-week reviews. Automatic reviews are attributed to todoer and explain that the
+  task returned from Later for review. Existing email preferences and digest timing apply; manual
+  assignments do not create duplicate events for the same recipient.
 - The API process batches a recipient's queued changes into one digest email once they have been
   quiet for 2 minutes (or 10 minutes after the first change), one block per task with each change
   listed once and a link to `/tasks/:id`. Sent via Resend (`RESEND_API_KEY`, `EMAIL_FROM`); disabled

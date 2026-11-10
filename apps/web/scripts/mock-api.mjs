@@ -1,3 +1,4 @@
+// Development mock never queues or delivers email, including Later assignment digests.
 /** Development-only, in-memory SPEC.md API. Never imported by the app. */
 import { defaultDate, scoreEntry } from "./mock-score.mjs";
 import { createServer } from "node:http";

@@ -46,25 +46,39 @@ export function describeChanges(before, after, recipientId, actorId) {
   return changes;
 }
 
-// Queue a change for the teammate if the task involves them and they want email.
+// Keep delivery preferences common to manual and automatic assignments.
+async function queueChange(db, recipientId, actorId, task, changes, scores = null) {
+  if (!notificationsConfigured() || !changes.length) return;
+  await db.query(`INSERT INTO notification_events (recipient_id, actor_id, task_id, task_title, changes, scores)
+    SELECT id, $2, $3, $4, $5, $6 FROM users
+    WHERE id = $1 AND email IS NOT NULL AND email_notifications`,
+  [recipientId, actorId, task.id, task.title, changes, scores && JSON.stringify(scores)]);
+}
+
+export async function recordLaterReview(db, task, recipientId) {
+  await queueChange(db, recipientId, null, task, ['brought it back from Later after two weeks', 'assigned it to you for review']);
+}
+
+// Notify the involved teammate, plus yourself when taking a task out of Later.
 export async function recordChange(db, req, before, after, scoresBefore = null) {
-  if (!notificationsConfigured() || !req.teammate) return;
-  const recipientId = req.teammate.id;
-  const involved = [before, after].some((task) => task && (task.createdBy?.id === recipientId || task.assignees.some((user) => user.id === recipientId)));
-  if (!involved) return;
-  const { rows: [recipient] } = await db.query('SELECT email, email_notifications FROM users WHERE id = $1', [recipientId]);
-  if (!recipient?.email || !recipient.email_notifications) return;
-  const changes = describeChanges(before, after, recipientId, req.user.id);
-  if (!changes.length) return;
-  const task = after ?? before;
-  // A completion carries the good boy scores from just before and after it.
+  if (!notificationsConfigured()) return;
+  const recipients = new Set();
+  if (req.teammate && [before, after].some((task) => task && (task.createdBy?.id === req.teammate.id || task.assignees.some((user) => user.id === req.teammate.id)))) {
+    recipients.add(req.teammate.id);
+  }
+  if (before?.list === 'later' && after?.list === 'now' && after.assignees.some((user) => user.id === req.user.id)) {
+    recipients.add(req.user.id);
+  }
+  if (!recipients.size) return;
   let scores = null;
   if (scoresBefore && after?.done && !before?.done) {
     const scoresAfter = await scoreSnapshot(db);
     scores = req.users.map((user) => ({ id: user.id, name: user.displayName, before: scoresBefore[user.id], after: scoresAfter[user.id] }));
   }
-  await db.query('INSERT INTO notification_events (recipient_id, actor_id, task_id, task_title, changes, scores) VALUES ($1,$2,$3,$4,$5,$6)',
-    [recipientId, req.user.id, task.id, task.title, changes, scores && JSON.stringify(scores)]);
+  for (const recipientId of recipients) {
+    await queueChange(db, recipientId, req.user.id, after ?? before,
+      describeChanges(before, after, recipientId, req.user.id), scores);
+  }
 }
 
 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -149,8 +163,8 @@ export async function flushNotifications({ send = sendEmail, quiet = quietMs, ma
         OR min(created_at) <= now() - $2::double precision * interval '1 millisecond'`, [quiet, maxWait]);
   let sent = 0;
   for (const { recipient_id: recipientId } of due) {
-    const { rows: events } = await pool.query(`SELECT e.id, e.task_id AS "taskId", e.task_title AS "taskTitle", e.changes, e.scores, a.display_name AS "actorName"
-      FROM notification_events e JOIN users a ON a.id = e.actor_id WHERE e.recipient_id = $1 ORDER BY e.id`, [recipientId]);
+    const { rows: events } = await pool.query(`SELECT e.id, e.task_id AS "taskId", e.task_title AS "taskTitle", e.changes, e.scores, COALESCE(a.display_name, 'todoer') AS "actorName"
+      FROM notification_events e LEFT JOIN users a ON a.id = e.actor_id WHERE e.recipient_id = $1 ORDER BY e.id`, [recipientId]);
     const ids = events.map((event) => event.id);
     const { rows: [recipient] } = await pool.query('SELECT email, display_name, email_notifications FROM users WHERE id = $1', [recipientId]);
     if (recipient?.email && recipient.email_notifications && events.length) {

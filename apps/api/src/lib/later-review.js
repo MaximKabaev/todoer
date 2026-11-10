@@ -1,3 +1,4 @@
+import { recordLaterReview } from './notifications.js';
 import { randomInt } from 'node:crypto';
 import { transaction } from '../db.js';
 import { dateFromToday, SCORE } from './score.js';
@@ -12,11 +13,12 @@ export async function resurfaceLaterTasks() {
       ORDER BY later_since LIMIT 100 FOR UPDATE SKIP LOCKED`);
     for (const task of rows) {
       const assignee = users[randomInt(2)].id;
-      await db.query(`UPDATE tasks SET list = 'now', resurfaced_at = now(), updated_at = now(), position = $2,
+      const { rows: [updated] } = await db.query(`UPDATE tasks SET list = 'now', resurfaced_at = now(), updated_at = now(), position = $2,
         due_date = CASE WHEN due_date IS NULL OR due_date < $3::date THEN $4::date ELSE due_date END
-        WHERE id = $1`, [task.id, Date.now(), dateFromToday(), dateFromToday(SCORE.defaultDays)]);
+        WHERE id = $1 RETURNING id, title`, [task.id, Date.now(), dateFromToday(), dateFromToday(SCORE.defaultDays)]);
       await db.query('DELETE FROM task_assignees WHERE task_id = $1', [task.id]);
       await db.query('INSERT INTO task_assignees (task_id, user_id) VALUES ($1, $2)', [task.id, assignee]);
+      await recordLaterReview(db, updated, assignee);
     }
     return rows.length;
   });
