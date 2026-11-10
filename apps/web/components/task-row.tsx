@@ -92,7 +92,7 @@ export function TaskRow({
       </div>
       <div
         style={{ transform: swipe.x ? `translateX(${swipe.x}px)` : undefined }}
-        className={`task-row ${selected ? "selected" : ""} ${completing ? "completing" : ""} ${task.done ? "done" : ""} ${task.id.startsWith("pending-") ? "pending" : ""}`}
+        className={`task-row task-priority-${task.priority} ${selected ? "selected" : ""} ${completing ? "completing" : ""} ${task.done ? "done" : ""} ${task.id.startsWith("pending-") ? "pending" : ""}`}
         tabIndex={0}
         role="group"
         aria-label={task.title || placeholder}
@@ -184,7 +184,7 @@ export function TaskRow({
                   aria-label={`Priority ${task.priority}`}
                 >
                   <Flag size={11} fill="currentColor" />
-                  {"!".repeat(task.priority)}
+                  {["", "Low priority", "Medium priority", "High priority"][task.priority]}
                 </span>
               )}
               {task.attachments.length > 0 && (

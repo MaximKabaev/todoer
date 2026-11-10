@@ -6,6 +6,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+import dotenv from 'dotenv';
+dotenv.config({ path: new URL('../.env', import.meta.url), quiet: true });
 
 async function withDeadline(promise) {
   let timer;
@@ -18,6 +22,18 @@ async function withDeadline(promise) {
 }
 
 test('production server binds default loopback or API_HOST and shuts down cleanly on SIGTERM', async (t) => {
+  const schema = `todoer_server_test_${randomUUID().replaceAll('-', '')}`;
+  const admin = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  t.after(async () => {
+    await admin.query(`DROP SCHEMA ${schema} CASCADE`);
+    await admin.end();
+  });
+  process.env.API_DB_SCHEMA = schema;
+  const { migrate } = await import('../scripts/migrate.js');
+  const { pool } = await import('../src/db.js');
+  await migrate();
+  t.after(() => pool.end());
   for (const [name, host, origin] of [
     ['default 127.0.0.1', '', 'http://127.0.0.1:4301'],
     ['explicit IPv6 loopback', '::1', 'http://[::1]:4301'],

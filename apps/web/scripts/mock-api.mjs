@@ -1,7 +1,7 @@
 /** Development-only, in-memory SPEC.md API. Never imported by the app. */
 import { defaultDate, scoreEntry } from "./mock-score.mjs";
 import { createServer } from "node:http";
-import { randomUUID, randomBytes } from "node:crypto";
+import { randomUUID, randomBytes, randomInt } from "node:crypto";
 const port = Number(process.env.MOCK_PORT || 4000);
 const stamp = () => new Date().toISOString();
 const users = [
@@ -95,6 +95,7 @@ function fixture(title, options = {}) {
     ...options,
   };
   if (task.list === "later") task.assignees = [];
+  task.laterSince = task.list === "later" ? task.createdAt : null;
   tasks.push(task);
   return task;
 }
@@ -193,10 +194,11 @@ function resolveTag(identifier) {
   }
   return tag;
 }
-const shape = (t) => ({
-  ...t,
-  project: projects.find((p) => p.id === t.projectId) || null,
-});
+const shape = (t) => {
+  const result = { ...t, project: projects.find((p) => p.id === t.projectId) || null };
+  delete result.laterSince;
+  return result;
+};
 function filterTasks(params, me) {
   const view = params.get("view") || "all";
   const other = users.find((u) => u.id !== me.id);
@@ -320,8 +322,17 @@ function patch(task, body, me) {
     );
   if (previousList === "later" && task.list === "now" && body.dueDate === undefined && (!task.dueDate || task.dueDate < localDate(new Date())))
     task.dueDate = defaultDate();
+  if (task.list !== "later") task.laterSince = null;
+  else if (previousList !== "later") task.laterSince = stamp();
   task.updatedAt = stamp();
 }
+// Match the production worker without requiring requests to trigger reviews.
+setInterval(() => {
+  for (const task of tasks) {
+    if (task.list !== "later" || task.done || Date.parse(task.laterSince) > Date.now() - 14 * 86400000) continue;
+    patch(task, { assignees: [users[randomInt(2)].id], position: Date.now() }, users[0]);
+  }
+}, 60000).unref();
 async function body(req) {
   const chunks = [];
   let size = 0;

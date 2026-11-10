@@ -882,3 +882,43 @@ test('email digests carry the good boy score when a task is completed', async ()
     await api('patch', '/api/me', secondToken).send({ email: null }).expect(200);
   });
 });
+
+
+test('Later review respects age, completion, snoozing, due dates and concurrent workers', async () => {
+  const { resurfaceLaterTasks } = await import('../src/lib/later-review.js');
+  const old = await create({ title: 'Review me', list: 'later', dueDate: '2020-01-01' });
+  const fresh = await create({ title: 'Too soon', list: 'later' });
+  const done = await create({ title: 'Finished', list: 'later', done: true });
+  const future = await create({ title: 'Future date', list: 'later', dueDate: '2099-01-01' });
+  const ids = [old.id, fresh.id, done.id, future.id];
+  try {
+    const { rows: [initial] } = await pool.query('SELECT later_since = created_at AS matches FROM tasks WHERE id = $1', [fresh.id]);
+    assert.equal(initial.matches, true);
+    await pool.query("UPDATE tasks SET later_since = now() - interval '15 days' WHERE id = ANY($1::uuid[])", [[old.id, done.id, future.id]]);
+    await pool.query("UPDATE tasks SET later_since = now() - interval '335 hours' WHERE id = $1", [fresh.id]);
+    await patch(old.id, { title: 'Edited without snoozing', list: 'later' });
+    await Promise.all([resurfaceLaterTasks(), resurfaceLaterTasks()]);
+    const get = async (id) => (await api('get', `/api/tasks/${id}`).expect(200)).body.task;
+    const reviewed = await get(old.id);
+    assert.equal(reviewed.list, 'now');
+    assert.equal(reviewed.assignees.length, 1);
+    assert.ok([first.id, second.id].includes(reviewed.assignees[0].id));
+    assert.equal(reviewed.dueDate, dateFromToday(7));
+    assert.equal((await get(future.id)).dueDate, '2099-01-01');
+    assert.equal((await get(fresh.id)).list, 'later');
+    assert.equal((await get(done.id)).list, 'later');
+    const snoozed = await patch(old.id, { list: 'later' });
+    assert.equal(snoozed.assignees.length, 0);
+    const { rows: [timer] } = await pool.query('SELECT later_since FROM tasks WHERE id = $1', [old.id]);
+    assert.ok(Math.abs(Date.now() - timer.later_since.getTime()) < 5000);
+    await resurfaceLaterTasks();
+    assert.equal((await get(old.id)).list, 'later');
+    await pool.query("UPDATE tasks SET later_since = now() - interval '336 hours' WHERE id = $1", [old.id]);
+    await resurfaceLaterTasks();
+    assert.equal((await get(old.id)).list, 'now');
+    const { rows: [cleared] } = await pool.query('SELECT later_since FROM tasks WHERE id = $1', [old.id]);
+    assert.equal(cleared.later_since, null);
+  } finally {
+    await pool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [ids]);
+  }
+});

@@ -1,6 +1,6 @@
 "use client";
 import { forwardRef, useRef, useState } from "react";
-import { ArrowUp, ImagePlus, LoaderCircle, Plus } from "lucide-react";
+import { ArrowUp, Plus } from "lucide-react";
 import type { TaskInput, User } from "@/lib/api";
 import { parseQuickSyntax } from "@/lib/quick-syntax";
 export const Composer = forwardRef<
@@ -17,7 +17,6 @@ export const Composer = forwardRef<
   ref,
 ) {
   const [value, setValue] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
   const localRef = useRef<HTMLInputElement | null>(null);
   const parsed = parseQuickSyntax(value, users, { assign: !later });
   async function submit(open = false) {
@@ -84,7 +83,6 @@ export const Composer = forwardRef<
           )}
         </div>
         <input
-          ref={fileRef}
           type="file"
           accept="image/*"
           multiple
@@ -96,19 +94,6 @@ export const Composer = forwardRef<
             e.target.value = "";
           }}
         />
-        <button
-          type="button"
-          className="icon-button photo-button"
-          aria-label="Add photos"
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-        >
-          {uploading ? (
-            <LoaderCircle className="spin" size={19} />
-          ) : (
-            <ImagePlus size={19} />
-          )}
-        </button>
         {value.trim() ? (
           <button type="submit" aria-label="Add task" className="submit-task">
             <ArrowUp size={18} />
@@ -117,20 +102,6 @@ export const Composer = forwardRef<
           <kbd className="composer-shortcut">↵</kbd>
         )}
       </form>
-      <div className="capture-hint">
-        <span>Just type. We’ll keep it here.</span>
-        <span>
-          <b>#</b> tag{" "}
-          {later ? (
-            "· Not assigned on Later ·"
-          ) : (
-            <>
-              <b>@</b> assign{" "}
-            </>
-          )}{" "}
-          <b>!</b> priority
-        </span>
-      </div>
     </div>
   );
 });

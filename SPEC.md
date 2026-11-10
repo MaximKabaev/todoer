@@ -274,6 +274,10 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
   when either is unset. Failed sends are retried with the same idempotency key; undelivered changes
   are dropped after 2 days.
 
+## Automatic Later review
+
+Open Later tasks automatically move to Now after 14 days (336 hours) and are assigned exclusively to one of the two users, chosen independently at random each time. The timer starts at creation for tasks created in Later, or when a task moves back into Later; ordinary edits and repeated `list: "later"` patches do not reset it. Completed tasks are skipped. Resurfacing preserves future/current due dates and sets a fresh seven-day deadline when the date is missing or past, just like manual planning. A background worker checks at startup and every minute (up to 100 tasks per pass), including after downtime. Existing Later tasks use their creation date for their first review. The task retains its project, content, tags, and attachments; either user can move it back to Later for another two weeks.
+
 ## Good boy score
 
 A competition between the two users: each has a 0-100 rating of how well they handle the tasks
@@ -329,3 +333,9 @@ Login accepts only same-origin relative `next` paths (starting `/`, excluding `/
 control characters and `/login`); default `/`. No protected UI is shown before authentication.
 Page titles reflect the private view in the browser only. OpenGraph/Twitter metadata stays generic.
 Task details offer Copy link and mobile native Share with a copy fallback.
+
+### Task presentation
+- Capture has no helper tagline or photo button; image paste and task-detail attachments remain available.
+- The visible task count sits beside the list title. Task details has a prominent heading.
+- The detail panel uses “I don’t wanna do all that rn” to move to Later, explains the two-week random review, and offers “Okay, let’s do this” to move back to Now and assign it to yourself.
+- Priority uses named None/Low/Medium/High choices, coloured badges, and orange/red row accents for medium/high priority. Existing sorting and scoring semantics remain unchanged.

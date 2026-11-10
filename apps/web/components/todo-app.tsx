@@ -669,9 +669,11 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
               <Icon size={30} strokeWidth={1.8} />
             </div>
             <div className="list-heading-top">
-              <h1>{title}</h1>
+              <div className="list-title-group">
+                <h1>{title}</h1>
+                <span className="list-total" aria-label={`${visible.length} tasks`}>{visible.length}</span>
+              </div>
               <div className="list-controls">
-                <span className="list-total">{visible.length}</span>
                 <div className="sort-wrap">
                   <button
                     className="icon-button"

@@ -17,7 +17,7 @@ import {
   Flag,
   ImagePlus,
   LoaderCircle,
-  MoreHorizontal,
+  Moon,
   Link as LinkIcon,
   Share2,
   Send,
@@ -244,7 +244,7 @@ export function TaskDetail({
           <span />
         </div>
         <div className="detail-toolbar">
-          <span className="eyebrow">TASK DETAILS</span>
+          <h2 className="detail-heading">Task details</h2>
           <span className={`save-state ${saveError ? "save-error" : ""}`}>
             {saveError ? (
               <button onClick={flush}>Retry saving</button>
@@ -367,12 +367,6 @@ export function TaskDetail({
             {task.list === "later" ? (
               <div className="later-planning">
                 <p>Later items aren’t assigned yet.</p>
-                <button
-                  className="primary-button"
-                  onClick={() => patch({ list: "now", assignees: ["me"] })}
-                >
-                  Plan it → Now
-                </button>
               </div>
             ) : (
               <>
@@ -424,22 +418,17 @@ export function TaskDetail({
             )}
           </div>
           <div className="detail-fields">
-            <div className="detail-field">
-              <span>
-                <MoreHorizontal size={17} /> List
-              </span>
-              <div className="small-segment" aria-label="Task list">
-                {(["now", "later"] as const).map((list) => (
-                  <button
-                    key={list}
-                    aria-pressed={task.list === list}
-                    className={task.list === list ? "selected" : ""}
-                    onClick={() => patch({ list })}
-                  >
-                    {list === "now" ? "Now" : "Later"}
-                  </button>
-                ))}
-              </div>
+            <div className="later-action">
+              <button
+                className="snooze-task"
+                onClick={() => patch(task.list === "later" ? { list: "now", assignees: ["me"] } : { list: "later" })}
+              >
+                <Moon size={18} />
+                {task.list === "later" ? "Okay, let’s do this" : "I don’t wanna do all that rn"}
+              </button>
+              <p>{task.done ? "Completed tasks stay put. Reopen it to bring it back into rotation." : task.list === "later"
+                ? "Chilling in Later. Back to one of you after two weeks."
+                : "Send to Later. We’ll randomly pick one of you to review it in two weeks."}</p>
             </div>
             <label className="detail-field">
               <span>
@@ -483,10 +472,10 @@ export function TaskDetail({
                       ][p]
                     }
                     aria-pressed={task.priority === p}
-                    className={task.priority === p ? "selected" : ""}
+                    className={`priority-option priority-${p} ${task.priority === p ? "selected" : ""}`}
                     onClick={() => patch({ priority: p })}
                   >
-                    {p === 0 ? "—" : "!".repeat(p)}
+                    {["None", "Low", "Medium", "High"][p]}
                   </button>
                 ))}
               </div>

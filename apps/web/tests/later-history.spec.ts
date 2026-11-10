@@ -9,7 +9,7 @@ const password = (username: string) =>
         .split(`Username: ${username}\n`)[1]
         .match(/Password: ([^\n]+)/)![1]
     : "todoer";
-const shotDir = `/tmp/todoer-later-shots${real ? "" : "/mock"}`;
+const shotDir = `/tmp/todoer-later-shots-${process.pid}${real ? "" : "/mock"}`;
 
 async function openTask(page: Page, task: Task, mobile: boolean) {
   const button = page.locator(`[data-task-id="${task.id}"] .row-open`);
@@ -155,7 +155,7 @@ for (const mobile of [false, true])
         );
         await expect(
           page.getByText("Not assigned on Later", { exact: false }),
-        ).toBeVisible();
+        ).toHaveCount(0);
         const captured = page.waitForResponse(
           (r) =>
             r.url().endsWith("/api/tasks") && r.request().method() === "POST",
@@ -240,7 +240,7 @@ for (const mobile of [false, true])
             r.request().method() === "PATCH",
         );
         await detail
-          .getByRole("button", { name: "Plan it → Now", exact: true })
+          .getByRole("button", { name: "Okay, let’s do this", exact: true })
           .click();
         await expect(row).toHaveCount(0, { timeout: 600 });
         await expect(detail.locator(".is-assigned")).toHaveCount(1, {
@@ -263,23 +263,22 @@ for (const mobile of [false, true])
             r.request().method() === "PATCH",
         );
         await detail
-          .getByRole("button", { name: "Later", exact: true })
+          .getByRole("button", { name: "I don’t wanna do all that rn", exact: true })
           .click();
         await expect(detail.locator(".assignee-toggles")).toHaveCount(0, {
           timeout: 600,
         });
         await movedLater;
         expect((await get(later.id)).assignees).toEqual([]);
-        await detail.getByRole("button", { name: "Now", exact: true }).click();
+        await detail.getByRole("button", { name: "Okay, let’s do this", exact: true }).click();
         await expect.poll(async () => (await get(later.id)).list).toBe("now");
-        expect((await get(later.id)).assignees).toEqual([]);
+        expect((await get(later.id)).assignees.map((u) => u.id)).toEqual([me.user.id]);
         await page
           .getByRole("button", { name: "Close task details", exact: true })
           .click();
         await expect(page).toHaveURL(/\/later$/);
-        await page.goto("/unassigned");
+        await page.goto("/my");
         await expect(row).toBeVisible();
-        await expect(row.locator(".assignee-stack")).toHaveCount(0);
 
         const a = await create({ title: "History task A" });
         const b = await create({ title: "History task B" });

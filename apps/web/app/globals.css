@@ -3620,3 +3620,60 @@ kbd {
 .email-notifications input:checked::before {
   transform: translateX(16px);
 }
+
+/* Clear task hierarchy and explicit planning actions. */
+.list-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.list-title-group .list-total { flex-shrink: 0; }
+.detail-toolbar .detail-heading {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.4px;
+  color: var(--text);
+}
+.later-action { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.snooze-task {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--blue) 9%, var(--bg));
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+}
+.snooze-task:hover { background: color-mix(in srgb, var(--blue) 16%, var(--bg)); }
+.later-action p { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.priority-picker { flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.priority-picker > button.priority-option {
+  width: auto;
+  min-height: 34px;
+  height: auto;
+  padding: 7px 9px;
+  font-size: 12px;
+  letter-spacing: 0;
+  border: 1px solid var(--line);
+}
+.priority-picker .priority-0.selected { color: var(--secondary); background: var(--bg); }
+.priority-picker .priority-1.selected { color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, var(--bg)); border-color: var(--blue); }
+.priority-picker .priority-2.selected { color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, var(--bg)); border-color: var(--orange); }
+.priority-picker .priority-3.selected { color: white; background: var(--red); border-color: var(--red); }
+.task-row .meta-priority { padding: 3px 7px; border-radius: 5px; font-weight: 700; letter-spacing: 0; }
+.task-row .meta-priority.priority-1 { color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--bg)); }
+.task-row .meta-priority.priority-2 { color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, var(--bg)); }
+.task-row .meta-priority.priority-3 { color: white; background: var(--red); }
+.task-row.task-priority-2:not(.done) { border-left: 3px solid var(--orange); }
+.task-row.task-priority-3:not(.done) { border-left: 3px solid var(--red); background: color-mix(in srgb, var(--red) 4%, var(--bg)); }
+.task-row.task-priority-3.selected:not(.done) { background: color-mix(in srgb, var(--red) 10%, var(--bg)); }
+
+@media (max-width: 700px) {
+  .priority-picker > button.priority-option { min-height: 44px; }
+  .detail-toolbar .detail-heading { font-size: 16px; }
+}
