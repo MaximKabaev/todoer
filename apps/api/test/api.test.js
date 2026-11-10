@@ -901,6 +901,9 @@ test('Later review respects age, completion, snoozing, due dates and concurrent 
     const get = async (id) => (await api('get', `/api/tasks/${id}`).expect(200)).body.task;
     const reviewed = await get(old.id);
     assert.equal(reviewed.list, 'now');
+    assert.ok(Math.abs(Date.now() - Date.parse(reviewed.resurfacedAt)) < 5000);
+    assert.equal((await get(fresh.id)).resurfacedAt, null);
+    assert.equal((await patch(old.id, { notes: 'Keep origin' })).resurfacedAt, reviewed.resurfacedAt);
     assert.equal(reviewed.assignees.length, 1);
     assert.ok([first.id, second.id].includes(reviewed.assignees[0].id));
     assert.equal(reviewed.dueDate, dateFromToday(7));

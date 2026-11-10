@@ -12,7 +12,7 @@ export async function resurfaceLaterTasks() {
       ORDER BY later_since LIMIT 100 FOR UPDATE SKIP LOCKED`);
     for (const task of rows) {
       const assignee = users[randomInt(2)].id;
-      await db.query(`UPDATE tasks SET list = 'now', updated_at = now(), position = $2,
+      await db.query(`UPDATE tasks SET list = 'now', resurfaced_at = now(), updated_at = now(), position = $2,
         due_date = CASE WHEN due_date IS NULL OR due_date < $3::date THEN $4::date ELSE due_date END
         WHERE id = $1`, [task.id, Date.now(), dateFromToday(), dateFromToday(SCORE.defaultDays)]);
       await db.query('DELETE FROM task_assignees WHERE task_id = $1', [task.id]);

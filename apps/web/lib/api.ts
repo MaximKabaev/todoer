@@ -43,6 +43,7 @@ export type Attachment = {
 export type Task = {
   id: string;
   webUrl?: string;
+  resurfacedAt?: string | null;
   title: string;
   notes: string;
   done: boolean;

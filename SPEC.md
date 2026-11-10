@@ -243,7 +243,8 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
   (like Reminders iOS) or bottom tab bar, large titles, safe-area insets, 44pt touch targets,
   bottom sheets for task details, no hover-only affordances.
 - **Friction-free capture**: an always-available "new task" input at the top/bottom of each list —
-  type and hit Enter, done. Inline quick syntax is a nice bonus (e.g. `#tag`, `@teammate`/`@me`,
+  with a 24px gap below it (plus the safe-area inset on mobile).
+  Type and hit Enter, done. Inline quick syntax is a nice bonus (e.g. `#tag`, `@teammate`/`@me`,
   `!` priority, "later" toggle) but must never block plain text. Empty title allowed.
   Keyboard shortcut `N` (or Cmd/Ctrl+N where possible) to focus new task. Enter on a fresh empty
   input can still create an empty task only if the user explicitly wants (e.g. pressing the + button).
@@ -276,7 +277,7 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
 
 ## Automatic Later review
 
-Open Later tasks automatically move to Now after 14 days (336 hours) and are assigned exclusively to one of the two users, chosen independently at random each time. The timer starts at creation for tasks created in Later, or when a task moves back into Later; ordinary edits and repeated `list: "later"` patches do not reset it. Completed tasks are skipped. Resurfacing preserves future/current due dates and sets a fresh seven-day deadline when the date is missing or past, just like manual planning. A background worker checks at startup and every minute (up to 100 tasks per pass), including after downtime. Existing Later tasks use their creation date for their first review. The task retains its project, content, tags, and attachments; either user can move it back to Later for another two weeks.
+Open Later tasks automatically move to Now after 14 days (336 hours) and are assigned exclusively to one of the two users, chosen independently at random each time. The timer starts at creation for tasks created in Later, or when a task moves back into Later; ordinary edits and repeated `list: "later"` patches do not reset it. Completed tasks are skipped. Resurfacing preserves future/current due dates and sets a fresh seven-day deadline when the date is missing or past, just like manual planning. A background worker checks at startup and every minute (up to 100 tasks per pass), including after downtime. Existing Later tasks use their creation date for their first review. The read-only `resurfacedAt` timestamp records the latest automatic return (null for tasks never automatically returned). It persists through edits and completion; the UI shows a purple boxed “From Later” label matching the Later icon outside Later. Earlier automatic returns cannot be identified retroactively. The task retains its project, content, tags, and attachments; either user can move it back to Later for another two weeks.
 
 ## Good boy score
 

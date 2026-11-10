@@ -43,7 +43,9 @@ export function TaskRow({
   const day = useLocalDay();
   const placeholder = task.attachments.length ? "Image" : "New task";
   const showDate = showDueChip(task, day);
+  const fromLater = task.list !== "later" && Boolean(task.resurfacedAt);
   const hasMeta =
+    fromLater ||
     (!later && task.assignees.length > 0) ||
     task.tags.length > 0 ||
     showDate ||
@@ -145,6 +147,11 @@ export function TaskRow({
           </span>
           {hasMeta && (
             <div className="task-meta">
+              {fromLater && (
+                <span className="tag-pill later-origin" title="Automatically brought back from Later after two weeks">
+                  From Later
+                </span>
+              )}
               {!later && task.assignees.length > 0 && (
                 <span
                   className="assignee-stack"
