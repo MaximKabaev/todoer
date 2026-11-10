@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
+import type { Task } from "../lib/api";
 
 for (const mobile of [false, true]) {
   test(`completion rewards and Undo (${mobile ? "mobile" : "desktop"})`, async ({ page }) => {
     if (mobile) await page.setViewportSize({ width: 390, height: 844 });
     await page.request.post("/api/auth/login", { data: { username: "maxim", password: "todoer" } });
-    const tasks = [];
+    const tasks: Task[] = [];
     for (let i = 0; i < 3; i++) {
       const response = await page.request.post("/api/tasks", { data: { title: `QA victory ${i} ${Date.now()}` } });
       tasks.push((await response.json()).task);

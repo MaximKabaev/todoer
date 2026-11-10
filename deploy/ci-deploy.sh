@@ -55,7 +55,9 @@ run_deploy() {
     return 0
   fi
 
-  deploy/redeploy.sh
+  # run_deploy is called in an OR-list, so errexit is disabled inside this function.
+  # Propagate failure explicitly; never mark a failed build as deployed.
+  deploy/redeploy.sh || return $?
   echo "$head" >"$STATE_DIR/deployed-sha"
   echo "== $(date -u +%FT%TZ) deployed $head"
 }
