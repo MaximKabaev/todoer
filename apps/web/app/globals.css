@@ -3649,13 +3649,13 @@ kbd {
   gap: 9px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--blue) 9%, var(--bg));
-  color: var(--blue);
+  background: color-mix(in srgb, var(--purple) 9%, var(--bg));
+  color: var(--purple);
   font-size: 13px;
   font-weight: 650;
   text-align: left;
 }
-.snooze-task:hover { background: color-mix(in srgb, var(--blue) 16%, var(--bg)); }
+.snooze-task:hover { background: color-mix(in srgb, var(--purple) 16%, var(--bg)); }
 .later-action p { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .priority-picker { flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
 .priority-picker > button.priority-option {

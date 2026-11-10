@@ -338,7 +338,7 @@ Task details offer Copy link and mobile native Share with a copy fallback.
 ### Task presentation
 - Capture has no helper tagline or photo button; image paste and task-detail attachments remain available.
 - The visible task count sits beside the list title. Task details has a prominent heading.
-- The detail panel uses “I don’t wanna do all that rn” to move to Later, explains the two-week random review, and offers “Okay, let’s do this” to move back to Now and assign it to yourself.
+- The detail panel uses “Send it back to Later” to move to Later, explains the two-week random review, and offers “Okay, let’s do this” to move back to Now and assign it to yourself.
 - Priority uses named None/Low/Medium/High choices, coloured badges, and orange/red row accents for medium/high priority. Existing sorting and scoring semantics remain unchanged.
 
 ### Completion rewards

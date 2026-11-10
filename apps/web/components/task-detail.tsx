@@ -17,7 +17,6 @@ import {
   Flag,
   ImagePlus,
   LoaderCircle,
-  Moon,
   Link as LinkIcon,
   Share2,
   Send,
@@ -429,8 +428,7 @@ export function TaskDetail({
                 className="snooze-task"
                 onClick={() => patch(task.list === "later" ? { list: "now", assignees: ["me"] } : { list: "later" })}
               >
-                <Moon size={18} />
-                {task.list === "later" ? "Okay, let’s do this" : "I don’t wanna do all that rn"}
+                {task.list === "later" ? "Okay, let’s do this" : "Send it back to Later"}
               </button>
               <p>{task.done ? "Completed tasks stay put. Reopen it to bring it back into rotation." : task.list === "later"
                 ? "Chilling in Later. Back to one of you after two weeks."
