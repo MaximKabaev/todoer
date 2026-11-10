@@ -1,19 +1,16 @@
 "use client";
 import Image from "next/image";
 import {
-  CalendarDays,
   ChevronRight,
-  Flag,
   ImageIcon,
   Check,
   Send,
   Trash2,
 } from "lucide-react";
 import type { Task } from "@/lib/api";
-import { showDueChip } from "@/lib/task-dates";
-import { dueLabel, taskAccent } from "@/lib/utils";
+import { taskAccent } from "@/lib/utils";
 import { useSwipe } from "@/hooks/use-swipe";
-import { useLocalDay } from "@/hooks/use-local-day";
+import { TaskUrgency } from "./task-urgency";
 import { Avatar, Checkbox } from "./ui";
 export function TaskRow({
   task,
@@ -40,17 +37,13 @@ export function TaskRow({
     !task.id.startsWith("pending-"),
     later ? 92 : 184,
   );
-  const day = useLocalDay();
   const placeholder = task.attachments.length ? "Image" : "New task";
-  const showDate = showDueChip(task, day);
   const fromLater = task.list !== "later" && Boolean(task.resurfacedAt);
   const hasMeta =
     fromLater ||
     (!later && task.assignees.length > 0) ||
     task.tags.length > 0 ||
-    showDate ||
     task.project ||
-    task.priority > 0 ||
     task.attachments.length > 0;
   return (
     <div
@@ -142,6 +135,7 @@ export function TaskRow({
           color={task.done ? "var(--blue)" : taskAccent(task)}
         />
         <div className="task-content">
+          <TaskUrgency task={task} />
           <span className={`row-title ${!task.title ? "untitled" : ""}`}>
             {task.title || placeholder}
           </span>
@@ -177,23 +171,6 @@ export function TaskRow({
                 </span>
               ))}
               {task.tags.length > 2 && <span>+{task.tags.length - 2}</span>}
-              {showDate && task.dueDate && (
-                <span
-                  className={`meta-date ${!task.done && day && task.dueDate < day ? "overdue" : task.dueDate === day ? "due-today" : ""}`}
-                >
-                  <CalendarDays size={12} />
-                  {day ? dueLabel(task.dueDate) : task.dueDate}
-                </span>
-              )}
-              {task.priority > 0 && (
-                <span
-                  className={`meta-priority priority-${task.priority}`}
-                  aria-label={`Priority ${task.priority}`}
-                >
-                  <Flag size={11} fill="currentColor" />
-                  {["", "Low priority", "Medium priority", "High priority"][task.priority]}
-                </span>
-              )}
               {task.attachments.length > 0 && (
                 <span className="meta-images">
                   <ImageIcon size={12} />

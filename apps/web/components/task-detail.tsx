@@ -36,6 +36,7 @@ import { useDialog } from "@/hooks/use-dialog";
 import { useMedia } from "@/hooks/use-media";
 import { Avatar, Checkbox, Confirm, Modal } from "./ui";
 import { useToast } from "./providers";
+import { TaskUrgency } from "./task-urgency";
 import { ZoomableImage } from "./zoomable-image";
 const subscribeShare = () => () => {};
 const canShare = () => typeof navigator.share === "function";
@@ -321,6 +322,7 @@ export function TaskDetail({
           </button>
         </div>
         <div className="detail-scroll">
+          <TaskUrgency task={task} />
           {task.project && task.projectId !== activeProjectId && (
             <div className="detail-project-context">
               In {task.project.name} ·{" "}

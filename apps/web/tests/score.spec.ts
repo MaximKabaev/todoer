@@ -22,7 +22,7 @@ test("scores follow the viewed person, refresh after completion, and capture def
   });
   expect(task.dueDate).toBe(expectedDate);
   const row = page.getByRole("group", { name: title, exact: true });
-  await expect(row.locator(".meta-date")).toHaveCount(0);
+  await expect(row.locator(".deadline-nudge")).toHaveCount(0);
   const before = await (await page.request.get("/api/score")).json();
   const refreshed = page.waitForResponse((r) => r.url().endsWith("/api/score") && r.request().method() === "GET");
   await row.getByRole("button", { name: `Complete ${title}`, exact: true }).click();

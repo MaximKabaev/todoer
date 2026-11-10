@@ -339,7 +339,7 @@ Task details offer Copy link and mobile native Share with a copy fallback.
 - Capture has no helper tagline or photo button; image paste and task-detail attachments remain available.
 - The visible task count sits beside the list title. Task details has a prominent heading.
 - The detail panel uses “I ain’t doing all that rn” to move to Later, with “Send it back to Later” explanatory text and the two-week random review, and offers “Okay, let’s do this” to move back to Now and assign it to yourself.
-- Priority uses named None/Low/Medium/High choices, coloured badges, and orange/red row accents for medium/high priority. Existing sorting and scoring semantics remain unchanged.
+- Priority uses named None/Low/Medium/High choices, prominent coloured labels above the title in rows and task details, and orange/red row accents for medium/high priority. Project names and tags remain below the title. Existing sorting and scoring semantics remain unchanged.
 
 ### Completion rewards
 - Tasks have a visible Done button in their row and a “Nailed it. Mark as done” action in details, alongside the existing checkbox, Space shortcut, and swipe gesture. Completed details offer Reopen.
@@ -348,3 +348,5 @@ Task details offer Copy link and mobile native Share with a copy fallback.
 Completing an open task with `PATCH /api/tasks/:id {done:true}` also returns `scoreChange: {before, after, delta}` for the authenticated user's Good boy rating. The comparison holds all other tasks and the scoring time constant, isolating this task edit's contribution; it is not a fixed points award. Zero and negative deltas are valid. Already-completed tasks, reopening, and unrelated edits omit this field. Completing a teammate-only or Later task does not raise your own rating.
 
 Completion celebrations say “Who’s a good boy?” and display the server-reported rating delta and before/after scores. Zero reads “Goodboy rating unchanged”; a negative value keeps its minus sign. If a server omits the optional delta, completion and Undo still work without a rating badge.
+
+Open Now tasks show a deadline warning above the title in rows and details when due within three calendar days (browser-local dates). Two or three days away: “Future you is watching.” Tomorrow: “Don’t make us say bad boy.” Today: “Good boys don’t leave it till tomorrow.” Overdue: the number of days late and “Who’s being a bad boy?” Warnings use amber for approaching/today and red for overdue, update at local midnight, and are absent for completed, undated, distant, or Later tasks. These are visual reminders; scoring and sort order are unchanged.

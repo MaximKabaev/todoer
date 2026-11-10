@@ -23,3 +23,20 @@ test("capture omits dueDate and score participates in workspace refresh", () => 
   assert.equal(Object.hasOwn(parseQuickSyntax("hello", [{ id: "1", username: "maxim", displayName: "Maxim", color: "blue" }, { id: "2", username: "german", displayName: "German", color: "orange" }]).fields, "dueDate"), false);
   assert.ok(workspaceKey("/api/score"));
 });
+
+test("deadline nudges use calendar days and skip completed, Later and distant tasks", async () => {
+  const { deadlineNudge } = await import("./task-dates");
+  const task = { list: "now" as const, done: false, dueDate: "2026-03-09" };
+  assert.equal(deadlineNudge(task, "2026-03-06")?.label, "Due in 3 days");
+  assert.equal(deadlineNudge(task, "2026-03-07")?.label, "Due in 2 days");
+  assert.equal(deadlineNudge(task, "2026-03-08")?.label, "Due tomorrow");
+  assert.equal(deadlineNudge(task, "2026-03-09")?.label, "Due today");
+  assert.equal(deadlineNudge(task, "2026-03-10")?.label, "1 day overdue");
+  assert.equal(deadlineNudge(task, "2026-03-11")?.label, "2 days overdue");
+  assert.equal(deadlineNudge({ ...task, dueDate: "2027-01-01" }, "2026-12-31")?.label, "Due tomorrow");
+  assert.equal(deadlineNudge(task, "2026-03-05"), null);
+  assert.equal(deadlineNudge({ ...task, done: true }, "2026-03-09"), null);
+  assert.equal(deadlineNudge({ ...task, list: "later" }, "2026-03-09"), null);
+  assert.equal(deadlineNudge({ ...task, dueDate: null }, "2026-03-09"), null);
+  assert.equal(deadlineNudge(task, ""), null);
+});

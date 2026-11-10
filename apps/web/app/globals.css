@@ -3750,3 +3750,28 @@ kbd {
 @media (prefers-color-scheme: dark) { .rating-reward.rating-up { color: var(--green); } }
 .rating-reward { width: fit-content; padding: 4px 7px; border-radius: 7px; background: var(--surface); }
 .rating-reward.rating-up { background: color-mix(in srgb, var(--green) 10%, var(--bg)); }
+
+/* Put urgency before the title, separate from project and tag metadata. */
+.task-urgency { display: grid; gap: 7px; margin-bottom: 9px; }
+.priority-heading { display: inline-flex; align-items: center; gap: 6px; justify-self: start; padding: 5px 9px; border-radius: 6px; font-size: 11px; line-height: 1.3; font-weight: 850; letter-spacing: .6px; text-transform: uppercase; }
+.priority-heading.priority-1 { color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--bg)); }
+.priority-heading.priority-2 { color: #9a4d00; background: color-mix(in srgb, var(--orange) 18%, var(--bg)); }
+.priority-heading.priority-3 { color: white; background: #c52a26; }
+.urgency-done .priority-heading { color: var(--secondary); background: var(--surface); }
+.deadline-nudge { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; line-height: 1.5; color: #9a4d00; }
+.deadline-nudge > svg { margin-top: 1px; flex-shrink: 0; }
+.deadline-nudge strong { font-weight: 800; }
+.deadline-message { margin-left: 6px; }
+.deadline-overdue { color: #c52a26; }
+.deadline-today, .deadline-overdue { padding: 7px 9px; border-radius: 7px; background: color-mix(in srgb, var(--orange) 8%, var(--bg)); }
+.deadline-overdue { background: color-mix(in srgb, var(--red) 7%, var(--bg)); }
+.detail-scroll > .task-urgency { margin-bottom: 18px; }
+.detail-scroll > .task-urgency .priority-heading { font-size: 12px; padding: 7px 11px; }
+.detail-scroll > .task-urgency .deadline-nudge { font-size: 13px; }
+@media (max-width: 760px) {
+  .deadline-message { display: block; margin-left: 0; }
+}
+@media (prefers-color-scheme: dark) {
+  .priority-heading.priority-2, .deadline-nudge { color: var(--orange); }
+  .deadline-overdue { color: var(--red); }
+}
