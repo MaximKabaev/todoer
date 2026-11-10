@@ -95,6 +95,7 @@ function fixture(title, options = {}) {
     ...options,
   };
   if (task.list === "later") task.assignees = [];
+  task.resurfacedAt = null;
   task.laterSince = task.list === "later" ? task.createdAt : null;
   tasks.push(task);
   return task;
@@ -330,6 +331,7 @@ function patch(task, body, me) {
 setInterval(() => {
   for (const task of tasks) {
     if (task.list !== "later" || task.done || Date.parse(task.laterSince) > Date.now() - 14 * 86400000) continue;
+    task.resurfacedAt = stamp();
     patch(task, { assignees: [users[randomInt(2)].id], position: Date.now() }, users[0]);
   }
 }, 60000).unref();

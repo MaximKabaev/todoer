@@ -3,7 +3,7 @@ import { resolveUser } from '../auth.js';
 import { HttpError } from './errors.js';
 
 export const taskColumns = `t.id, t.title, t.notes, t.done, t.done_at AS "doneAt", t.list,
-  to_char(t.due_date, 'YYYY-MM-DD') AS "dueDate", t.priority, t.project_id AS "projectId",
+  to_char(t.due_date, 'YYYY-MM-DD') AS "dueDate", t.priority, t.resurfaced_at AS "resurfacedAt", t.project_id AS "projectId",
   t.created_by AS "creatorId", t.position, t.created_at AS "createdAt", t.updated_at AS "updatedAt"`;
 export const attachmentColumns = `id, task_id AS "taskId", filename, mime_type AS "mimeType", size, width, height,
   '/api/attachments/' || id || '/file' AS url, created_at AS "createdAt"`;
