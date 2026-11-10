@@ -513,7 +513,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
       .then((result) => {
         const count = recordWin(task.id, done);
         toast({
-          message: done ? "Who’s a good boy? You are." : "Task reopened.",
+          message: done ? "Who’s a good boy?" : "Task reopened.",
           detail: done ? completionMessage(count) : undefined,
           scoreChange: done ? result.scoreChange : undefined,
           celebration: done ? (completionMilestone(count) ? "milestone" : "win") : undefined,

@@ -30,7 +30,7 @@ test("scores follow the viewed person, refresh after completion, and capture def
   expect(after.me.doneThisWeek).toBe(before.me.doneThisWeek + 1);
   expect(after.me.score).toBeGreaterThan(before.me.score);
   await expect(card).toContainText(`${after.me.doneThisWeek} done this week`);
-  await expect(page.getByRole("status")).toContainText("Who’s a good boy? You are.");
+  await expect(page.getByRole("status")).toContainText("Who’s a good boy?");
   await expect(page.getByRole("status")).toContainText(`+${after.me.score - before.me.score} Goodboy rating`);
   await expect(page.getByRole("status")).toContainText(`${before.me.score} → ${after.me.score}`);
   await page.goto("/people/teammate");
@@ -99,7 +99,7 @@ for (const delta of [0, -2, undefined]) {
         await route.fulfill({ response, json: body });
       });
       await page.locator(`[data-task-id="${task.id}"]`).getByRole("button", { name: `Finish ${task.title}`, exact: true }).click();
-      await expect(page.getByRole("status")).toContainText("Who’s a good boy? You are.");
+      await expect(page.getByRole("status")).toContainText("Who’s a good boy?");
       if (delta === undefined) await expect(page.locator(".rating-reward")).toHaveCount(0);
       else await expect(page.locator(".rating-reward")).toContainText(delta === 0 ? "Goodboy rating unchanged" : "-2 Goodboy rating");
       await page.getByRole("button", { name: "Undo", exact: true }).click();
