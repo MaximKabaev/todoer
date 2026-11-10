@@ -6,7 +6,7 @@ import { id, identifier, querySchema, taskBody, taskPatchSchema, taskSchema, z }
 import { applyRelations, getTask, hydrate, taskColumns } from '../lib/tasks.js';
 import { removeFiles, saveAttachments, upload, withUploadCleanup } from '../lib/uploads.js';
 import { notificationsConfigured, recordChange } from '../lib/notifications.js';
-import { dateFromToday, scoreSnapshot, SCORE } from '../lib/score.js';
+import { dateFromToday, scoreSnapshot, SCORE, loadScoreRows, taskScoreChange } from '../lib/score.js';
 
 export const tasksRouter = Router();
 
@@ -64,10 +64,11 @@ tasksRouter.post('/', upload, async (req, res) => {
 tasksRouter.patch('/:id', async (req, res) => {
   const taskId = id.parse(req.params.id);
   const body = taskPatchSchema.parse(req.body);
-  const task = await transaction(async (db) => {
+  const result = await transaction(async (db) => {
     const { rows: [current] } = await db.query("SELECT list, to_char(due_date, 'YYYY-MM-DD') AS \"dueDate\" FROM tasks WHERE id = $1 FOR UPDATE", [taskId]);
     if (!current) throw new HttpError(404, 'Task not found');
     const before = await getTask(taskId, db);
+    const completionRows = body.done === true && !before.done ? await loadScoreRows(db, taskId) : null;
     const scoresBefore = body.done === true && !before.done && notificationsConfigured() ? await scoreSnapshot(db) : null;
     const assigning = Boolean(body.assignees?.length || body.addAssignees?.length);
     // Later tasks have no assignees: assigning someone plans the task (moves it to Now),
@@ -89,9 +90,12 @@ tasksRouter.patch('/:id', async (req, res) => {
     await db.query("DELETE FROM task_assignees a USING tasks t WHERE t.id = a.task_id AND t.id = $1 AND t.list = 'later'", [taskId]);
     const updated = await getTask(taskId, db);
     await recordChange(db, req, before, updated, scoresBefore);
-    return updated;
+    const scoreChange = completionRows
+      ? taskScoreChange(completionRows, await loadScoreRows(db), taskId, req.user.id)
+      : undefined;
+    return { task: updated, ...(scoreChange ? { scoreChange } : {}) };
   });
-  res.json({ task });
+  res.json(result);
 });
 tasksRouter.post('/:id/handoff', async (req, res) => {
   const taskId = id.parse(req.params.id);

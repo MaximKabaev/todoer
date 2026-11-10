@@ -3735,3 +3735,12 @@ kbd {
 .toast.toast-celebration { width: min(460px, calc(100vw - 32px)); box-sizing: border-box; }
 .toast-celebration > span { flex: 1; }
 .toast-celebration > button { flex-shrink: 0; }
+.toast-copy { display: grid; gap: 5px; }
+.toast-celebration .toast-copy > span { font-weight: 750; font-size: 14px; }
+.rating-reward { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--secondary); font-size: 12px; }
+.rating-reward.rating-up { color: #19764b; }
+.rating-reward small { font-size: 11px; font-weight: 500; color: var(--secondary); }
+.toast-detail { font-size: 11px; color: var(--secondary); }
+@media (prefers-color-scheme: dark) { .rating-reward.rating-up { color: var(--green); } }
+.rating-reward { width: fit-content; padding: 4px 7px; border-radius: 7px; background: var(--surface); }
+.rating-reward.rating-up { background: color-mix(in srgb, var(--green) 10%, var(--bg)); }

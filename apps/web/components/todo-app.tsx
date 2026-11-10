@@ -510,10 +510,12 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     }
     void store
       .patch(task, { done })
-      .then(() => {
+      .then((result) => {
         const count = recordWin(task.id, done);
         toast({
-          message: done ? completionMessage(count) : "Task reopened.",
+          message: done ? "Who’s a good boy? You are." : "Task reopened.",
+          detail: done ? completionMessage(count) : undefined,
+          scoreChange: done ? result.scoreChange : undefined,
           celebration: done ? (completionMilestone(count) ? "milestone" : "win") : undefined,
           action: {
             label: "Undo",
@@ -905,7 +907,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           activeProjectId={user.activeProjectId}
           onSwitchProject={setActiveProject}
           onPatch={async (input, handoff) => {
-            const task = await store.patch(selected.data!.task, input, handoff);
+            const { task } = await store.patch(selected.data!.task, input, handoff);
             if (
               input.projectId !== undefined &&
               user.activeProjectId &&

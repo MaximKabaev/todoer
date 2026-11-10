@@ -72,11 +72,11 @@ export function scoreFor(rows, userId, asOf = new Date()) {
 
 // Every task that is in Now and assigned, with its deadline: the start of the day after its due
 // date (or after created + 7 days when it has none), in the score timezone.
-export async function loadScoreRows(db = pool) {
+export async function loadScoreRows(db = pool, taskId = null) {
   const { rows } = await db.query(`SELECT t.id, a.user_id AS "userId", t.done, t.done_at AS "doneAt", t.created_at AS "createdAt",
     t.priority, (btrim(t.title) = '' AND btrim(t.notes) = '') AS empty,
     ((COALESCE(t.due_date, (t.created_at AT TIME ZONE $1)::date + ${SCORE.defaultDays}) + 1)::timestamp AT TIME ZONE $1) AS deadline
-    FROM tasks t JOIN task_assignees a ON a.task_id = t.id WHERE t.list = 'now'`, [scoreTimezone()]);
+    FROM tasks t JOIN task_assignees a ON a.task_id = t.id WHERE t.list = 'now' AND ($2::uuid IS NULL OR t.id = $2)`, [scoreTimezone(), taskId]);
   return rows;
 }
 
@@ -108,4 +108,12 @@ export async function scoreboard(db, user, teammate, now = new Date()) {
   const other = entry(teammate);
   const diff = other ? me.score - other.score : 0;
   return { me, teammate: other, leader: diff > 0 ? 'me' : diff < 0 ? 'teammate' : null, lead: Math.abs(diff) };
+}
+
+// Isolate this task's contribution from unrelated concurrent task edits.
+export function taskScoreChange(previousTaskRows, currentRows, taskId, userId, asOf = new Date()) {
+  const beforeRows = [...currentRows.filter((row) => row.id !== taskId), ...previousTaskRows];
+  const before = scoreFor(beforeRows, userId, asOf);
+  const after = scoreFor(currentRows, userId, asOf);
+  return { before, after, delta: after - before };
 }

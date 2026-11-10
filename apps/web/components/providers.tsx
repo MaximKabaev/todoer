@@ -8,9 +8,11 @@ import {
 } from "react";
 import { SWRConfig } from "swr";
 import { Check, X, AlertCircle, PartyPopper, Trophy } from "lucide-react";
-import { ApiError, request } from "@/lib/api";
+import { ApiError, request, type ScoreChange } from "@/lib/api";
 type Toast = {
   message: string;
+  detail?: string;
+  scoreChange?: ScoreChange;
   error?: boolean;
   celebration?: "win" | "milestone";
   action?: { label: string; run: () => void };
@@ -60,7 +62,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 <i key={i} style={{ "--piece": i } as React.CSSProperties} />)}
             </div>}
             {toast.error ? <AlertCircle size={18} /> : toast.celebration === "milestone" ? <Trophy size={23} /> : toast.celebration ? <PartyPopper size={21} /> : <Check size={18} />}
-            <span>{toast.message}</span>
+            <span className="toast-copy">
+              <span>{toast.message}</span>
+              {toast.scoreChange && <strong className={`rating-reward ${toast.scoreChange.delta > 0 ? "rating-up" : ""}`}>
+                {toast.scoreChange.delta === 0 ? "Goodboy rating unchanged" : `${toast.scoreChange.delta > 0 ? "+" : ""}${toast.scoreChange.delta} Goodboy rating`}
+                <small>{toast.scoreChange.before} → {toast.scoreChange.after}</small>
+              </strong>}
+              {toast.detail && <small className="toast-detail">{toast.detail}</small>}
+            </span>
             {toast.action && (
               <button
                 onClick={() => {

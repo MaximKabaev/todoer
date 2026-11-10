@@ -922,3 +922,35 @@ test('Later review respects age, completion, snoozing, due dates and concurrent 
     await pool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [ids]);
   }
 });
+
+test('completion returns the caller’s real rating change, with no repeated award', async () => {
+  const own = await create({ title: 'QA rating reward', priority: 3 });
+  const teammate = await create({ title: 'QA teammate reward', assignees: ['teammate'] });
+  const later = await create({ title: 'QA Later reward', list: 'later' });
+  const empty = await create();
+  try {
+    const before = (await api('get', '/api/score').expect(200)).body.me.score;
+    const response = (await api('patch', `/api/tasks/${own.id}`).send({ done: true }).expect(200)).body;
+    const after = (await api('get', '/api/score').expect(200)).body.me.score;
+    assert.deepEqual(response.scoreChange, { before, after, delta: after - before });
+    assert.equal((await api('patch', `/api/tasks/${own.id}`).send({ done: true }).expect(200)).body.scoreChange, undefined);
+    assert.equal((await api('patch', `/api/tasks/${own.id}`).send({ done: false }).expect(200)).body.scoreChange, undefined);
+    for (const task of [teammate, later, empty]) {
+      const { scoreChange } = (await api('patch', `/api/tasks/${task.id}`).send({ done: true }).expect(200)).body;
+      assert.equal(scoreChange.delta, 0);
+      assert.equal(scoreChange.before, scoreChange.after);
+    }
+  } finally {
+    await pool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [[own.id, teammate.id, later.id, empty.id]]);
+  }
+});
+
+test('rating delta isolates the edited task from unrelated concurrent completions', async () => {
+  const { taskScoreChange } = await import('../src/lib/score.js');
+  const now = new Date('2026-11-10T12:00:00Z');
+  const other = { id: 'other', userId: first.id, done: true, doneAt: now,
+    createdAt: new Date('2026-11-01'), deadline: new Date('2026-11-11'), priority: 3, empty: false };
+  const result = taskScoreChange([], [other], 'later-task', first.id, now);
+  assert.ok(result.after > 50);
+  assert.equal(result.delta, 0);
+});

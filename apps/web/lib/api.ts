@@ -109,6 +109,7 @@ export type Counts = {
   unassigned: number;
   completed: number;
 };
+export type ScoreChange = { before: number; after: number; delta: number };
 export type ScoreEntry = {
   user: User;
   score: number;
@@ -234,7 +235,7 @@ export const api = {
         : json("POST", input),
     ),
   updateTask: (id: string, input: TaskInput) =>
-    request<{ task: Task }>(`/api/tasks/${id}`, json("PATCH", input)),
+    request<{ task: Task; scoreChange?: ScoreChange }>(`/api/tasks/${id}`, json("PATCH", input)),
   handoff: (id: string, to?: string) =>
     request<{ task: Task }>(`/api/tasks/${id}/handoff`, json("POST", { to })),
   deleteTask: (id: string) =>

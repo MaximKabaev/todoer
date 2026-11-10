@@ -30,6 +30,9 @@ test("scores follow the viewed person, refresh after completion, and capture def
   expect(after.me.doneThisWeek).toBe(before.me.doneThisWeek + 1);
   expect(after.me.score).toBeGreaterThan(before.me.score);
   await expect(card).toContainText(`${after.me.doneThisWeek} done this week`);
+  await expect(page.getByRole("status")).toContainText("Who’s a good boy? You are.");
+  await expect(page.getByRole("status")).toContainText(`+${after.me.score - before.me.score} Goodboy rating`);
+  await expect(page.getByRole("status")).toContainText(`${before.me.score} → ${after.me.score}`);
   await page.goto("/people/teammate");
   const other = page.getByRole("region", { name: "Teammate’s good boy score", exact: true });
   await expect(other).toBeVisible();
@@ -79,3 +82,31 @@ test("mock preserves explicit dates and defaults only on Now creation or Later p
     for (const id of ids) await request.delete(`/api/tasks/${id}`);
   }
 });
+
+
+for (const delta of [0, -2, undefined]) {
+  test(`completion rating handles ${delta === undefined ? "missing metadata" : delta}`, async ({ page }) => {
+    await page.request.post("/api/auth/login", { data: { username: "maxim", password: "todoer" } });
+    const { task } = await (await page.request.post("/api/tasks", { data: { title: `QA rating ${delta} ${Date.now()}` } })).json();
+    try {
+      await page.goto("/my");
+      await page.route(`**/api/tasks/${task.id}`, async (route) => {
+        if (route.request().method() !== "PATCH") return route.continue();
+        const response = await route.fetch();
+        const body = await response.json();
+        if (delta === undefined) delete body.scoreChange;
+        else body.scoreChange = { before: 80, after: 80 + delta, delta };
+        await route.fulfill({ response, json: body });
+      });
+      await page.locator(`[data-task-id="${task.id}"]`).getByRole("button", { name: `Finish ${task.title}`, exact: true }).click();
+      await expect(page.getByRole("status")).toContainText("Who’s a good boy? You are.");
+      if (delta === undefined) await expect(page.locator(".rating-reward")).toHaveCount(0);
+      else await expect(page.locator(".rating-reward")).toContainText(delta === 0 ? "Goodboy rating unchanged" : "-2 Goodboy rating");
+      await page.getByRole("button", { name: "Undo", exact: true }).click();
+      await expect.poll(async () => (await (await page.request.get(`/api/tasks/${task.id}`)).json()).task.done).toBe(false);
+    } finally {
+      await page.unroute(`**/api/tasks/${task.id}`);
+      await page.request.delete(`/api/tasks/${task.id}`);
+    }
+  });
+}

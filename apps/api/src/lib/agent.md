@@ -198,3 +198,5 @@ When reporting a task you created or found, include its `webUrl` as a clickable 
 for example `[Task title](webUrl)`. This opens the task directly in the private web app.
 `webUrl` is included on every task when the server's `PUBLIC_WEB_URL` is configured;
 when it is absent, the field is omitted. Do not invent a URL from the API origin.
+
+Completing an open task with `PATCH /api/tasks/:id {done:true}` also returns `scoreChange: {before, after, delta}` for the authenticated user's Good boy rating. The comparison holds all other tasks and the scoring time constant, isolating this task edit's contribution; it is not a fixed points award. Zero and negative deltas are valid. Already-completed tasks, reopening, and unrelated edits omit this field. Completing a teammate-only or Later task does not raise your own rating.

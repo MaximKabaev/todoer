@@ -6,6 +6,7 @@ import {
   ApiError,
   type Counts,
   type Score,
+  type ScoreChange,
   type CurrentUser,
   scopeKey,
   workspaceKey,
@@ -180,14 +181,15 @@ export function useWorkspace(
       );
     queues.current.set(task.id, operation);
     try {
-      const { task: saved } = await operation;
+      const result: { task: Task; scoreChange?: ScoreChange } = await operation;
+      const { task: saved } = result;
       if (versions.current.get(task.id) === version) {
         await apply(task.id, () => saved);
         await refreshMeta();
       }
       if (task.list === "later" && saved.list === "now")
         toast({ message: "Moved to Now" });
-      return saved;
+      return result;
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
         await forget(task.id);

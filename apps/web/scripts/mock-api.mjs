@@ -615,8 +615,12 @@ const server = createServer(async (req, res) => {
         const { data } = await body(req);
         if (data.projectId && !projects.some((p) => p.id === data.projectId))
           return send({ error: "unknown_project" }, 400);
+        const completing = data.done === true && !task.done;
+        const now = Date.now();
+        const before = completing ? scoreEntry(tasks, me, now).score : null;
         patch(task, data, me);
-        return send({ task: shape(task) });
+        const after = completing ? scoreEntry(tasks, me, Math.max(now, Date.parse(task.doneAt))).score : null;
+        return send({ task: shape(task), ...(completing ? { scoreChange: { before, after, delta: after - before } } : {}) });
       }
       if (method === "DELETE") {
         task.attachments.forEach((a) => files.delete(a.id));
