@@ -118,6 +118,7 @@ export type ScoreEntry = {
   trend: number;
   doneThisWeek: number;
   overdue: number;
+  afkPenaltyThisWeek?: number;
 };
 export type Score = {
   me: ScoreEntry;

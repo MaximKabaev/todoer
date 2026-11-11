@@ -196,7 +196,7 @@ Unknown body fields are ignored. Everything is camelCase.
 
 ### Good boy score
 - `GET /api/score` → `{ me: Entry, teammate: Entry | null, leader: "me" | "teammate" | null, lead: number }`
-  where `Entry = { user, score (0-100 integer), label, trend, doneThisWeek, overdue }`. Not scoped by project.
+  where `Entry = { user, score (0-100 integer), label, trend, doneThisWeek, overdue, afkPenaltyThisWeek }`. Not scoped by project.
   `leader` is null when tied; `lead` is the integer point gap.
 - See the **Good boy score** section for how it is computed.
 
@@ -306,7 +306,16 @@ editing a due date is always reflected.
 - **Label** by score: ≥90 Best boy ever, ≥75 Very good boy, ≥60 Good boy, ≥45 Doing okay,
   ≥30 Naughty, otherwise Bad boy.
 - `trend` = score now minus the score computed as of 7 days ago; `doneThisWeek` = tasks completed in the
-  last 7 days; `overdue` = open assigned Now tasks past their deadline.
+  last 7 days; `overdue` = open assigned Now tasks past their deadline; `afkPenaltyThisWeek` = AFK points
+  taken in the last 7 days.
+- **AFK penalty**: at the end of every day (in `SCORE_TIMEZONE`), a user who had open tasks assigned in
+  Now at the end of that day but completed none of their assigned tasks during it loses **5 points**,
+  every such day in a row. Days with nothing assigned never count. Penalties are stored in `afk_days`
+  (one row per user per finished day, decided once, never retroactive; counting starts the day the
+  feature shipped) and subtract directly from the running score at the moment the day ended (floored
+  at 0); later good work recovers it as usual. Both users are emailed "AFK penalty applied" (the
+  penalized user with a nudge, the other as news) with the current scores, if they have an email and
+  notifications on. The API process checks every minute.
 - **Emails**: a digest that contains a task completion ends with a "Good boy score" block: each
   person's score and label, the net change across the batch, and who leads. Edits and reopening alone
   carry no score block.

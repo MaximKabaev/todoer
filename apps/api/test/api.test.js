@@ -1010,3 +1010,60 @@ test('Later assignments email each assignee once, including self-claims and auto
     }
   });
 });
+
+test('AFK penalty: -5 for each finished day with open tasks and no completion, announced to both people', async () => {
+  const { applyAfkPenalties, sendAfkEmails } = await import('../src/lib/afk.js');
+  const DAY = 86400000, T0 = Date.now();
+  const at = (days) => new Date(T0 + days * DAY);
+  await pool.query('DELETE FROM tasks'); await pool.query('DELETE FROM afk_days');
+  // The first run only records a baseline, so history is never penalized.
+  assert.deepEqual(await applyAfkPenalties(at(-3)), []);
+  const base = await board();
+  const task = await create({ title: 'QA afk', assignees: ['me'], dueDate: dateFromToday(30) }); // not overdue: isolates AFK
+  await backdate(task.id, 5);
+  // Two finished days with an open task and nothing completed: two penalties for Maxim. German has
+  // nothing assigned, so his empty days never count.
+  const applied = await applyAfkPenalties(at(-1));
+  assert.deepEqual(applied.map((entry) => [entry.userId, entry.points]), [[first.id, 5], [first.id, 5]]);
+  assert.deepEqual(await applyAfkPenalties(at(-1)), []); // each day is decided once
+  let state = await board();
+  assert.equal(state.me.score, base.me.score - 10);
+  assert.equal(state.teammate.score, base.teammate.score);
+  assert.equal(state.me.afkPenaltyThisWeek, 10);
+  assert.equal(state.teammate.afkPenaltyThisWeek, 0);
+
+  const outbox = [];
+  const send = async (message) => { outbox.push(message); };
+  await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>', PUBLIC_WEB_URL: 'https://todo.example.com' }, async () => {
+    await api('patch', '/api/me').send({ email: 'maxim.afk@example.com' }).expect(200);
+    await api('patch', '/api/me', secondToken).send({ email: 'partner.afk@example.com' }).expect(200);
+    assert.equal(await sendAfkEmails({ send, now: at(-1) }), 4); // 2 days x 2 recipients
+    assert.equal(await sendAfkEmails({ send, now: at(-1) }), 0); // never twice
+    const mine = outbox.filter((mail) => mail.to === 'maxim.afk@example.com');
+    const theirs = outbox.filter((mail) => mail.to === 'partner.afk@example.com');
+    assert.equal(mine.length, 2); assert.equal(theirs.length, 2);
+    assert.equal(mine[0].subject, 'AFK penalty applied: −5 good boy points');
+    assert.match(mine[0].text, /You completed no tasks on .* while you had 1 open task, so 5 points were taken\./);
+    assert.match(mine[1].text, /That's 2 AFK days in a row\./);
+    assert.match(mine[1].text, /Complete a task today to avoid another one\./);
+    assert.equal(theirs[0].subject, 'Maxim Test got an AFK penalty (−5)');
+    assert.match(theirs[0].text, /Teammate Test \(you\): \d+ · /);
+    assert.notEqual(mine[0].idempotencyKey, mine[1].idempotencyKey);
+    await api('patch', '/api/me').send({ email: null }).expect(200);
+    await api('patch', '/api/me', secondToken).send({ email: null }).expect(200);
+  });
+
+  // Completing a task stops it: yesterday (still open at its end) is penalized, today is not.
+  await patch(task.id, { done: true });
+  const later = await applyAfkPenalties(at(1));
+  assert.deepEqual(later.map((entry) => [entry.userId, entry.day]), [[first.id, dateFromToday(-1)]]);
+  const { rows } = await pool.query("SELECT points FROM afk_days WHERE user_id = $1 AND day = $2::date", [first.id, dateFromToday(0)]);
+  assert.deepEqual(rows, [{ points: 0 }]);
+  await pool.query('DELETE FROM afk_days');
+});
+
+test('AFK penalties fold into the score as direct deductions, floored at 0', () => {
+  assert.equal(foldScore([{ key: 'p', time: 1, penalty: 5 }]), 45);
+  assert.equal(foldScore([{ key: 'a', time: 1, weight: 1, grade: 100 }, { key: 'p', time: 2, penalty: 5 }]), 53);
+  assert.equal(foldScore(Array.from({ length: 20 }, (_, i) => ({ key: `p${i}`, time: i, penalty: 5 }))), 0);
+});

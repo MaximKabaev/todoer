@@ -15,6 +15,7 @@ export const SCORE = {
   quickMs: 10 * 60 * 1000, // tasks created and finished this fast barely count
   quickFactor: 0.25,
   trendDays: 7,
+  afkPoints: 5, // taken at the end of each day with open tasks and no completion
 };
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -40,11 +41,13 @@ export const gradeDone = (lateDays) => (lateDays <= 0 ? 100 : Math.max(30, 90 - 
 export const gradeOpen = (lateDays) => Math.max(0, 60 - 10 * lateDays);
 const lateDaysAt = (time, deadline) => (time <= deadline ? 0 : Math.ceil((time - deadline) / DAY));
 
-// Fold events [{ time, grade, weight, key }] into a 0-100 integer score.
+// Fold events [{ time, grade, weight, key }] into a 0-100 integer score. AFK penalty events
+// ({ time, penalty, key }) subtract points directly, floored at 0.
 export function foldScore(events) {
   let weightSum = SCORE.priorWeight;
   let score = SCORE.priorScore;
   for (const event of [...events].sort((a, b) => a.time - b.time || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))) {
+    if (event.penalty) { score = Math.max(0, score - event.penalty); continue; }
     if (event.weight <= 0) continue;
     weightSum = Math.min(weightSum + event.weight, SCORE.maxWeight);
     score += (event.weight / weightSum) * (event.grade - score);
@@ -57,7 +60,12 @@ export function foldScore(events) {
 export function scoreFor(rows, userId, asOf = new Date()) {
   const events = [];
   for (const row of rows) {
-    if (row.userId !== userId || row.createdAt > asOf) continue;
+    if (row.userId !== userId) continue;
+    if (row.kind === 'afk') {
+      if (row.at <= asOf) events.push({ key: row.id, time: row.at, penalty: row.points });
+      continue;
+    }
+    if (row.createdAt > asOf) continue;
     const done = row.done && row.doneAt <= asOf;
     let weight = (1 + 0.5 * row.priority) * (row.empty ? 0 : 1);
     if (done) {
@@ -71,13 +79,17 @@ export function scoreFor(rows, userId, asOf = new Date()) {
 }
 
 // Every task that is in Now and assigned, with its deadline: the start of the day after its due
-// date (or after created + 7 days when it has none), in the score timezone.
+// date (or after created + 7 days when it has none), in the score timezone. Unless filtered to one
+// task, AFK penalties are appended as { kind: 'afk', userId, at, points } rows.
 export async function loadScoreRows(db = pool, taskId = null) {
   const { rows } = await db.query(`SELECT t.id, a.user_id AS "userId", t.done, t.done_at AS "doneAt", t.created_at AS "createdAt",
     t.priority, (btrim(t.title) = '' AND btrim(t.notes) = '') AS empty,
     ((COALESCE(t.due_date, (t.created_at AT TIME ZONE $1)::date + ${SCORE.defaultDays}) + 1)::timestamp AT TIME ZONE $1) AS deadline
     FROM tasks t JOIN task_assignees a ON a.task_id = t.id WHERE t.list = 'now' AND ($2::uuid IS NULL OR t.id = $2)`, [scoreTimezone(), taskId]);
-  return rows;
+  if (taskId) return rows;
+  const { rows: penalties } = await db.query(`SELECT 'afk' AS kind, 'afk:' || user_id || ':' || day AS id, user_id AS "userId",
+    applied_at AS at, points FROM afk_days WHERE points > 0`);
+  return [...rows, ...penalties];
 }
 
 // { [userId]: score } right now; used to report score changes in emails.
@@ -94,7 +106,8 @@ export async function scoreboard(db, user, teammate, now = new Date()) {
   const entry = (person) => {
     if (!person) return null;
     const score = scoreFor(rows, person.id, now);
-    const mine = rows.filter((row) => row.userId === person.id);
+    const mine = rows.filter((row) => row.userId === person.id && row.kind !== 'afk');
+    const penalties = rows.filter((row) => row.userId === person.id && row.kind === 'afk' && row.at <= now);
     return {
       user: users.find((candidate) => candidate.id === person.id),
       score,
@@ -102,6 +115,7 @@ export async function scoreboard(db, user, teammate, now = new Date()) {
       trend: score - scoreFor(rows, person.id, weekAgo),
       doneThisWeek: mine.filter((row) => row.done && row.doneAt > weekAgo && row.doneAt <= now).length,
       overdue: mine.filter((row) => !row.done && row.deadline < now).length,
+      afkPenaltyThisWeek: penalties.filter((row) => row.at > weekAgo).reduce((sum, row) => sum + row.points, 0),
     };
   };
   const me = entry(user);

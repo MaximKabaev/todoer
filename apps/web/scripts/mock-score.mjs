@@ -40,5 +40,6 @@ export function scoreEntry(tasks, user, now = Date.now()) {
     trend: score - scoreAt(scored, now - 7 * DAY),
     doneThisWeek: scored.filter((t) => t.done && t.doneAt && Date.parse(t.doneAt) >= now - 7 * DAY && Date.parse(t.doneAt) <= now).length,
     overdue: scored.filter((t) => !t.done && now > deadline(t)).length,
+    afkPenaltyThisWeek: 0, // the mock has no daily AFK worker
   };
 }

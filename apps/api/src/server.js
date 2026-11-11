@@ -1,5 +1,6 @@
 import { app } from './app.js';
 import { pool } from './db.js';
+import { startAfkWorker } from './lib/afk.js';
 import { startLaterReviewWorker } from './lib/later-review.js';
 import { startNotificationWorker } from './lib/notifications.js';
 
@@ -9,11 +10,13 @@ const port = Number(process.env.API_PORT || 4000);
 const host = process.env.API_HOST || '127.0.0.1';
 const stopNotifications = startNotificationWorker();
 const stopLaterReview = startLaterReviewWorker();
+const stopAfk = startAfkWorker();
 const server = app.listen(port, host, () => console.log(`todoer API listening on http://${host.includes(':') ? `[${host}]` : host}:${port}`));
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.once(signal, () => {
     stopNotifications();
     stopLaterReview();
+    stopAfk();
     const timeout = setTimeout(() => process.exit(1), 10000).unref();
     server.close(async () => {
       await pool.end();
