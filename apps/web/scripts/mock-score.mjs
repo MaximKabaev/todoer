@@ -31,12 +31,16 @@ export function scoreAt(tasks, asOf) {
   }
   return Math.round(s);
 }
-export function scoreEntry(tasks, user, now = Date.now()) {
+/** @param {string | null} githubLogin */
+export function scoreEntry(tasks, user, now = Date.now(), githubLogin = null) {
   const scored = tasks.filter((t) => t.list === "now" && t.assignees.some((u) => u.id === user.id));
   const score = scoreAt(scored, now);
   const label = score >= 90 ? "Best boy ever" : score >= 75 ? "Very good boy" : score >= 60 ? "Good boy" : score >= 45 ? "Doing okay" : score >= 30 ? "Naughty" : "Bad boy";
+  const day = new Date(now).toISOString().slice(0, 10);
+  const completed = scored.filter((t) => t.done && t.doneAt?.slice(0, 10) === day && Date.parse(t.doneAt) <= now).length;
   return {
     user, score, label,
+    activity: { day, completed, commits: 0, merges: 0, active: completed > 0, atRisk: completed === 0 && scored.some((t) => !t.done), githubLinked: !!githubLogin },
     trend: score - scoreAt(scored, now - 7 * DAY),
     doneThisWeek: scored.filter((t) => t.done && t.doneAt && Date.parse(t.doneAt) >= now - 7 * DAY && Date.parse(t.doneAt) <= now).length,
     overdue: scored.filter((t) => !t.done && now > deadline(t)).length,

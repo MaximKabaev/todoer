@@ -22,8 +22,10 @@ const users = [
 const activeProjects = new Map(users.map((u) => [u.id, null]));
 const emails = new Map(users.map((u) => [u.id, `${u.username}@example.com`]));
 const emailNotifications = new Map(users.map((u) => [u.id, true]));
+const githubLogins = new Map(users.map((u) => [u.id, null]));
 const currentUser = (u) => ({
   ...u,
+  githubLogin: githubLogins.get(u.id),
   activeProjectId: activeProjects.get(u.id),
   email: emails.get(u.id),
   emailNotifications: emailNotifications.get(u.id),
@@ -461,6 +463,13 @@ const server = createServer(async (req, res) => {
         const { data } = await body(req);
         if (data.password && passwords.get(me.id) !== data.currentPassword)
           return send({ error: "incorrect_current_password" }, 400);
+        let githubLogin;
+        if (data.githubLogin !== undefined) {
+          if (data.githubLogin !== null && typeof data.githubLogin !== "string") return send({ error: "Enter a valid GitHub username" }, 400);
+          githubLogin = data.githubLogin?.trim() || null;
+          if (githubLogin && !/^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/.test(githubLogin)) return send({ error: "Enter a valid GitHub username" }, 400);
+          if (githubLogin && users.some((u) => u.id !== me.id && githubLogins.get(u.id)?.toLowerCase() === githubLogin.toLowerCase())) return send({ error: "That GitHub username is already linked" }, 409);
+        }
         let email;
         if (data.email !== undefined) {
           if (data.email !== null && typeof data.email !== "string")
@@ -490,6 +499,7 @@ const server = createServer(async (req, res) => {
             return send({ error: "unknown_project" }, 400);
           activeProjects.set(me.id, data.activeProjectId);
         }
+        if (data.githubLogin !== undefined) githubLogins.set(me.id, githubLogin);
         if (data.email !== undefined) emails.set(me.id, email);
         if (data.emailNotifications !== undefined)
           emailNotifications.set(me.id, data.emailNotifications);
@@ -505,9 +515,9 @@ const server = createServer(async (req, res) => {
     if (parts[1] === "users") return send({ users });
     if (parts[1] === "score" && method === "GET") {
       const now = Date.now();
-      const own = scoreEntry(tasks, me, now);
+      const own = scoreEntry(tasks, me, now, githubLogins.get(me.id));
       const otherUser = users.find((u) => u.id !== me.id);
-      const other = otherUser ? scoreEntry(tasks, otherUser, now) : null;
+      const other = otherUser ? scoreEntry(tasks, otherUser, now, githubLogins.get(otherUser.id)) : null;
       const difference = other ? own.score - other.score : 0;
       return send({ me: own, teammate: other, leader: difference > 0 ? "me" : difference < 0 ? "teammate" : null, lead: Math.abs(difference) });
     }

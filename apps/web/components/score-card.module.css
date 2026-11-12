@@ -1,4 +1,4 @@
-.slot { min-height: 132px; margin: 12px 0 0; }
+.slot { flex-shrink: 0; min-height: 132px; margin: 12px 0 0; }
 .card { min-height: 132px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 16px 18px; border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface); }
 .eyebrow { font-size: 10px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary); }
 .eyebrow span { font-weight: 400; letter-spacing: 0; text-transform: none; }
@@ -8,6 +8,13 @@
 .number strong { font-size: 34px; font-weight: 700; letter-spacing: -1.5px; }
 .number span { color: var(--secondary); font-size: 11px; margin-left: 3px; }
 .trend { display: flex; justify-content: flex-end; align-items: center; gap: 3px; font-size: 10px; color: var(--secondary); }
-.stats { grid-column: 1 / -1; border-top: 1px solid var(--line-strong); padding-top: 9px; font-size: 11px; color: var(--secondary); display: flex; gap: 14px; }
+.stats { grid-column: 1 / -1; border-top: 1px solid var(--line-strong); padding-top: 9px; font-size: 11px; color: var(--secondary); display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .overdue { color: var(--red); }
 @media (max-width: 420px) { .card { padding: 14px; gap: 8px; } .label { font-size: 21px; } .eyebrow { font-size: 9px; } .number strong { font-size: 31px; } }
+
+.activity { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.6; color: var(--secondary); margin-top: 3px; }
+.activity svg { flex-shrink: 0; margin-top: 3px; }
+.active { color: var(--green); }
+.atRisk { color: var(--orange); }
+.githubHint { grid-column: 1 / -1; color: var(--secondary); font-size: 11px; text-decoration: underline; text-underline-offset: 3px; width: fit-content; }
+.githubHint:hover { color: var(--text); }

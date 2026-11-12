@@ -3775,3 +3775,8 @@ kbd {
   .priority-heading.priority-2, .deadline-nudge { color: var(--orange); }
   .deadline-overdue { color: var(--red); }
 }
+
+.github-section .settings-section-title { margin-bottom: 16px; }
+.github-section .settings-section-title p { max-width: 390px; line-height: 1.6; }
+.github-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
+.github-actions > span { display: inline-flex; align-items: center; gap: 4px; overflow-wrap: anywhere; }

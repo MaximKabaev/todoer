@@ -15,6 +15,7 @@ export type User = {
   color: Color;
 };
 export type CurrentUser = User & {
+  githubLogin: string | null;
   activeProjectId: string | null;
   email?: string | null;
   emailNotifications?: boolean;
@@ -118,7 +119,16 @@ export type ScoreEntry = {
   trend: number;
   doneThisWeek: number;
   overdue: number;
-  afkPenaltyThisWeek?: number;
+  afkPenaltyThisWeek: number;
+  activity: {
+    day: string;
+    completed: number;
+    commits: number;
+    merges: number;
+    active: boolean;
+    atRisk: boolean;
+    githubLinked: boolean;
+  };
 };
 export type Score = {
   me: ScoreEntry;
@@ -211,6 +221,7 @@ export const api = {
   logout: () => request<{ ok: true }>("/api/auth/logout", json("POST")),
   me: () => request<{ user: CurrentUser; teammate: User }>("/api/me"),
   updateMe: (input: {
+    githubLogin?: string | null;
     activeProjectId?: string | null;
     email?: string | null;
     emailNotifications?: boolean;

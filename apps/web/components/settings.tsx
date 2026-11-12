@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   Check,
   Copy,
+  Github,
   KeyRound,
   LogOut,
   Plus,
@@ -30,6 +31,25 @@ export function Settings({
   const { mutate, cache } = useSWRConfig();
   const router = useRouter();
   const toast = useToast();
+  const [github, setGithub] = useState(user.githubLogin || "");
+  const [savedGithub, setSavedGithub] = useState(user.githubLogin || "");
+  const [githubBusy, setGithubBusy] = useState(false);
+  const [githubError, setGithubError] = useState("");
+  async function saveGithub(value: string) {
+    setGithubBusy(true);
+    setGithubError("");
+    try {
+      const { user: updated } = await api.updateMe({ githubLogin: value.trim() || null });
+      setGithub(updated.githubLogin || "");
+      setSavedGithub(updated.githubLogin || "");
+      await Promise.all([mutate("/api/me"), mutate("/api/score")]);
+      toast({ message: updated.githubLogin ? "GitHub connected." : "GitHub disconnected." });
+    } catch (err) {
+      setGithubError(err instanceof Error ? err.message : "Could not update GitHub.");
+    } finally {
+      setGithubBusy(false);
+    }
+  }
   const [name, setName] = useState(user.displayName);
   const [email, setEmail] = useState(user.email || "");
   const [savedEmail, setSavedEmail] = useState(user.email || "");
@@ -158,6 +178,28 @@ export function Settings({
           {busy ? "Saving…" : "Save changes"}
         </button>
       </form>
+      <div className="settings-divider" />
+      <section className="github-section" aria-labelledby="github-heading">
+        <div className="settings-section-title">
+          <span className="agent-icon"><Github size={19} aria-hidden="true" /></span>
+          <div>
+            <h3 id="github-heading">GitHub</h3>
+            <p id="github-help">Commits and merged PRs on any branch of connected repos count as activity for the daily AFK check.</p>
+          </div>
+        </div>
+        <form className="settings-form" onSubmit={(e) => { e.preventDefault(); void saveGithub(github); }}>
+          <label>
+            GitHub username
+            <input value={github} onChange={(e) => { setGithub(e.target.value); setGithubError(""); }} placeholder="your-github-username" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" aria-describedby={githubError ? "github-help github-error" : "github-help"} aria-invalid={!!githubError} disabled={githubBusy} />
+          </label>
+          <div className="github-actions">
+            <button className="secondary-button" disabled={githubBusy || github.trim() === savedGithub}>{githubBusy ? "Saving…" : "Save GitHub"}</button>
+            {savedGithub && <button type="button" className="text-button" disabled={githubBusy} onClick={() => void saveGithub("")}>Clear GitHub</button>}
+            {savedGithub && <span className="small muted"><Check size={13} aria-hidden="true" /> Connected as @{savedGithub}</span>}
+          </div>
+          {githubError && <p className="form-error" id="github-error" role="alert">{githubError}</p>}
+        </form>
+      </section>
       <div className="settings-divider" />
       <section className="email-section" aria-labelledby="email-heading">
         <div className="settings-section-title">

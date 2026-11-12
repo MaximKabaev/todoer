@@ -43,3 +43,18 @@ test("priority, the ten-minute boundary and capped evidence weight match the con
   assert.equal(scoreEntry(many, user, now).label, "Best boy ever");
   assert.equal(scoreEntry([{ ...done, list: "later" }, { ...done, assignees: [] }], user, now).score, 50);
 });
+
+test("mock activity tracks today's completions, open-task risk and GitHub link", () => {
+  assert.deepEqual(scoreEntry([task], user, now).activity, {
+    day: "2026-11-09", completed: 0, commits: 0, merges: 0,
+    active: false, atRisk: true, githubLinked: false,
+  });
+  const done = { ...task, done: true, doneAt: "2026-11-09T10:00:00Z" };
+  const active = scoreEntry([task, done], user, now, "maxim").activity;
+  assert.equal(active.completed, 1);
+  assert.equal(active.active, true);
+  assert.equal(active.atRisk, false);
+  assert.equal(active.githubLinked, true);
+  assert.equal(scoreEntry([], user, now).activity.atRisk, false);
+  assert.equal(scoreEntry([{ ...done, doneAt: "2026-11-08T10:00:00Z" }], user, now).activity.active, false);
+});
