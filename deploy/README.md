@@ -50,6 +50,19 @@ sudo systemctl restart todoer-api      # or todoer-web; web serves the existing 
 systemctl status todoer-api todoer-web
 ```
 
+## GitHub activity webhooks
+
+Pushes (any branch) and merged PRs in connected repos count as activity for the AFK penalty. The secret
+is `GITHUB_WEBHOOK_SECRET` in `apps/api/.env` (restart the API after changing it). To connect repos
+(idempotent; updates an existing todoer hook):
+
+```sh
+deploy/github-webhooks.sh MaximKabaev/todoer MaximKabaev/customs-ai
+```
+
+Check deliveries in the repo's Settings → Webhooks, or `gh api repos/OWNER/REPO/hooks`. People link their
+GitHub username in todoer Settings.
+
 ## Staging
 
 `deploy/staging.sh start|stop|status|migrate` runs the current checkout on http://localhost:3400

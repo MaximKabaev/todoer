@@ -25,7 +25,7 @@ Use JSON and `Content-Type: application/json` unless uploading. Responses use ca
 | POST /api/auth/login | `{username,password}`; username or email, case-insensitive | `{user}` + session cookie |
 | POST /api/auth/logout | None | `{ok:true}`; clears session |
 | GET /api/me | None | `{user,teammate}`; `user` includes your `email` and `emailNotifications` |
-| PATCH /api/me | `{displayName?,password?,currentPassword?,email?,emailNotifications?}`; currentPassword required to change password; `email: ""` or `null` clears it | `{user}` |
+| PATCH /api/me | `{displayName?,password?,currentPassword?,email?,emailNotifications?,githubLogin?}`; currentPassword required to change password; `email: ""` or `null` clears it; `githubLogin` links the user's GitHub account (`""`/`null` unlinks) | `{user}` |
 | GET /api/users | None | `{users:[User]}` |
 | GET /api/tokens | None | `{tokens:[{id,name,createdAt,lastUsedAt}]}`; yours only |
 | POST /api/tokens | `{name?}` | `201 {token:{id,name,createdAt},secret:"tdr_..."}` |
@@ -47,7 +47,7 @@ Use JSON and `Content-Type: application/json` unless uploading. Responses use ca
 | POST /api/tags | `{name,color?}` | `201 {tag}`, or `200 {tag}` if existing |
 | PATCH /api/tags/:id | `{name?,color?}` | `{tag}` |
 | DELETE /api/tags/:id | Confirm first; removes tag associations, keeps tasks | `{ok:true}` |
-| GET /api/score | None | `{me,teammate,leader,lead}`: each entry `{user,score,label,trend,doneThisWeek,overdue,afkPenaltyThisWeek}`. The 0-100 "good boy" score of how well each person handles assigned tasks (on-time completions raise it, overdue tasks lower it, and each day with open tasks but no completion costs 5 points) |
+| GET /api/score | None | `{me,teammate,leader,lead}`: each entry `{user,score,label,trend,doneThisWeek,overdue,afkPenaltyThisWeek,activity}`. The 0-100 "good boy" score of how well each person handles assigned tasks (on-time completions raise it, overdue tasks lower it, and each day with open tasks but no activity costs 5 points; activity = a completed task, commits pushed to any branch of a connected GitHub repo, or a merged PR). `activity` = `{day,completed,commits,merges,active,atRisk,githubLinked}` for today |
 | GET /api/counts | None | `{mine,mineCreated,mineFromTeammate,teammate,later,unassigned,completed}` |
 
 

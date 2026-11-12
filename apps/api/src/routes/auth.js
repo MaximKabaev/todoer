@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { pool, transaction } from '../db.js';
 import { authenticate, cookieName, cookieOptions, dummyPassword, meColumns, newToken, publicUser, sessionHash, cookieLifetime, tokenHash, userColumns } from '../auth.js';
 import { HttpError } from '../lib/errors.js';
+import { githubLoginPattern } from '../lib/github.js';
 import { id, z } from '../lib/validation.js';
 
 export const authRouter = Router();
@@ -54,7 +55,15 @@ authRouter.patch('/me', async (req, res) => {
     // "" or null clears the email.
     email: z.string().trim().max(320).nullable().optional().transform((value) => (value === '' ? null : value)),
     emailNotifications: z.boolean().optional(),
+    // "" or null unlinks GitHub. A leading @ or a profile URL is tolerated.
+    githubLogin: z.string().trim().max(200).nullable().optional()
+      .transform((value) => (value ? value.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/^@/, '').replace(/\/+$/, '') || null : value === undefined ? undefined : null)),
   }).parse(req.body);
+  if (body.githubLogin) {
+    if (!githubLoginPattern.test(body.githubLogin)) throw new HttpError(400, 'Enter a valid GitHub username');
+    const { rowCount } = await pool.query('SELECT 1 FROM users WHERE lower(github_login) = lower($1) AND id <> $2', [body.githubLogin, req.user.id]);
+    if (rowCount) throw new HttpError(409, 'That GitHub account is already linked to the other person');
+  }
   if (body.email) {
     if (!z.email().safeParse(body.email).success) throw new HttpError(400, 'Enter a valid email address');
     const { rowCount } = await pool.query('SELECT 1 FROM users WHERE lower(email) = lower($1) AND id <> $2', [body.email, req.user.id]);
@@ -70,10 +79,12 @@ authRouter.patch('/me', async (req, res) => {
     }
     const { rows } = await db.query(`UPDATE users SET display_name = COALESCE($2, display_name), password_hash = COALESCE($3, password_hash),
       active_project_id = CASE WHEN $4 THEN $5::uuid ELSE active_project_id END,
-      email = CASE WHEN $6 THEN $7 ELSE email END, email_notifications = COALESCE($8, email_notifications)
+      email = CASE WHEN $6 THEN $7 ELSE email END, email_notifications = COALESCE($8, email_notifications),
+      github_login = CASE WHEN $9 THEN $10 ELSE github_login END
       WHERE id = $1 RETURNING ${meColumns}`,
     [req.user.id, body.displayName, hash, body.activeProjectId !== undefined, body.activeProjectId ?? null,
-      body.email !== undefined, body.email ?? null, body.emailNotifications ?? null]);
+      body.email !== undefined, body.email ?? null, body.emailNotifications ?? null,
+      body.githubLogin !== undefined, body.githubLogin ?? null]);
     return rows[0];
   });
   res.json({ user });

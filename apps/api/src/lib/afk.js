@@ -3,13 +3,41 @@ import { dateFromToday, labelFor, SCORE, scoreSnapshot, scoreTimezone } from './
 import { notificationsConfigured, sendEmail } from './notifications.js';
 
 // AFK penalty: at the end of every day (in SCORE_TIMEZONE), anyone who had open tasks assigned in
-// Now but completed none of their assigned tasks that day loses SCORE.afkPoints. Days with nothing
+// Now but no activity that day (no assigned task completed, no commits pushed to any branch of a
+// connected GitHub repo, no PR merged) loses SCORE.afkPoints. Days with nothing
 // assigned never count, so one person's empty plate can't cost them. Both people get an email.
 // Penalties are stored (afk_days), so they never shift retroactively; each day is decided once.
 
 const addDays = (day, n) => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const pretty = (day) => new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+
+// What someone did on a calendar day (SCORE_TIMEZONE): open assigned Now tasks at the end of the day
+// (or now, if the day isn't over), tasks completed, and GitHub pushes/merges by their linked login.
+// Any completion, pushed commit (any branch) or merged PR makes the day active.
+export async function dayActivity(db, userId, day, now = new Date()) {
+  const { rows: [state] } = await db.query(`WITH bounds AS (
+      SELECT ($2::date)::timestamp AT TIME ZONE $3 AS starts, ($2::date + 1)::timestamp AT TIME ZONE $3 AS ends),
+    cutoff AS (SELECT starts, ends, least(ends, $4::timestamptz) AS until FROM bounds),
+    mine AS (SELECT t.* FROM tasks t JOIN task_assignees a ON a.task_id = t.id AND a.user_id = $1 WHERE t.list = 'now'),
+    gh AS (SELECT e.* FROM github_events e JOIN users u ON lower(u.github_login) = lower(e.github_login) AND u.id = $1, cutoff
+      WHERE e.at >= cutoff.starts AND e.at < cutoff.ends)
+    SELECT (SELECT ends FROM bounds) AS ends,
+      (SELECT count(*)::int FROM mine, cutoff WHERE mine.created_at < cutoff.until AND (NOT mine.done OR mine.done_at >= cutoff.until)) AS open,
+      (SELECT count(*)::int FROM mine, cutoff WHERE mine.done AND mine.done_at >= cutoff.starts AND mine.done_at < cutoff.ends) AS completed,
+      (SELECT coalesce(sum(commits), 0)::int FROM gh WHERE kind = 'push') AS commits,
+      (SELECT count(*)::int FROM gh WHERE kind = 'merge') AS merges,
+      EXISTS (SELECT 1 FROM users WHERE id = $1 AND github_login IS NOT NULL) AS "githubLinked"`,
+  [userId, day, scoreTimezone(), now]);
+  return { ...state, active: state.completed > 0 || state.commits > 0 || state.merges > 0 };
+}
+
+// Today's activity for the score card: atRisk means a penalty lands at midnight unless something happens.
+export async function todayActivity(db, userId, now = new Date()) {
+  const day = dateFromToday(0, now);
+  const { open, completed, commits, merges, active, githubLinked } = await dayActivity(db, userId, day, now);
+  return { day, completed, commits, merges, active, atRisk: open > 0 && !active, githubLinked };
+}
 
 // Decide every finished day not yet checked. The first run only records yesterday as a baseline,
 // so the feature starts counting from the day it ships rather than penalizing history.
@@ -27,15 +55,8 @@ export async function applyAfkPenalties(now = new Date(), db = pool) {
       continue;
     }
     for (let day = addDays(last, 1); day <= yesterday; day = addDays(day, 1)) {
-      // Open at the end of the day: created before it ended and not completed by then.
-      const { rows: [state] } = await db.query(`WITH bounds AS (
-          SELECT ($2::date)::timestamp AT TIME ZONE $3 AS starts, ($2::date + 1)::timestamp AT TIME ZONE $3 AS ends),
-        mine AS (SELECT t.* FROM tasks t JOIN task_assignees a ON a.task_id = t.id AND a.user_id = $1 WHERE t.list = 'now')
-        SELECT (SELECT ends FROM bounds) AS ends,
-          (SELECT count(*)::int FROM mine, bounds WHERE mine.created_at < bounds.ends AND (NOT mine.done OR mine.done_at >= bounds.ends)) AS open,
-          (SELECT count(*)::int FROM mine, bounds WHERE mine.done AND mine.done_at >= bounds.starts AND mine.done_at < bounds.ends) AS completed`,
-      [userId, day, tz]);
-      const points = state.open > 0 && state.completed === 0 ? SCORE.afkPoints : 0;
+      const state = await dayActivity(db, userId, day, now);
+      const points = state.open > 0 && !state.active ? SCORE.afkPoints : 0;
       const { rowCount } = await db.query(`INSERT INTO afk_days (user_id, day, points, applied_at) VALUES ($1, $2, $3, $4)
         ON CONFLICT DO NOTHING`, [userId, day, points, state.ends]);
       if (rowCount && points) applied.push({ userId, day, points, open: state.open });
@@ -57,9 +78,9 @@ export function composeAfkEmail({ penalized, recipient, day, points, open, strea
   const base = process.env.PUBLIC_WEB_URL?.replace(/\/+$/, '') || '';
   const who = you ? 'You' : penalized.display_name;
   const subject = you ? `AFK penalty applied: −${points} good boy points` : `${penalized.display_name} got an AFK penalty (−${points})`;
-  const reason = `${who} completed no tasks on ${pretty(day)} while ${you ? 'you' : 'they'} had ${open} open task${open === 1 ? '' : 's'}, so ${points} points were taken.`;
+  const reason = `${who} completed no tasks and pushed no commits on ${pretty(day)} while ${you ? 'you' : 'they'} had ${open} open task${open === 1 ? '' : 's'}, so ${points} points were taken.`;
   const streakLine = streakDays > 1 ? `That's ${streakDays} AFK days in a row.` : '';
-  const nudge = you ? 'Complete a task today to avoid another one.' : '';
+  const nudge = you ? 'Complete a task or push a commit today to avoid another one.' : '';
   const rows = people.map((person) => `${person.display_name}${person.id === recipient.id ? ' (you)' : ''}: ${scores[person.id]} · ${labelFor(scores[person.id])}`);
   const text = [`Hi ${recipient.display_name},`, '', reason, ...[streakLine, nudge].filter(Boolean), '', 'Good boy score', ...rows.map((row) => `  ${row}`),
     ...(base ? ['', `${base}/my`] : []), '', 'You get these because email notifications are on in todoer Settings.'].join('\n');

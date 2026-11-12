@@ -7,6 +7,7 @@ import { tasksRouter } from './routes/tasks.js';
 import { scoreRouter } from './routes/score.js';
 import { catalogRouter } from './routes/catalog.js';
 import { attachmentsRouter } from './routes/attachments.js';
+import { githubRouter } from './routes/github.js';
 
 const instructions = await readFile(new URL('./lib/agent.md', import.meta.url), 'utf8');
 export const app = express();
@@ -14,6 +15,8 @@ export const app = express();
 const trustedProxies = (process.env.TRUST_PROXY || '').split(',').map((entry) => entry.trim()).filter(Boolean);
 app.set('trust proxy', trustedProxies.length ? trustedProxies : 'loopback');
 app.disable('x-powered-by');
+// GitHub webhooks: own parser (large push payloads) that keeps the raw body for signature checks.
+app.use('/api/github', express.json({ limit: '25mb', verify: (req, res, buffer) => { req.rawBody = buffer; } }), githubRouter);
 app.use(express.json({ limit: '1mb' }));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get(['/api/agent', '/agent'], async (req, res) => {

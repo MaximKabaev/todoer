@@ -132,7 +132,7 @@ test('login is case-insensitive, cookie sessions expire and logout revokes them'
   assert.equal(session.forever, true);
   assert.notEqual(session.id, cookie.split(';')[0].split('=')[1]);
   const me = await browser.get('/api/me').expect(200);
-  assert.deepEqual(me.body, { user: { ...first, activeProjectId: null, email: null, emailNotifications: true }, teammate: second });
+  assert.deepEqual(me.body, { user: { ...first, activeProjectId: null, email: null, emailNotifications: true, githubLogin: null }, teammate: second });
   // Each app load renews the cookie so a browser session never lapses.
   const renewed = me.headers['set-cookie']?.[0] ?? '';
   assert.equal(renewed.split(';')[0], cookie.split(';')[0]);
@@ -193,7 +193,7 @@ test('remote clients cannot bypass the login rate limit by changing X-Forwarded-
 
 test('bearer tokens act as their owner, are hashed, and update last_used_at', async () => {
   const me = await api('get', '/api/me', secondToken).expect(200);
-  assert.deepEqual(me.body, { user: { ...second, activeProjectId: null, email: null, emailNotifications: true }, teammate: first });
+  assert.deepEqual(me.body, { user: { ...second, activeProjectId: null, email: null, emailNotifications: true, githubLogin: null }, teammate: first });
   const token = (await pool.query('SELECT token_hash, last_used_at FROM api_tokens WHERE user_id = $1', [second.id])).rows[0];
   assert.equal(token.token_hash, hash(secondToken));
   assert.ok(token.last_used_at);
@@ -1043,9 +1043,9 @@ test('AFK penalty: -5 for each finished day with open tasks and no completion, a
     const theirs = outbox.filter((mail) => mail.to === 'partner.afk@example.com');
     assert.equal(mine.length, 2); assert.equal(theirs.length, 2);
     assert.equal(mine[0].subject, 'AFK penalty applied: −5 good boy points');
-    assert.match(mine[0].text, /You completed no tasks on .* while you had 1 open task, so 5 points were taken\./);
+    assert.match(mine[0].text, /You completed no tasks and pushed no commits on .* while you had 1 open task, so 5 points were taken\./);
     assert.match(mine[1].text, /That's 2 AFK days in a row\./);
-    assert.match(mine[1].text, /Complete a task today to avoid another one\./);
+    assert.match(mine[1].text, /Complete a task or push a commit today to avoid another one\./);
     assert.equal(theirs[0].subject, 'Maxim Test got an AFK penalty (−5)');
     assert.match(theirs[0].text, /Teammate Test \(you\): \d+ · /);
     assert.notEqual(mine[0].idempotencyKey, mine[1].idempotencyKey);
@@ -1060,6 +1060,81 @@ test('AFK penalty: -5 for each finished day with open tasks and no completion, a
   const { rows } = await pool.query("SELECT points FROM afk_days WHERE user_id = $1 AND day = $2::date", [first.id, dateFromToday(0)]);
   assert.deepEqual(rows, [{ points: 0 }]);
   await pool.query('DELETE FROM afk_days');
+});
+
+test('GitHub: link a login in /api/me; signed webhooks record pushes (any branch) and merges', async () => {
+  const { createHmac } = await import('node:crypto');
+  // Linking: tolerant input, validated, unique across the two people, clearable.
+  let { body } = await api('patch', '/api/me').send({ githubLogin: 'https://github.com/Maxim-Test/' }).expect(200);
+  assert.equal(body.user.githubLogin, 'Maxim-Test');
+  await api('patch', '/api/me').send({ githubLogin: 'not a login!' }).expect(400);
+  await api('patch', '/api/me', secondToken).send({ githubLogin: '@maxim-test' }).expect(409);
+  ({ body } = await api('patch', '/api/me', secondToken).send({ githubLogin: '@Partner-Test' }).expect(200));
+  assert.equal(body.user.githubLogin, 'Partner-Test');
+  ({ body } = await api('get', '/api/me').expect(200));
+  assert.equal(body.user.githubLogin, 'Maxim-Test');
+  assert.equal(body.teammate.githubLogin, undefined); // private to each person
+
+  const secret = 'whsec_test';
+  const hook = (event, payload, { delivery = randomUUID(), sign = secret } = {}) => {
+    const raw = JSON.stringify(payload);
+    return request(app).post('/api/github/webhook').set('content-type', 'application/json').set('x-github-event', event)
+      .set('x-github-delivery', delivery).set('x-hub-signature-256', `sha256=${createHmac('sha256', sign).update(raw).digest('hex')}`).send(raw);
+  };
+  const push = (login, extra = {}) => ({ ref: 'refs/heads/feature/x', compare: 'https://github.com/o/r/compare/a...b', deleted: false,
+    commits: [{ id: 'a' }, { id: 'b' }], sender: { login, type: 'User' }, repository: { full_name: 'o/r' }, ...extra });
+  await pool.query('DELETE FROM github_events');
+  await withEnv({ GITHUB_WEBHOOK_SECRET: undefined }, () => hook('push', push('Maxim-Test')).expect(503));
+  await withEnv({ GITHUB_WEBHOOK_SECRET: secret }, async () => {
+    await hook('push', push('Maxim-Test'), { sign: 'wrong' }).expect(401);
+    assert.equal((await hook('ping', { zen: 'hi' }).expect(200)).body.pong, true);
+    const delivery = randomUUID();
+    assert.equal((await hook('push', push('maxim-test'), { delivery }).expect(200)).body.recorded, true);
+    assert.equal((await hook('push', push('maxim-test'), { delivery }).expect(200)).body.recorded, false); // redelivery
+    assert.equal((await hook('push', push('Maxim-Test', { deleted: true, commits: [] })).expect(200)).body.recorded, false);
+    assert.equal((await hook('push', push('dependabot[bot]', { sender: { login: 'dependabot[bot]', type: 'Bot' } })).expect(200)).body.recorded, false);
+    const merged = { action: 'closed', sender: { login: 'Partner-Test', type: 'User' }, repository: { full_name: 'o/r' },
+      pull_request: { merged: true, merged_by: { login: 'Partner-Test' }, base: { ref: 'main' }, commits: 3, html_url: 'https://github.com/o/r/pull/1' } };
+    assert.equal((await hook('pull_request', merged).expect(200)).body.recorded, true);
+    assert.equal((await hook('pull_request', { ...merged, pull_request: { ...merged.pull_request, merged: false } }).expect(200)).body.recorded, false);
+  });
+  const { rows } = await pool.query('SELECT kind, github_login, repo, ref, commits FROM github_events ORDER BY kind');
+  assert.deepEqual(rows, [{ kind: 'merge', github_login: 'Partner-Test', repo: 'o/r', ref: 'main', commits: 3 },
+    { kind: 'push', github_login: 'maxim-test', repo: 'o/r', ref: 'feature/x', commits: 2 }]);
+
+  // Today's activity on the scoreboard counts them (login match is case-insensitive).
+  await pool.query('DELETE FROM tasks');
+  await create({ title: 'QA gh open', assignees: ['me'] });
+  let state = await board();
+  assert.deepEqual(state.me.activity, { day: dateFromToday(0), completed: 0, commits: 2, merges: 0, active: true, atRisk: false, githubLinked: true });
+  assert.equal(state.teammate.activity.merges, 1);
+  await pool.query('DELETE FROM github_events');
+  state = await board();
+  assert.equal(state.me.activity.atRisk, true);
+  assert.equal(state.teammate.activity.atRisk, false); // nothing assigned
+  await api('patch', '/api/me').send({ githubLogin: '' }).expect(200);
+  assert.equal((await board()).me.activity.githubLinked, false);
+  await api('patch', '/api/me', secondToken).send({ githubLogin: null }).expect(200);
+  await pool.query('DELETE FROM tasks');
+});
+
+test('AFK: a day with GitHub commits but no completed task is not penalized', async () => {
+  const { applyAfkPenalties } = await import('../src/lib/afk.js');
+  const DAY = 86400000, T0 = Date.now();
+  await pool.query('DELETE FROM tasks'); await pool.query('DELETE FROM afk_days'); await pool.query('DELETE FROM github_events');
+  await api('patch', '/api/me').send({ githubLogin: 'Maxim-Test' }).expect(200);
+  await applyAfkPenalties(new Date(T0 - 2 * DAY)); // baseline: day -3, so days -2 and -1 are judged
+  const task = await create({ title: 'QA afk gh', assignees: ['me'], dueDate: dateFromToday(30) });
+  await backdate(task.id, 5);
+  // Pushed on the day two days ago (noon of that day); nothing yesterday.
+  await pool.query(`INSERT INTO github_events (delivery_id, kind, github_login, repo, commits, at)
+    VALUES ('d1', 'push', 'maxim-test', 'o/r', 1, (($1::date)::timestamp + interval '12 hours') AT TIME ZONE 'UTC')`, [dateFromToday(-2)]);
+  const applied = await applyAfkPenalties(new Date(T0));
+  assert.deepEqual(applied.map((entry) => [entry.userId, entry.day]), [[first.id, dateFromToday(-1)]]);
+  const { rows } = await pool.query("SELECT points FROM afk_days WHERE user_id = $1 AND day = $2::date", [first.id, dateFromToday(-2)]);
+  assert.deepEqual(rows, [{ points: 0 }]);
+  await api('patch', '/api/me').send({ githubLogin: null }).expect(200);
+  await pool.query('DELETE FROM afk_days'); await pool.query('DELETE FROM github_events'); await pool.query('DELETE FROM tasks');
 });
 
 test('AFK penalties fold into the score as direct deductions, floored at 0', () => {

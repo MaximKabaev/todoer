@@ -5,7 +5,7 @@ import { HttpError } from './lib/errors.js';
 
 export const userColumns = 'id, username, display_name AS "displayName", color';
 // Private fields only ever returned for the current user, never the teammate.
-export const meColumns = `${userColumns}, active_project_id AS "activeProjectId", email, email_notifications AS "emailNotifications"`;
+export const meColumns = `${userColumns}, active_project_id AS "activeProjectId", email, email_notifications AS "emailNotifications", github_login AS "githubLogin"`;
 export const publicUser = (user) => ({ id: user.id, username: user.username, displayName: user.displayName, color: user.color });
 export const tokenHash = (secret) => createHash('sha256').update(secret).digest('hex');
 export const newToken = () => `tdr_${randomBytes(32).toString('base64url')}`;

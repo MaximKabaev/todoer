@@ -135,8 +135,8 @@ Unknown body fields are ignored. Everything is camelCase.
 ### Auth
 - `POST /api/auth/login` `{ username, password }` → `{ user }` + sets cookie. `username` accepts the username or the user's email, case-insensitively.
 - `POST /api/auth/logout` → `{ ok: true }`
-- `GET /api/me` → `{ user, teammate }` (current `user` also includes `activeProjectId: uuid | null`, `email: string | null`, `emailNotifications: boolean`; the teammate's email is never returned anywhere)
-- `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null, email?: string | null, emailNotifications?: boolean }` → `{ user }` (password change requires currentPassword; email is trimmed, `""`/`null` clears it, invalid → 400, used by the other user → 409)
+- `GET /api/me` → `{ user, teammate }` (current `user` also includes `activeProjectId: uuid | null`, `email: string | null`, `emailNotifications: boolean`, `githubLogin: string | null`; the teammate's email and GitHub login are never returned anywhere)
+- `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null, email?: string | null, emailNotifications?: boolean, githubLogin?: string | null }` → `{ user }` (password change requires currentPassword; email is trimmed, `""`/`null` clears it, invalid → 400, used by the other user → 409; `githubLogin` accepts `name`, `@name` or a github.com profile URL, `""`/`null` unlinks, invalid → 400, linked to the other user → 409)
 - `GET /api/users` → `{ users: User[] }` (both users)
 - `GET /api/tokens` → `{ tokens: [{ id, name, createdAt, lastUsedAt }] }` (mine only)
 - `POST /api/tokens` `{ name? }` → `{ token: { id, name, createdAt }, secret: "tdr_..." }` (secret shown once)
@@ -196,7 +196,9 @@ Unknown body fields are ignored. Everything is camelCase.
 
 ### Good boy score
 - `GET /api/score` → `{ me: Entry, teammate: Entry | null, leader: "me" | "teammate" | null, lead: number }`
-  where `Entry = { user, score (0-100 integer), label, trend, doneThisWeek, overdue, afkPenaltyThisWeek }`. Not scoped by project.
+  where `Entry = { user, score (0-100 integer), label, trend, doneThisWeek, overdue, afkPenaltyThisWeek, activity }`. Not scoped by project.
+  `activity = { day, completed, commits, merges, active, atRisk, githubLinked }` is today's AFK check so far:
+  tasks completed, commits pushed and PRs merged today; `atRisk` = open assigned Now tasks and no activity yet.
   `leader` is null when tied; `lead` is the integer point gap.
 - See the **Good boy score** section for how it is computed.
 
@@ -309,13 +311,21 @@ editing a due date is always reflected.
   last 7 days; `overdue` = open assigned Now tasks past their deadline; `afkPenaltyThisWeek` = AFK points
   taken in the last 7 days.
 - **AFK penalty**: at the end of every day (in `SCORE_TIMEZONE`), a user who had open tasks assigned in
-  Now at the end of that day but completed none of their assigned tasks during it loses **5 points**,
-  every such day in a row. Days with nothing assigned never count. Penalties are stored in `afk_days`
+  Now at the end of that day but had **no activity** during it loses **5 points**, every such day in a
+  row. Activity = completing an assigned task, pushing commits to any branch of a connected GitHub repo,
+  or merging a PR there (see **GitHub activity**). Days with nothing assigned never count. Penalties are stored in `afk_days`
   (one row per user per finished day, decided once, never retroactive; counting starts the day the
   feature shipped) and subtract directly from the running score at the moment the day ended (floored
   at 0); later good work recovers it as usual. Both users are emailed "AFK penalty applied" (the
   penalized user with a nudge, the other as news) with the current scores, if they have an email and
   notifications on. The API process checks every minute.
+- **GitHub activity**: connected repos have a webhook (push + pull_request events, JSON, secret
+  `GITHUB_WEBHOOK_SECRET`) to `POST /api/github/webhook` (public, authenticated by the
+  `X-Hub-Signature-256` HMAC; 503 when the secret is unset, 401 on a bad signature). Pushes with at least
+  one commit (any branch; branch deletions ignored) and merged PRs are stored in `github_events`
+  (idempotent per `X-GitHub-Delivery`; bots ignored) with the authenticated sender's login and the
+  delivery time. They count for whoever has that login linked (`users.github_login`, set in Settings,
+  matched case-insensitively). Repos are connected by installing the webhook (`deploy/github-webhooks.sh`).
 - **Emails**: a digest that contains a task completion ends with a "Good boy score" block: each
   person's score and label, the net change across the batch, and who leads. Edits and reopening alone
   carry no score block.
