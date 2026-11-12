@@ -513,8 +513,12 @@ select:focus-visible {
   justify-content: space-between;
   gap: 15px;
 }
+.list-heading {
+  /* Shared by the title and its count badge, which is aligned to the title's cap height. */
+  --list-title-size: 34px;
+}
 .list-heading h1 {
-  font-size: 34px;
+  font-size: var(--list-title-size);
   line-height: 41px;
   font-weight: 730;
   letter-spacing: -1.1px;
@@ -2051,8 +2055,8 @@ kbd {
     padding-left: 25px;
     padding-right: 25px;
   }
-  .has-detail .list-heading h1 {
-    font-size: 29px;
+  .has-detail .list-heading {
+    --list-title-size: 29px;
   }
   .has-detail .toolbar-location {
     display: none;
@@ -2330,9 +2334,12 @@ kbd {
     width: 26px;
     height: 26px;
   }
+  .list-heading,
+  .has-detail .list-heading {
+    --list-title-size: 34px;
+  }
   .list-heading h1,
   .has-detail .list-heading h1 {
-    font-size: 34px;
     line-height: 41px;
     letter-spacing: -1px;
   }
@@ -3170,9 +3177,12 @@ kbd {
   .list-heading > p {
     display: none;
   }
+  .list-heading,
+  .has-detail .list-heading {
+    --list-title-size: 30px;
+  }
   .list-heading h1,
   .has-detail .list-heading h1 {
-    font-size: 30px;
     line-height: 38px;
   }
   .segmented-control {
@@ -3630,11 +3640,16 @@ kbd {
 /* Clear task hierarchy and explicit planning actions. */
 .list-title-group {
   display: flex;
-  align-items: center;
+  /* Baseline + cap-height offset centers the badge on the title's capitals in every font;
+     centering the boxes depends on each font's line metrics (off by a few px on Windows). */
+  align-items: baseline;
   gap: 12px;
   min-width: 0;
 }
-.list-title-group .list-total { flex-shrink: 0; }
+.list-title-group .list-total {
+  flex-shrink: 0;
+  transform: translateY(calc(0.5cap - 0.35 * var(--list-title-size)));
+}
 .detail-toolbar .detail-heading {
   margin: 0;
   font-size: 18px;
