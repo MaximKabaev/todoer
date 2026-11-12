@@ -40,8 +40,8 @@ Use JSON and `Content-Type: application/json` unless uploading. Responses use ca
 | DELETE /api/attachments/:id | Confirm with human first | `{ok:true}` |
 | GET /api/attachments/:id/file | Auth required | Image bytes |
 | GET /api/projects | None | `{projects:[Project & {openCount}]}` |
-| POST /api/projects | `{name?,color?,emoji?}`; defaults to New Project, blue | `201 {project}` |
-| PATCH /api/projects/:id | `{name?,color?,emoji?,position?}` | `{project}` |
+| POST /api/projects | `{name?,color?,emoji?,githubRepo?}`; defaults to New Project, blue | `201 {project}` |
+| PATCH /api/projects/:id | `{name?,color?,emoji?,position?,githubRepo?}`; `githubRepo` is `owner/name` (or a github.com URL), `""`/`null` clears | `{project}` |
 | DELETE /api/projects/:id | Confirm first; tasks keep existing, projectId becomes null | `{ok:true}` |
 | GET /api/tags | None | `{tags:[Tag & {count}]}`; count of open tasks |
 | POST /api/tags | `{name,color?}` | `201 {tag}`, or `200 {tag}` if existing |

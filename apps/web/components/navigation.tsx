@@ -250,14 +250,21 @@ function ProjectEditor({
   const [name, setName] = useState(project?.name || "");
   const [color, setColor] = useState<Color>(project?.color || "blue");
   const [emoji, setEmoji] = useState(project?.emoji || "");
+  const [githubRepo, setGithubRepo] = useState(project?.githubRepo || "");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const toast = useToast();
-  return (
-    <Modal title={project ? "Edit project" : "A new project"} onClose={onClose}>
+
+  return createPortal(
+    <Modal
+      className="project-editor"
+      title={project ? "Edit project" : "A new project"}
+      onClose={onClose}
+    >
       <form
         className="project-form"
         onSubmit={async (e) => {
           e.preventDefault();
+          setError("");
           setBusy(true);
           try {
             if (project)
@@ -265,20 +272,20 @@ function ProjectEditor({
                 name: name.trim() || "New Project",
                 color,
                 emoji: emoji || null,
+                githubRepo: githubRepo.trim() || null,
               });
             else
               await api.createProject({
                 name: name.trim() || "New Project",
                 color,
                 emoji: emoji || null,
+                githubRepo: githubRepo.trim() || null,
               });
             await onSave();
           } catch (err) {
-            toast({
-              message:
-                err instanceof Error ? err.message : "Could not save project.",
-              error: true,
-            });
+            setError(
+              err instanceof Error ? err.message : "Could not save project.",
+            );
             setBusy(false);
           }
         }}
@@ -304,6 +311,18 @@ function ProjectEditor({
             />
           </label>
         </div>
+        <label className="project-repo-field">
+          GitHub repository
+          <input
+            value={githubRepo}
+            onChange={(e) => setGithubRepo(e.target.value)}
+            placeholder="owner/name or GitHub URL"
+            autoCapitalize="none"
+            spellCheck={false}
+            aria-invalid={!!error}
+          />
+        </label>
+        {error && <p className="text-danger" role="alert">{error}</p>}
         <label>Color</label>
         <div className="color-picker">
           {colors.map((c) => (
@@ -331,7 +350,8 @@ function ProjectEditor({
           </button>
         </div>
       </form>
-    </Modal>
+    </Modal>,
+    document.body,
   );
 }
 
@@ -345,28 +365,30 @@ function InlineProject({
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("");
   const [color, setColor] = useState<Color>("blue");
+  const [githubRepo, setGithubRepo] = useState("");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const toast = useToast();
+
   return (
     <form
       className="inline-project-form"
       onSubmit={async (e) => {
         e.preventDefault();
+        setError("");
         setBusy(true);
         try {
           const { project } = await api.createProject({
             name: name.trim() || "New Project",
             emoji: emoji || null,
+            githubRepo: githubRepo.trim() || null,
             color,
           });
           await onSave(project);
           onClose();
         } catch (err) {
-          toast({
-            message:
-              err instanceof Error ? err.message : "Could not add project.",
-            error: true,
-          });
+          setError(
+              err instanceof Error ? err.message : "Could not save project.",
+            );
           setBusy(false);
         }
       }}
@@ -390,6 +412,18 @@ function InlineProject({
           }}
         />
       </div>
+      <label className="project-repo-field">
+        GitHub repository
+        <input
+          value={githubRepo}
+          onChange={(e) => setGithubRepo(e.target.value)}
+          placeholder="owner/name or GitHub URL"
+          autoCapitalize="none"
+          spellCheck={false}
+          aria-invalid={!!error}
+        />
+      </label>
+      {error && <p className="text-danger" role="alert">{error}</p>}
       <div className="color-picker">
         {colors.map((c) => (
           <button
@@ -414,6 +448,7 @@ function InlineProject({
     </form>
   );
 }
+
 
 export function ProjectSelector({
   projects,

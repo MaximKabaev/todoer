@@ -16,6 +16,7 @@ import {
   taskBackground,
 } from "@/lib/routes";
 import {
+  Github,
   ArrowDownUp,
   ArrowLeft,
   ArrowUpRight,
@@ -675,6 +676,18 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           </div>
         </header>
         <div className="main-content">
+          {activeProject?.githubRepo && (
+            <a
+              className="project-repo-link"
+              href={`https://github.com/${activeProject.githubRepo}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Github size={14} aria-hidden="true" />
+              {activeProject.githubRepo}
+              <ArrowUpRight size={13} aria-hidden="true" />
+            </a>
+          )}
           <div className="list-heading">
             <div className="heading-symbol">
               <Icon size={30} strokeWidth={1.8} />

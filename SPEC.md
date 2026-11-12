@@ -182,8 +182,11 @@ Unknown body fields are ignored. Everything is camelCase.
 
 ### Projects
 - `GET /api/projects` → `{ projects: (Project & { openCount: number })[] }`
-- `POST /api/projects` `{ name?, color?, emoji? }` → `201 { project }` (name defaults to "New Project")
-- `PATCH /api/projects/:id` → `{ project }`
+- `POST /api/projects` `{ name?, color?, emoji?, githubRepo? }` → `201 { project }` (name defaults to "New Project")
+- `PATCH /api/projects/:id` `{ name?, color?, emoji?, position?, githubRepo? }` → `{ project }`
+  (`githubRepo` = the project's GitHub repo, `"owner/name"` or a github.com URL, normalized to `owner/name`;
+  `""`/`null` clears; invalid → 400. Shown as a link on the project page. Informational: AFK activity
+  comes from whichever repos have the webhook, not from this field.)
 - `DELETE /api/projects/:id` → `{ ok: true }`
 
 ### Tags

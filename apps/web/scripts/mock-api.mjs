@@ -1,3 +1,15 @@
+function normalizeGithubRepo(value) {
+  if (value === null || value === undefined) return null;
+  const invalid = () => Object.assign(new Error("Invalid GitHub repository. Use owner/name or a GitHub URL."), { status: 400 });
+  if (typeof value !== "string" || value.trim().length > 300) throw invalid();
+  const repo = value.trim()
+    .replace(/^(https?:\/\/)?(www\.)?github\.com\//i, "")
+    .replace(/\/+$/, "")
+    .replace(/\.git$/i, "");
+  if (!repo) return null;
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}\/[A-Za-z0-9._-]{1,100}$/.test(repo)) throw invalid();
+  return repo;
+}
 // Development mock never queues or delivers email, including Later assignment digests.
 /** Development-only, in-memory SPEC.md API. Never imported by the app. */
 import { defaultDate, scoreEntry } from "./mock-score.mjs";
@@ -38,6 +50,7 @@ const projects = [
   {
     id: randomUUID(),
     name: "A better todoer",
+    githubRepo: "MaximKabaev/todoer",
     color: "purple",
     emoji: "✦",
     position: 3,
@@ -46,6 +59,7 @@ const projects = [
   {
     id: randomUUID(),
     name: "Home & life",
+    githubRepo: null,
     color: "teal",
     emoji: "⌂",
     position: 2,
@@ -54,6 +68,7 @@ const projects = [
   {
     id: randomUUID(),
     name: "Weekend plans",
+    githubRepo: null,
     color: "orange",
     emoji: "☀",
     position: 1,
@@ -692,6 +707,7 @@ const server = createServer(async (req, res) => {
           ...(isProject
             ? {
                 emoji: data.emoji || null,
+                githubRepo: normalizeGithubRepo(data.githubRepo),
                 position: Date.now(),
                 createdAt: stamp(),
               }
@@ -704,6 +720,7 @@ const server = createServer(async (req, res) => {
       if (!item) return send({ error: "not_found" }, 404);
       if (method === "PATCH") {
         const { data } = await body(req);
+        if (isProject && data.githubRepo !== undefined) item.githubRepo = normalizeGithubRepo(data.githubRepo);
         for (const key of [
           "name",
           "color",

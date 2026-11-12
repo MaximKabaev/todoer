@@ -1,30 +1,35 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { HttpError } from '../lib/errors.js';
-import { id, projectSchema, tagSchema } from '../lib/validation.js';
+import { githubRepoPattern, id, projectSchema, tagSchema } from '../lib/validation.js';
 
 export const catalogRouter = Router();
-const projectColumns = 'id, name, color, emoji, position, created_at AS "createdAt"';
+const parseProject = (body) => {
+  const project = projectSchema.parse(body);
+  if (project.githubRepo && !githubRepoPattern.test(project.githubRepo)) throw new HttpError(400, 'Enter a GitHub repo as owner/name');
+  return project;
+};
+const projectColumns = 'id, name, color, emoji, position, github_repo AS "githubRepo", created_at AS "createdAt"';
 
 catalogRouter.get('/projects', async (req, res) => {
-  const { rows } = await pool.query(`SELECT p.id, p.name, p.color, p.emoji, p.position, p.created_at AS "createdAt",
+  const { rows } = await pool.query(`SELECT p.id, p.name, p.color, p.emoji, p.position, p.github_repo AS "githubRepo", p.created_at AS "createdAt",
     (SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND NOT t.done) AS "openCount"
     FROM projects p ORDER BY p.position DESC, p.created_at DESC`);
   res.json({ projects: rows });
 });
 catalogRouter.post('/projects', async (req, res) => {
-  const body = projectSchema.parse(req.body ?? {});
-  const { rows } = await pool.query(`INSERT INTO projects (name, color, emoji, position) VALUES ($1,$2,$3,$4) RETURNING ${projectColumns}`, [body.name ?? 'New Project', body.color ?? 'blue', body.emoji ?? null, body.position ?? Date.now()]);
+  const body = parseProject(req.body ?? {});
+  const { rows } = await pool.query(`INSERT INTO projects (name, color, emoji, position, github_repo) VALUES ($1,$2,$3,$4,$5) RETURNING ${projectColumns}`, [body.name ?? 'New Project', body.color ?? 'blue', body.emoji ?? null, body.position ?? Date.now(), body.githubRepo ?? null]);
   res.status(201).json({ project: rows[0] });
 });
 catalogRouter.patch('/projects/:id', async (req, res) => {
-  const body = projectSchema.parse(req.body);
+  const body = parseProject(req.body);
   const values = [id.parse(req.params.id)];
   const assignments = [];
-  for (const field of ['name', 'color', 'emoji', 'position']) {
+  for (const [field, column] of [['name', 'name'], ['color', 'color'], ['emoji', 'emoji'], ['position', 'position'], ['githubRepo', 'github_repo']]) {
     if (body[field] === undefined) continue;
     values.push(body[field]);
-    assignments.push(`${field} = $${values.length}`);
+    assignments.push(`${column} = $${values.length}`);
   }
   const { rows } = await pool.query(`UPDATE projects SET ${assignments.length ? assignments.join(', ') : 'name = name'} WHERE id = $1 RETURNING ${projectColumns}`, values);
   if (!rows.length) throw new HttpError(404, 'Project not found');

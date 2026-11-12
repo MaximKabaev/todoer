@@ -22,9 +22,16 @@ export const taskPatchSchema = taskSchema.extend({
   addAssignees: identifiers.optional(), removeAssignees: identifiers.optional(),
   addTags: identifiers.optional(), removeTags: identifiers.optional(),
 });
+// A project's GitHub repo: "owner/name" or a github.com URL (optional .git or trailing slash),
+// normalized to "owner/name"; "" or null clears it.
+// Routes check githubRepoPattern themselves so the 400 carries a readable message.
+export const githubRepoPattern = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}\/[A-Za-z0-9._-]{1,100}$/;
+const githubRepo = z.string().trim().max(300).nullable()
+  .transform((value) => (value ? value.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/\/+$/, '').replace(/\.git$/i, '') || null : null));
 export const projectSchema = z.object({
   name: z.string().max(500).optional(), color: colors.optional(),
   emoji: z.string().max(100).nullable().optional(), position: z.number().finite().optional(),
+  githubRepo: githubRepo.optional(),
 });
 export const tagSchema = z.object({ name: identifier, color: colors.optional() });
 export const querySchema = z.object({

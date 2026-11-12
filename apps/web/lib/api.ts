@@ -25,6 +25,7 @@ export type Project = {
   name: string;
   color: Color;
   emoji: string | null;
+  githubRepo: string | null;
   position: number;
   createdAt: string;
   openCount?: number;
@@ -262,11 +263,11 @@ export const api = {
     request<{ ok: true }>(`/api/attachments/${id}`, json("DELETE")),
   attachmentUrl: (id: string) => `/api/attachments/${id}/file`,
   projects: () => request<{ projects: Project[] }>("/api/projects"),
-  createProject: (input: Partial<Pick<Project, "name" | "color" | "emoji">>) =>
+  createProject: (input: Partial<Pick<Project, "name" | "color" | "emoji" | "githubRepo">>) =>
     request<{ project: Project }>("/api/projects", json("POST", input)),
   updateProject: (
     id: string,
-    input: Partial<Pick<Project, "name" | "color" | "emoji" | "position">>,
+    input: Partial<Pick<Project, "name" | "color" | "emoji" | "position" | "githubRepo">>,
   ) =>
     request<{ project: Project }>(`/api/projects/${id}`, json("PATCH", input)),
   deleteProject: (id: string) =>

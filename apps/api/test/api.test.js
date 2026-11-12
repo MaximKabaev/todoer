@@ -470,6 +470,18 @@ test('projects support CRUD, open counts, filters, hydration, and null tasks on 
   assert.equal((await api('get', '/api/projects').expect(200)).body.projects.find((project) => project.id === id).openCount, 1);
   assert.equal((await api('get', '/api/tasks').query({ projectId: id, done: 'all' }).expect(200)).body.tasks.length, 2);
   await api('patch', `/api/projects/${id}`).send({ emoji: null }).expect(200);
+  // GitHub repo: URL or owner/name, normalized; invalid rejected with a readable error; "" clears.
+  assert.equal(initial.project.githubRepo, null);
+  let repo = await api('patch', `/api/projects/${id}`).send({ githubRepo: 'https://github.com/MaximKabaev/customs-ai.git' }).expect(200);
+  assert.equal(repo.body.project.githubRepo, 'MaximKabaev/customs-ai');
+  assert.equal((await api('get', '/api/projects').expect(200)).body.projects.find((project) => project.id === id).githubRepo, 'MaximKabaev/customs-ai');
+  assert.equal((await api('patch', `/api/projects/${id}`).send({ githubRepo: 'not a repo' }).expect(400)).body.error, 'Enter a GitHub repo as owner/name');
+  assert.equal((await api('patch', `/api/projects/${id}`).send({ name: 'Test Project' }).expect(200)).body.project.githubRepo, 'MaximKabaev/customs-ai');
+  repo = await api('patch', `/api/projects/${id}`).send({ githubRepo: '' }).expect(200);
+  assert.equal(repo.body.project.githubRepo, null);
+  const withRepo = await api('post', '/api/projects').send({ name: 'QA repo', githubRepo: 'o/r/' }).expect(201);
+  assert.equal(withRepo.body.project.githubRepo, 'o/r');
+  await api('delete', `/api/projects/${withRepo.body.project.id}`).expect(200);
   await api('delete', `/api/projects/${id}`).expect(200, { ok: true });
   const remaining = (await api('get', `/api/tasks/${open.id}`).expect(200)).body.task;
   assert.equal(remaining.projectId, null); assert.equal(remaining.project, null);

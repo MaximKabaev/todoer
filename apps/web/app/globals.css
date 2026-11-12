@@ -3780,3 +3780,18 @@ kbd {
 .github-section .settings-section-title p { max-width: 390px; line-height: 1.6; }
 .github-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
 .github-actions > span { display: inline-flex; align-items: center; gap: 4px; overflow-wrap: anywhere; }
+
+/* Render the project editor outside the transformed sidebar. */
+.project-editor { max-width: 370px; }
+.project-editor .project-name-fields label:first-child { flex: 0 0 58px; }
+.project-repo-field { display: flex; flex-direction: column; gap: 9px; margin-bottom: 22px; color: var(--secondary); font-size: 12px; }
+.project-repo-field input { width: 100%; min-width: 0; }
+.project-editor .color-picker { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; }
+.project-editor .color-picker button { width: 25px; height: 25px; border: 0; outline-offset: 3px; }
+.project-form-actions button { white-space: nowrap; }
+.project-repo-link { display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; overflow-wrap: anywhere; color: var(--secondary); font-size: 12px; margin-bottom: 16px; }
+.project-repo-link:hover { color: var(--text); }
+.project-repo-link svg { flex-shrink: 0; }
+@media (max-width: 360px) {
+  .project-editor .color-picker { grid-template-columns: repeat(5, 1fr); row-gap: 14px; }
+}
