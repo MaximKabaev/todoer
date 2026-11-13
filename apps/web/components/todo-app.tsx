@@ -676,17 +676,22 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           </div>
         </header>
         <div className="main-content">
-          {activeProject?.githubRepo && (
-            <a
-              className="project-repo-link"
-              href={`https://github.com/${activeProject.githubRepo}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Github size={14} aria-hidden="true" />
-              {activeProject.githubRepo}
-              <ArrowUpRight size={13} aria-hidden="true" />
-            </a>
+          {!!activeProject?.githubRepos.length && (
+            <div className="project-repo-links">
+              {activeProject.githubRepos.map((repo) => (
+                <a
+                  key={repo}
+                  className="project-repo-link"
+                  href={`https://github.com/${repo}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Github size={14} aria-hidden="true" />
+                  <span>{repo}</span>
+                  <ArrowUpRight size={13} aria-hidden="true" />
+                </a>
+              ))}
+            </div>
           )}
           <div className="list-heading">
             <div className="heading-symbol">

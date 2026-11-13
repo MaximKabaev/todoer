@@ -3801,10 +3801,16 @@ kbd {
 .project-editor .project-name-fields label:first-child { flex: 0 0 58px; }
 .project-repo-field { display: flex; flex-direction: column; gap: 9px; margin-bottom: 22px; color: var(--secondary); font-size: 12px; }
 .project-repo-field input { width: 100%; min-width: 0; }
+.project-repo-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.project-repo-remove { flex-shrink: 0; width: 30px; height: 34px; border-radius: 6px; color: var(--secondary); font-size: 20px; }
+.project-repo-remove:hover { background: var(--surface); color: var(--text); }
+.project-repo-add { display: flex; align-items: center; gap: 5px; align-self: flex-start; font-size: 12px; }
+.project-repo-links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 16px; min-width: 0; }
 .project-editor .color-picker { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; }
 .project-editor .color-picker button { width: 25px; height: 25px; border: 0; outline-offset: 3px; }
 .project-form-actions button { white-space: nowrap; }
-.project-repo-link { display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; overflow-wrap: anywhere; color: var(--secondary); font-size: 12px; margin-bottom: 16px; }
+.project-repo-link { display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; overflow-wrap: anywhere; color: var(--secondary); font-size: 12px; min-width: 0; }
+.project-repo-link span { min-width: 0; }
 .project-repo-link:hover { color: var(--text); }
 .project-repo-link svg { flex-shrink: 0; }
 @media (max-width: 360px) {

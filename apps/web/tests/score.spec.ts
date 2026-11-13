@@ -24,7 +24,13 @@ test("scores follow the viewed person, refresh after completion, and capture def
   const row = page.getByRole("group", { name: title, exact: true });
   await expect(row.locator(".deadline-nudge")).toHaveCount(0);
   const before = await (await page.request.get("/api/score")).json();
-  const refreshed = page.waitForResponse((r) => r.url().endsWith("/api/score") && r.request().method() === "GET");
+  // Capture may still have a score refresh in flight. Wait for the
+  // completion's updated count rather than accepting that earlier response.
+  const refreshed = page.waitForResponse(async (r) =>
+    r.url().endsWith("/api/score") &&
+    r.request().method() === "GET" &&
+    (await r.json()).me.doneThisWeek === before.me.doneThisWeek + 1
+  );
   await row.getByRole("button", { name: `Complete ${title}`, exact: true }).click();
   const after = await (await refreshed).json();
   expect(after.me.doneThisWeek).toBe(before.me.doneThisWeek + 1);

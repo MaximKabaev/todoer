@@ -236,6 +236,71 @@ export function Navigation({
     </aside>
   );
 }
+function ProjectRepositories({
+  rows,
+  onChange,
+  invalid,
+}: {
+  rows: string[];
+  onChange: (rows: string[]) => void;
+  invalid: boolean;
+}) {
+  const inputs = useRef<(HTMLInputElement | null)[]>([]);
+  const focusRow = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusRow.current !== null) {
+      inputs.current[focusRow.current]?.focus();
+      focusRow.current = null;
+    }
+  }, [rows]);
+
+  return (
+    <div className="project-repo-field">
+      <span>GitHub repositories</span>
+      {rows.map((repo, index) => (
+        <div className="project-repo-row" key={index}>
+          <input
+            ref={(node) => {
+              inputs.current[index] = node;
+            }}
+            aria-label={`GitHub repository ${index + 1}`}
+            value={repo}
+            onChange={(e) =>
+              onChange(rows.map((value, i) => i === index ? e.target.value : value))
+            }
+            placeholder="owner/name or GitHub URL"
+            autoCapitalize="none"
+            spellCheck={false}
+            aria-invalid={invalid}
+          />
+          <button
+            type="button"
+            className="project-repo-remove"
+            aria-label={`Remove repository ${repo.trim() || index + 1}`}
+            onClick={() => {
+              focusRow.current = Math.max(0, Math.min(index, rows.length - 2));
+              onChange(rows.length === 1 ? [""] : rows.filter((_, i) => i !== index));
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="text-button project-repo-add"
+        onClick={() => {
+          focusRow.current = rows.length;
+          onChange([...rows, ""]);
+        }}
+      >
+        <Plus size={13} aria-hidden="true" />
+        Add repository
+      </button>
+    </div>
+  );
+}
+
 function ProjectEditor({
   project,
   onClose,
@@ -250,7 +315,9 @@ function ProjectEditor({
   const [name, setName] = useState(project?.name || "");
   const [color, setColor] = useState<Color>(project?.color || "blue");
   const [emoji, setEmoji] = useState(project?.emoji || "");
-  const [githubRepo, setGithubRepo] = useState(project?.githubRepo || "");
+  const [githubRepos, setGithubRepos] = useState<string[]>(
+    project?.githubRepos.length ? project.githubRepos : [""],
+  );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -272,14 +339,14 @@ function ProjectEditor({
                 name: name.trim() || "New Project",
                 color,
                 emoji: emoji || null,
-                githubRepo: githubRepo.trim() || null,
+                githubRepos: githubRepos.map((repo) => repo.trim()).filter(Boolean),
               });
             else
               await api.createProject({
                 name: name.trim() || "New Project",
                 color,
                 emoji: emoji || null,
-                githubRepo: githubRepo.trim() || null,
+                githubRepos: githubRepos.map((repo) => repo.trim()).filter(Boolean),
               });
             await onSave();
           } catch (err) {
@@ -311,17 +378,11 @@ function ProjectEditor({
             />
           </label>
         </div>
-        <label className="project-repo-field">
-          GitHub repository
-          <input
-            value={githubRepo}
-            onChange={(e) => setGithubRepo(e.target.value)}
-            placeholder="owner/name or GitHub URL"
-            autoCapitalize="none"
-            spellCheck={false}
-            aria-invalid={!!error}
-          />
-        </label>
+        <ProjectRepositories
+          rows={githubRepos}
+          onChange={setGithubRepos}
+          invalid={!!error}
+        />
         {error && <p className="text-danger" role="alert">{error}</p>}
         <label>Color</label>
         <div className="color-picker">
@@ -365,7 +426,7 @@ function InlineProject({
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("");
   const [color, setColor] = useState<Color>("blue");
-  const [githubRepo, setGithubRepo] = useState("");
+  const [githubRepos, setGithubRepos] = useState<string[]>([""]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -380,7 +441,7 @@ function InlineProject({
           const { project } = await api.createProject({
             name: name.trim() || "New Project",
             emoji: emoji || null,
-            githubRepo: githubRepo.trim() || null,
+            githubRepos: githubRepos.map((repo) => repo.trim()).filter(Boolean),
             color,
           });
           await onSave(project);
@@ -412,17 +473,11 @@ function InlineProject({
           }}
         />
       </div>
-      <label className="project-repo-field">
-        GitHub repository
-        <input
-          value={githubRepo}
-          onChange={(e) => setGithubRepo(e.target.value)}
-          placeholder="owner/name or GitHub URL"
-          autoCapitalize="none"
-          spellCheck={false}
-          aria-invalid={!!error}
-        />
-      </label>
+      <ProjectRepositories
+        rows={githubRepos}
+        onChange={setGithubRepos}
+        invalid={!!error}
+      />
       {error && <p className="text-danger" role="alert">{error}</p>}
       <div className="color-picker">
         {colors.map((c) => (
