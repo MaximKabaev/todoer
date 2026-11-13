@@ -1,15 +1,29 @@
-function normalizeGithubRepo(value) {
-  if (value === null || value === undefined) return null;
-  const invalid = () => Object.assign(new Error("Invalid GitHub repository. Use owner/name or a GitHub URL."), { status: 400 });
-  if (typeof value !== "string" || value.trim().length > 300) throw invalid();
-  const repo = value.trim()
-    .replace(/^(https?:\/\/)?(www\.)?github\.com\//i, "")
-    .replace(/\/+$/, "")
-    .replace(/\.git$/i, "");
-  if (!repo) return null;
-  if (!/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}\/[A-Za-z0-9._-]{1,100}$/.test(repo)) throw invalid();
-  return repo;
+function normalizeGithubRepos(value) {
+  if (value === null || value === undefined) return [];
+  const invalid = (repo) => Object.assign(new Error(`Enter each GitHub repo as owner/name ("${String(repo).slice(0, 80)}" isn't)`), { status: 400 });
+  if (!Array.isArray(value) || value.length > 20) throw invalid(value);
+  const seen = new Set();
+  const repos = [];
+  for (const raw of value) {
+    if (typeof raw !== "string" || raw.length > 300) throw invalid(raw);
+    const repo = raw.trim()
+      .replace(/^(https?:\/\/)?(www\.)?github\.com\//i, "")
+      .replace(/\/+$/, "")
+      .replace(/\.git$/i, "");
+    if (!repo || seen.has(repo.toLowerCase())) continue;
+    if (!/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}\/[A-Za-z0-9._-]{1,100}$/.test(repo)) throw invalid(repo);
+    seen.add(repo.toLowerCase());
+    repos.push(repo);
+  }
+  return repos;
 }
+// Mirrors the API: githubRepos wins; the legacy githubRepo string sets a one-repo list.
+function repoInput(data) {
+  if (data.githubRepos !== undefined) return normalizeGithubRepos(data.githubRepos);
+  if (data.githubRepo !== undefined) return normalizeGithubRepos(data.githubRepo ? [data.githubRepo] : []);
+  return undefined;
+}
+const withRepos = (project, repos) => Object.assign(project, { githubRepos: repos, githubRepo: repos[0] ?? null });
 // Development mock never queues or delivers email, including Later assignment digests.
 /** Development-only, in-memory SPEC.md API. Never imported by the app. */
 import { defaultDate, scoreEntry } from "./mock-score.mjs";
@@ -50,6 +64,7 @@ const projects = [
   {
     id: randomUUID(),
     name: "A better todoer",
+    githubRepos: ["MaximKabaev/todoer"],
     githubRepo: "MaximKabaev/todoer",
     color: "purple",
     emoji: "✦",
@@ -59,6 +74,7 @@ const projects = [
   {
     id: randomUUID(),
     name: "Home & life",
+    githubRepos: [],
     githubRepo: null,
     color: "teal",
     emoji: "⌂",
@@ -68,6 +84,7 @@ const projects = [
   {
     id: randomUUID(),
     name: "Weekend plans",
+    githubRepos: [],
     githubRepo: null,
     color: "orange",
     emoji: "☀",
@@ -707,7 +724,7 @@ const server = createServer(async (req, res) => {
           ...(isProject
             ? {
                 emoji: data.emoji || null,
-                githubRepo: normalizeGithubRepo(data.githubRepo),
+                ...withRepos({}, repoInput(data) ?? []),
                 position: Date.now(),
                 createdAt: stamp(),
               }
@@ -720,7 +737,8 @@ const server = createServer(async (req, res) => {
       if (!item) return send({ error: "not_found" }, 404);
       if (method === "PATCH") {
         const { data } = await body(req);
-        if (isProject && data.githubRepo !== undefined) item.githubRepo = normalizeGithubRepo(data.githubRepo);
+        const repos = isProject ? repoInput(data) : undefined;
+        if (repos !== undefined) withRepos(item, repos);
         for (const key of [
           "name",
           "color",

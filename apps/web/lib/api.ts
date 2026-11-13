@@ -25,6 +25,9 @@ export type Project = {
   name: string;
   color: Color;
   emoji: string | null;
+  /** owner/name, in display order. A project can span several repos (e.g. backend + frontend). */
+  githubRepos: string[];
+  /** Legacy: first of githubRepos, or null. Prefer githubRepos. */
   githubRepo: string | null;
   position: number;
   createdAt: string;
@@ -263,11 +266,11 @@ export const api = {
     request<{ ok: true }>(`/api/attachments/${id}`, json("DELETE")),
   attachmentUrl: (id: string) => `/api/attachments/${id}/file`,
   projects: () => request<{ projects: Project[] }>("/api/projects"),
-  createProject: (input: Partial<Pick<Project, "name" | "color" | "emoji" | "githubRepo">>) =>
+  createProject: (input: Partial<Pick<Project, "name" | "color" | "emoji" | "githubRepos">>) =>
     request<{ project: Project }>("/api/projects", json("POST", input)),
   updateProject: (
     id: string,
-    input: Partial<Pick<Project, "name" | "color" | "emoji" | "position" | "githubRepo">>,
+    input: Partial<Pick<Project, "name" | "color" | "emoji" | "position" | "githubRepos">>,
   ) =>
     request<{ project: Project }>(`/api/projects/${id}`, json("PATCH", input)),
   deleteProject: (id: string) =>

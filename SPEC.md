@@ -66,7 +66,7 @@ SPEC.md               this file
 | createdAt / updatedAt | timestamptz | |
 
 ### Project
-`id, name, color (one of: blue, purple, pink, red, orange, yellow, green, teal, gray), emoji (nullable text), position, createdAt`.
+`id, name, color (one of: blue, purple, pink, red, orange, yellow, green, teal, gray), emoji (nullable text), position, githubRepos (string[], `owner/name`; `githubRepo` = first or null), createdAt`.
 Projects are shared. Deleting a project sets its tasks' `projectId` to null.
 
 ### Tag
@@ -182,11 +182,14 @@ Unknown body fields are ignored. Everything is camelCase.
 
 ### Projects
 - `GET /api/projects` → `{ projects: (Project & { openCount: number })[] }`
-- `POST /api/projects` `{ name?, color?, emoji?, githubRepo? }` → `201 { project }` (name defaults to "New Project")
-- `PATCH /api/projects/:id` `{ name?, color?, emoji?, position?, githubRepo? }` → `{ project }`
-  (`githubRepo` = the project's GitHub repo, `"owner/name"` or a github.com URL, normalized to `owner/name`;
-  `""`/`null` clears; invalid → 400. Shown as a link on the project page. Informational: AFK activity
-  comes from whichever repos have the webhook, not from this field.)
+- `POST /api/projects` `{ name?, color?, emoji?, githubRepos? }` → `201 { project }` (name defaults to "New Project")
+- `PATCH /api/projects/:id` `{ name?, color?, emoji?, position?, githubRepos? }` → `{ project }`
+  (`githubRepos` = the project's GitHub repos, so a project split across repos (e.g. backend + frontend) lists
+  them all. Each entry is `"owner/name"` or a github.com URL, normalized to `owner/name`; blank entries are dropped,
+  case-insensitive duplicates collapse, order is kept; `[]`/`null` clears; any invalid entry → 400. Shown as links on
+  the project page. Informational: AFK activity comes from whichever repos have the webhook, not from this field.
+  Legacy: `githubRepo` (a single string) is still accepted and sets a one-repo list; responses also carry
+  `githubRepo` = the first repo or `null`.)
 - `DELETE /api/projects/:id` → `{ ok: true }`
 
 ### Tags

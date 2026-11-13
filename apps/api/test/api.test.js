@@ -470,18 +470,30 @@ test('projects support CRUD, open counts, filters, hydration, and null tasks on 
   assert.equal((await api('get', '/api/projects').expect(200)).body.projects.find((project) => project.id === id).openCount, 1);
   assert.equal((await api('get', '/api/tasks').query({ projectId: id, done: 'all' }).expect(200)).body.tasks.length, 2);
   await api('patch', `/api/projects/${id}`).send({ emoji: null }).expect(200);
-  // GitHub repo: URL or owner/name, normalized; invalid rejected with a readable error; "" clears.
+  // GitHub repos: URL or owner/name, normalized, deduped; invalid rejected with a readable error; [] clears.
+  assert.deepEqual(initial.project.githubRepos, []);
   assert.equal(initial.project.githubRepo, null);
-  let repo = await api('patch', `/api/projects/${id}`).send({ githubRepo: 'https://github.com/MaximKabaev/customs-ai.git' }).expect(200);
+  let repo = await api('patch', `/api/projects/${id}`).send({ githubRepos: ['https://github.com/MaximKabaev/customs-ai.git', ' ', 'MaximKabaev/customsai-frontend/', 'maximkabaev/Customs-AI'] }).expect(200);
+  assert.deepEqual(repo.body.project.githubRepos, ['MaximKabaev/customs-ai', 'MaximKabaev/customsai-frontend']);
   assert.equal(repo.body.project.githubRepo, 'MaximKabaev/customs-ai');
-  assert.equal((await api('get', '/api/projects').expect(200)).body.projects.find((project) => project.id === id).githubRepo, 'MaximKabaev/customs-ai');
-  assert.equal((await api('patch', `/api/projects/${id}`).send({ githubRepo: 'not a repo' }).expect(400)).body.error, 'Enter a GitHub repo as owner/name');
-  assert.equal((await api('patch', `/api/projects/${id}`).send({ name: 'Test Project' }).expect(200)).body.project.githubRepo, 'MaximKabaev/customs-ai');
-  repo = await api('patch', `/api/projects/${id}`).send({ githubRepo: '' }).expect(200);
+  assert.deepEqual((await api('get', '/api/projects').expect(200)).body.projects.find((project) => project.id === id).githubRepos, ['MaximKabaev/customs-ai', 'MaximKabaev/customsai-frontend']);
+  assert.match((await api('patch', `/api/projects/${id}`).send({ githubRepos: ['o/r', 'not a repo'] }).expect(400)).body.error, /^Enter each GitHub repo as owner\/name \("not a repo"/);
+  await api('patch', `/api/projects/${id}`).send({ githubRepos: 'o/r' }).expect(400);
+  assert.equal((await api('patch', `/api/projects/${id}`).send({ name: 'Test Project' }).expect(200)).body.project.githubRepos.length, 2);
+  repo = await api('patch', `/api/projects/${id}`).send({ githubRepos: [] }).expect(200);
+  assert.deepEqual(repo.body.project.githubRepos, []);
   assert.equal(repo.body.project.githubRepo, null);
-  const withRepo = await api('post', '/api/projects').send({ name: 'QA repo', githubRepo: 'o/r/' }).expect(201);
-  assert.equal(withRepo.body.project.githubRepo, 'o/r');
+  // Legacy single-repo field still works: sets a one-repo list, "" clears.
+  repo = await api('patch', `/api/projects/${id}`).send({ githubRepo: 'https://github.com/o/legacy' }).expect(200);
+  assert.deepEqual(repo.body.project.githubRepos, ['o/legacy']);
+  assert.equal((await api('patch', `/api/projects/${id}`).send({ githubRepo: 'not a repo' }).expect(400)).body.error.startsWith('Enter each GitHub repo'), true);
+  assert.deepEqual((await api('patch', `/api/projects/${id}`).send({ githubRepo: '' }).expect(200)).body.project.githubRepos, []);
+  const withRepo = await api('post', '/api/projects').send({ name: 'QA repo', githubRepos: ['o/r/', 'o/web'] }).expect(201);
+  assert.deepEqual(withRepo.body.project.githubRepos, ['o/r', 'o/web']);
   await api('delete', `/api/projects/${withRepo.body.project.id}`).expect(200);
+  const legacy = await api('post', '/api/projects').send({ name: 'QA legacy repo', githubRepo: 'o/r' }).expect(201);
+  assert.deepEqual(legacy.body.project.githubRepos, ['o/r']);
+  await api('delete', `/api/projects/${legacy.body.project.id}`).expect(200);
   await api('delete', `/api/projects/${id}`).expect(200, { ok: true });
   const remaining = (await api('get', `/api/tasks/${open.id}`).expect(200)).body.task;
   assert.equal(remaining.projectId, null); assert.equal(remaining.project, null);

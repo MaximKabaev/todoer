@@ -6,27 +6,30 @@ import { githubRepoPattern, id, projectSchema, tagSchema } from '../lib/validati
 export const catalogRouter = Router();
 const parseProject = (body) => {
   const project = projectSchema.parse(body);
-  if (project.githubRepo && !githubRepoPattern.test(project.githubRepo)) throw new HttpError(400, 'Enter a GitHub repo as owner/name');
+  const invalid = project.githubRepos?.find((repo) => !githubRepoPattern.test(repo));
+  if (invalid) throw new HttpError(400, `Enter each GitHub repo as owner/name ("${invalid.slice(0, 80)}" isn't)`);
   return project;
 };
-const projectColumns = 'id, name, color, emoji, position, github_repo AS "githubRepo", created_at AS "createdAt"';
+// githubRepo (the first repo, or null) is kept for older API clients.
+const repoColumns = (p = '') => `${p}github_repos AS "githubRepos", ${p}github_repos[1] AS "githubRepo"`;
+const projectColumns = `id, name, color, emoji, position, ${repoColumns()}, created_at AS "createdAt"`;
 
 catalogRouter.get('/projects', async (req, res) => {
-  const { rows } = await pool.query(`SELECT p.id, p.name, p.color, p.emoji, p.position, p.github_repo AS "githubRepo", p.created_at AS "createdAt",
+  const { rows } = await pool.query(`SELECT p.id, p.name, p.color, p.emoji, p.position, ${repoColumns('p.')}, p.created_at AS "createdAt",
     (SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND NOT t.done) AS "openCount"
     FROM projects p ORDER BY p.position DESC, p.created_at DESC`);
   res.json({ projects: rows });
 });
 catalogRouter.post('/projects', async (req, res) => {
   const body = parseProject(req.body ?? {});
-  const { rows } = await pool.query(`INSERT INTO projects (name, color, emoji, position, github_repo) VALUES ($1,$2,$3,$4,$5) RETURNING ${projectColumns}`, [body.name ?? 'New Project', body.color ?? 'blue', body.emoji ?? null, body.position ?? Date.now(), body.githubRepo ?? null]);
+  const { rows } = await pool.query(`INSERT INTO projects (name, color, emoji, position, github_repos) VALUES ($1,$2,$3,$4,$5) RETURNING ${projectColumns}`, [body.name ?? 'New Project', body.color ?? 'blue', body.emoji ?? null, body.position ?? Date.now(), body.githubRepos ?? []]);
   res.status(201).json({ project: rows[0] });
 });
 catalogRouter.patch('/projects/:id', async (req, res) => {
   const body = parseProject(req.body);
   const values = [id.parse(req.params.id)];
   const assignments = [];
-  for (const [field, column] of [['name', 'name'], ['color', 'color'], ['emoji', 'emoji'], ['position', 'position'], ['githubRepo', 'github_repo']]) {
+  for (const [field, column] of [['name', 'name'], ['color', 'color'], ['emoji', 'emoji'], ['position', 'position'], ['githubRepos', 'github_repos']]) {
     if (body[field] === undefined) continue;
     values.push(body[field]);
     assignments.push(`${column} = $${values.length}`);
