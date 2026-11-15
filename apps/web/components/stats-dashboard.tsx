@@ -1,5 +1,14 @@
 "use client";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Trophy, Timer, ArrowUpRight, Flame } from "lucide-react";
 import { request, type Stats, type PersonStats } from "@/lib/api";
@@ -15,6 +24,193 @@ const date = (day: string) =>
 const days = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
 const accent = (person: PersonStats): CSSProperties =>
   ({ "--person": `var(--${person.user.color})` }) as CSSProperties;
+const fullDate = (day: string) =>
+  new Date(day).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+const completed = (n: number) => `${n} ${n === 1 ? "task" : "tasks"} completed`;
+
+// Shared interaction and viewport positioning for all chart tooltips. No overlay
+// catches events: an outside tap dismisses and still reaches its intended control.
+function ChartTooltip({
+  id,
+  anchor: active,
+  label,
+}: {
+  id: string;
+  anchor: { x: number; top: number; bottom: number };
+  label: string;
+}) {
+  const bubble = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 8, top: 8 });
+  useLayoutEffect(() => {
+    if (!active || !bubble.current) return;
+    const rect = bubble.current.getBoundingClientRect();
+    setPosition({
+      left: Math.max(
+        8,
+        Math.min(innerWidth - rect.width - 8, active.x - rect.width / 2),
+      ),
+      top: Math.max(
+        8,
+        Math.min(
+          innerHeight - rect.height - 8,
+          active.top > rect.height + 16
+            ? active.top - rect.height - 8
+            : active.bottom + 8,
+        ),
+      ),
+    });
+  }, [active, label]);
+  return createPortal(
+    <div
+      ref={bubble}
+      id={id}
+      role="tooltip"
+      aria-live="polite"
+      className={styles.chartTooltip}
+      style={position}
+    >
+      {label}
+    </div>,
+    document.body,
+  );
+}
+
+function useChartTooltip(labels: string[]) {
+  const id = useId();
+  const [selected, setSelected] = useState(0);
+  const [anchor, setAnchor] = useState<{
+    index: number;
+    x: number;
+    top: number;
+    bottom: number;
+    element: Element;
+    offsetX: number;
+  } | null>(null);
+  const active = anchor && anchor.index < labels.length ? anchor : null;
+  function show(index: number, element: Element, x?: number) {
+    document.dispatchEvent(
+      new CustomEvent("todoer:chart-inspect", { detail: id }),
+    );
+    const rect = element.getBoundingClientRect();
+    setSelected(index);
+    setAnchor({
+      index,
+      x: x ?? rect.left + rect.width / 2,
+      top: rect.top,
+      bottom: rect.bottom,
+      element,
+      offsetX: x === undefined ? rect.width / 2 : x - rect.left,
+    });
+  }
+  useEffect(() => {
+    const dismiss = () => setAnchor(null);
+    const reposition = () =>
+      setAnchor((current) => {
+        if (!current) return null;
+        const rect = current.element.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > innerHeight) return null;
+        return {
+          ...current,
+          x: rect.left + current.offsetX,
+          top: rect.top,
+          bottom: rect.bottom,
+        };
+      });
+    const outside = (event: PointerEvent) => {
+      if (
+        !document.getElementById(`${id}-chart`)?.contains(event.target as Node)
+      )
+        dismiss();
+    };
+    const inspecting = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== id) dismiss();
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") dismiss();
+    };
+    document.addEventListener("todoer:chart-inspect", inspecting);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      document.removeEventListener("todoer:chart-inspect", inspecting);
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [id]);
+  function navigate(event: KeyboardEvent, index: number, column = 1) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      show(index, event.currentTarget);
+      return;
+    }
+    const delta = {
+      ArrowRight: column,
+      ArrowLeft: -column,
+      ArrowDown: 1,
+      ArrowUp: -1,
+    }[event.key];
+    if (delta === undefined && event.key !== "Home" && event.key !== "End")
+      return;
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? labels.length - 1
+          : Math.max(0, Math.min(labels.length - 1, index + delta!));
+    const target = event.currentTarget
+      .closest("[data-chart-root]")
+      ?.querySelectorAll<HTMLElement>("[data-chart-item]")[next];
+    target?.focus();
+  }
+  return {
+    rootProps: { id: `${id}-chart`, "data-chart-root": "" },
+    selected,
+    active,
+    show,
+    navigate,
+    item: (index: number) => ({
+      "aria-label": labels[index],
+      "aria-describedby": active?.index === index ? id : undefined,
+      "data-chart-item": "",
+      tabIndex: selected === index ? 0 : -1,
+      onFocus: (event: React.FocusEvent<HTMLElement>) =>
+        show(index, event.currentTarget),
+      onClick: (event: React.MouseEvent<HTMLElement>) =>
+        show(index, event.currentTarget),
+      onPointerEnter: (event: React.PointerEvent<HTMLElement>) => {
+        if (event.pointerType === "mouse") show(index, event.currentTarget);
+      },
+      onKeyDown: (event: KeyboardEvent<HTMLElement>) => navigate(event, index),
+    }),
+    dismiss: {
+      onPointerLeave: (event: React.PointerEvent) => {
+        if (
+          event.pointerType === "mouse" &&
+          !event.currentTarget.contains(document.activeElement)
+        )
+          setAnchor(null);
+      },
+      onBlur: (event: React.FocusEvent) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node))
+          setAnchor(null);
+      },
+    },
+    tooltip: active ? (
+      <ChartTooltip id={id} anchor={active} label={labels[active.index]} />
+    ) : null,
+  };
+}
+
 function History({ data }: { data: Stats }) {
   const [range, setRange] = useState(30);
   // Draw at the container's real width so the chart keeps its height and legible labels on phones.
@@ -31,11 +227,29 @@ function History({ data }: { data: Stats }) {
   }, []);
   const right = width - 42;
   const history = range ? data.history.slice(-range) : data.history;
+  const historyLabels = history.map(
+    (h) =>
+      `${fullDate(h.day)} · ${data.me.user.displayName}: ${h.me ?? "No score"}${data.teammate ? ` · ${data.teammate.user.displayName}: ${h.teammate ?? "No score"}` : ""}`,
+  );
+  const tip = useChartTooltip(historyLabels);
   const x = (i: number) =>
     history.length < 2
       ? width / 2
       : 42 + (i / (history.length - 1)) * (right - 42);
   const y = (score: number) => 190 - score * 1.6;
+  function inspect(element: Element, clientX: number) {
+    if (!history.length) return;
+    const rect = element.getBoundingClientRect();
+    const local = ((clientX - rect.left) * width) / rect.width;
+    const i = Math.max(
+      0,
+      Math.min(
+        history.length - 1,
+        Math.round(((local - 42) / (right - 42)) * (history.length - 1)),
+      ),
+    );
+    tip.show(i, element, rect.left + (x(i) * rect.width) / width);
+  }
   const people = [data.me, data.teammate].filter((p): p is PersonStats => !!p);
   return (
     <section className={styles.panel} aria-labelledby="history-title">
@@ -70,96 +284,158 @@ function History({ data }: { data: Stats }) {
         <small>End-of-day · /100</small>
       </div>
       <div ref={frame}>
-        <svg
-          className={styles.chart}
-          viewBox={`0 0 ${width} 232`}
-          role="img"
-          aria-label="Score history chart: end-of-day scores, 0 to 100"
-        >
-          {[0, 25, 50, 75, 100].map((n) => (
-            <g key={n}>
-              <line
-                x1="42"
-                x2={right}
-                y1={y(n)}
-                y2={y(n)}
-                stroke="var(--line-strong)"
-                strokeDasharray={n === 50 ? "4 4" : undefined}
-              />
-              <text x="28" y={y(n) + 4} textAnchor="end">
-                {n}
-              </text>
-            </g>
-          ))}
-          {history.map(
-            (h, i) =>
-              h.day.endsWith("-01") && (
-                <g key={h.day}>
-                  <line
-                    x1={x(i)}
-                    x2={x(i)}
-                    y1="22"
-                    y2="195"
-                    stroke="var(--secondary)"
-                    strokeDasharray="3 5"
-                  />
-                  <text x={x(i)} y="14" textAnchor="middle">
-                    {new Date(h.day).toLocaleDateString("en-US", {
-                      month: "short",
-                      timeZone: "UTC",
-                    })}{" "}
-                    · season
-                  </text>
-                </g>
-              ),
-          )}
-          {(["me", "teammate"] as const).map(
-            (key, pi) =>
-              data[key] && (
-                <g key={key} style={accent(data[key]!)}>
-                  <polyline
-                    points={history
-                      .map((h, i) =>
-                        h[key] === null ? "" : `${x(i)},${y(h[key]!)}`,
-                      )
-                      .join(" ")}
-                    fill="none"
-                    stroke="var(--person)"
-                    strokeWidth="3"
-                    strokeLinejoin="round"
-                    strokeDasharray={pi ? "6 4" : undefined}
-                  />
-                  {history.map(
-                    (h, i) =>
-                      h[key] !== null && (
-                        <circle
-                          key={h.day}
-                          cx={x(i)}
-                          cy={y(h[key]!)}
-                          r={history.length < 3 ? 5 : 2}
-                          fill="var(--person)"
-                        >
-                          <title>
-                            {date(h.day)} · {data[key]!.user.displayName}:{" "}
-                            {h[key]}
-                          </title>
-                        </circle>
+        <div
+          {...tip.rootProps}
+          role="group"
+          tabIndex={history.length ? 0 : -1}
+          aria-label={
+            tip.active
+              ? historyLabels[tip.active.index]
+              : "Explore score history. Use arrow keys to move between days."
+          }
+          {...tip.dismiss}
+          onFocus={(event) => {
+            if (history.length) {
+              const i = Math.min(tip.selected, history.length - 1);
+              const rect = event.currentTarget.getBoundingClientRect();
+              tip.show(
+                i,
+                event.currentTarget,
+                rect.left + (x(i) * rect.width) / width,
+              );
+            }
+          }}
+          onKeyDown={(event) => {
+            if (
+              !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) ||
+              !history.length
+            )
+              return;
+            event.preventDefault();
+            const i =
+              event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? history.length - 1
+                  : Math.max(
+                      0,
+                      Math.min(
+                        history.length - 1,
+                        tip.selected + (event.key === "ArrowLeft" ? -1 : 1),
                       ),
-                  )}
-                </g>
-              ),
-          )}
-          {history.length > 0 && (
-            <>
-              <text x="42" y="222">
-                {date(history[0].day)}
-              </text>
-              <text x={right} y="222" textAnchor="end">
-                {date(history.at(-1)!.day)}
-              </text>
-            </>
-          )}
-        </svg>
+                    );
+            const rect = event.currentTarget.getBoundingClientRect();
+            tip.show(
+              i,
+              event.currentTarget,
+              rect.left + (x(i) * rect.width) / width,
+            );
+          }}
+          onPointerMove={(event) => {
+            if (event.pointerType === "mouse")
+              inspect(event.currentTarget, event.clientX);
+          }}
+          onClick={(event) => inspect(event.currentTarget, event.clientX)}
+        >
+          <svg
+            className={styles.chart}
+            viewBox={`0 0 ${width} 232`}
+            role="img"
+            aria-label="Score history chart: end-of-day scores, 0 to 100"
+          >
+            {[0, 25, 50, 75, 100].map((n) => (
+              <g key={n}>
+                <line
+                  x1="42"
+                  x2={right}
+                  y1={y(n)}
+                  y2={y(n)}
+                  stroke="var(--line-strong)"
+                  strokeDasharray={n === 50 ? "4 4" : undefined}
+                />
+                <text x="28" y={y(n) + 4} textAnchor="end">
+                  {n}
+                </text>
+              </g>
+            ))}
+            {history.map(
+              (h, i) =>
+                h.day.endsWith("-01") && (
+                  <g key={h.day}>
+                    <line
+                      x1={x(i)}
+                      x2={x(i)}
+                      y1="22"
+                      y2="195"
+                      stroke="var(--secondary)"
+                      strokeDasharray="3 5"
+                    />
+                    <text x={x(i)} y="14" textAnchor="middle">
+                      {new Date(h.day).toLocaleDateString("en-US", {
+                        month: "short",
+                        timeZone: "UTC",
+                      })}{" "}
+                      · season
+                    </text>
+                  </g>
+                ),
+            )}
+            {(["me", "teammate"] as const).map(
+              (key, pi) =>
+                data[key] && (
+                  <g key={key} style={accent(data[key]!)}>
+                    <polyline
+                      points={history
+                        .map((h, i) =>
+                          h[key] === null ? "" : `${x(i)},${y(h[key]!)}`,
+                        )
+                        .join(" ")}
+                      fill="none"
+                      stroke="var(--person)"
+                      strokeWidth="3"
+                      strokeLinejoin="round"
+                      strokeDasharray={pi ? "6 4" : undefined}
+                    />
+                    {history.map(
+                      (h, i) =>
+                        h[key] !== null && (
+                          <circle
+                            key={h.day}
+                            cx={x(i)}
+                            cy={y(h[key]!)}
+                            r={history.length < 3 ? 5 : 2}
+                            fill="var(--person)"
+                          />
+                        ),
+                    )}
+                  </g>
+                ),
+            )}
+            {tip.active && (
+              <line
+                data-testid="history-guide"
+                x1={x(tip.active.index)}
+                x2={x(tip.active.index)}
+                y1="22"
+                y2="195"
+                stroke="var(--secondary)"
+                strokeDasharray="3 3"
+                pointerEvents="none"
+              />
+            )}
+            {history.length > 0 && (
+              <>
+                <text x="42" y="222">
+                  {date(history[0].day)}
+                </text>
+                <text x={right} y="222" textAnchor="end">
+                  {date(history.at(-1)!.day)}
+                </text>
+              </>
+            )}
+          </svg>
+        </div>
+        {tip.tooltip}
       </div>
       {history.length < 3 && (
         <p className={styles.note}>
@@ -277,23 +553,38 @@ function Bars({
   name: string;
 }) {
   const max = Math.max(1, ...values);
+  const weekdays = [
+    "Mondays",
+    "Tuesdays",
+    "Wednesdays",
+    "Thursdays",
+    "Fridays",
+    "Saturdays",
+    "Sundays",
+  ];
+  const tip = useChartTooltip(
+    values.map(
+      (v, i) =>
+        `${values.length === 7 ? weekdays[i] : `${String(i).padStart(2, "0")}:00–${String(i + 1).padStart(2, "0")}:00`} · ${completed(v)}`,
+    ),
+  );
   return (
     <div
       className={styles.bars}
-      role="img"
-      aria-label={`${name}: ${values.map((v, i) => `${labels[i]}: ${v}`).join(", ")}`}
+      {...tip.rootProps}
+      role="group"
+      aria-label={name}
+      {...tip.dismiss}
     >
       {values.map((v, i) => (
         <div key={i}>
-          <div className={styles.barTrack}>
-            <span
-              style={{ height: `${(v / max) * 100}%` }}
-              title={`${labels[i]}: ${v} completions`}
-            />
+          <div className={styles.barTrack} role="button" {...tip.item(i)}>
+            <span style={{ height: `${(v / max) * 100}%` }} />
           </div>
           <small>{values.length === 7 || i % 6 === 0 ? labels[i] : ""}</small>
         </div>
       ))}
+      {tip.tooltip}
     </div>
   );
 }
@@ -304,6 +595,20 @@ function PersonPanel({
   person: PersonStats;
   timezone: string;
 }) {
+  const tip = useChartTooltip(
+    person.activity.map((a) =>
+      [
+        fullDate(a.day),
+        ...[
+          a.completed && completed(a.completed),
+          a.commits && `${a.commits} ${a.commits === 1 ? "commit" : "commits"}`,
+          a.merges && `${a.merges} merged ${a.merges === 1 ? "PR" : "PRs"}`,
+        ].filter(Boolean),
+      ]
+        .concat(a.completed + a.commits + a.merges ? [] : ["No activity"])
+        .join(" · "),
+    ),
+  );
   const records = [
     [
       "Active streak",
@@ -354,10 +659,12 @@ function PersonPanel({
       </p>
       <div
         className={styles.heatmap}
-        role="img"
-        aria-label={`${person.user.displayName} daily activity heatmap`}
+        {...tip.rootProps}
+        role="group"
+        aria-label={`${person.user.displayName} daily activity heatmap. Use up and down for days, left and right for weeks.`}
+        {...tip.dismiss}
       >
-        {person.activity.map((a) => {
+        {person.activity.map((a, i) => {
           const n = a.completed + a.commits + a.merges;
           return (
             <span
@@ -367,11 +674,14 @@ function PersonPanel({
                   ? `color-mix(in srgb, var(--person) ${Math.min(100, 25 + n * 12)}%, var(--surface))`
                   : "var(--surface)",
               }}
-              title={`${date(a.day)}: ${a.completed} completed, ${a.commits} commits, ${a.merges} merges`}
+              role="button"
+              {...tip.item(i)}
+              onKeyDown={(event) => tip.navigate(event, i, 7)}
             />
           );
         })}
       </div>
+      {tip.tooltip}
       <div className={styles.heatLegend}>
         <span>
           {person.activity[0]
