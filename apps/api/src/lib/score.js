@@ -16,6 +16,7 @@ export const SCORE = {
   quickFactor: 0.25,
   trendDays: 7,
   afkPoints: 5, // taken at the end of each day with open tasks and no completion
+  resetKeep: 0.5, // at a season boundary, keep this share of the distance from the prior score
 };
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -35,6 +36,66 @@ export function dateFromToday(offset = 0, now = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
+const zoneFormats = new Map();
+const zoneFormat = (tz) => {
+  if (!zoneFormats.has(tz)) {
+    zoneFormats.set(tz, new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', weekday: 'short' }));
+  }
+  return zoneFormats.get(tz);
+};
+const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+// Local calendar parts of an instant in the score timezone: { day: 'YYYY-MM-DD', hour, weekday (0 = Monday) }.
+export function localParts(instant, tz = scoreTimezone()) {
+  const parts = Object.fromEntries(zoneFormat(tz).formatToParts(instant).map((part) => [part.type, part.value]));
+  return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour), weekday: weekdays.indexOf(parts.weekday),
+    offset: Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - Math.floor(instant.getTime() / 1000) * 1000 };
+}
+
+const midnights = new Map();
+// The instant local midnight starts `day` (YYYY-MM-DD) in the score timezone.
+export function startOfDay(day, tz = scoreTimezone()) {
+  const key = `${tz}|${day}`;
+  if (!midnights.has(key)) {
+    const naive = Date.parse(`${day}T00:00:00Z`);
+    let time = naive - localParts(new Date(naive), tz).offset;
+    time = naive - localParts(new Date(time), tz).offset;
+    midnights.set(key, new Date(time));
+  }
+  return midnights.get(key);
+}
+export const addDays = (day, n) => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+export const addMonths = (day, n) => { const d = new Date(`${day.slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); };
+
+// Seasons: calendar months in the score timezone. SEASONS_START is the first reset (the 1st of a
+// month); the month before it is Season 1, which carries all earlier history.
+export const seasonsStart = () => `${(process.env.SEASONS_START || '2026-12-01').slice(0, 7)}-01`;
+// Season boundaries (the 1st of each month from SEASONS_START) that have started by `until`: [{ day, at }].
+export function seasonBoundaries(until = new Date()) {
+  const boundaries = [];
+  for (let day = seasonsStart(); startOfDay(day) <= until; day = addMonths(day, 1)) boundaries.push({ day, at: startOfDay(day) });
+  return boundaries;
+}
+// Describe the season that runs during the month starting `month` (YYYY-MM-01).
+export function describeSeason(month) {
+  const first = addMonths(seasonsStart(), -1);
+  const [fy, fm] = first.split('-').map(Number);
+  const [y, m] = month.split('-').map(Number);
+  return {
+    id: month.slice(0, 7),
+    number: (y - fy) * 12 + (m - fm) + 1,
+    name: new Date(`${month}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+    startsAt: startOfDay(month),
+    endsAt: startOfDay(addMonths(month, 1)),
+  };
+}
+// The season in progress at `now` (never before Season 1).
+export function currentSeason(now = new Date()) {
+  const month = `${dateFromToday(0, now).slice(0, 7)}-01`;
+  const first = addMonths(seasonsStart(), -1);
+  return describeSeason(month < first ? first : month);
+}
+
 // Done late grades 90 minus 10 per late day (floor 30); still open and overdue grades 60 minus
 // 10 per overdue day (floor 0), so finishing an overdue task is always an improvement.
 export const gradeDone = (lateDays) => (lateDays <= 0 ? 100 : Math.max(30, 90 - 10 * lateDays));
@@ -42,11 +103,19 @@ export const gradeOpen = (lateDays) => Math.max(0, 60 - 10 * lateDays);
 const lateDaysAt = (time, deadline) => (time <= deadline ? 0 : Math.ceil((time - deadline) / DAY));
 
 // Fold events [{ time, grade, weight, key }] into a 0-100 integer score. AFK penalty events
-// ({ time, penalty, key }) subtract points directly, floored at 0.
+// ({ time, penalty, key }) subtract points directly, floored at 0. Season resets ({ time, reset, key })
+// pull the score part of the way back to the prior and restore the prior's memory; at the same
+// instant they come after everything else (the last day's AFK penalty still counts for the old season).
 export function foldScore(events) {
   let weightSum = SCORE.priorWeight;
   let score = SCORE.priorScore;
-  for (const event of [...events].sort((a, b) => a.time - b.time || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))) {
+  const order = (a, b) => a.time - b.time || (a.reset ? 1 : 0) - (b.reset ? 1 : 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  for (const event of [...events].sort(order)) {
+    if (event.reset) {
+      score = SCORE.priorScore + (score - SCORE.priorScore) * SCORE.resetKeep;
+      weightSum = SCORE.priorWeight;
+      continue;
+    }
     if (event.penalty) { score = Math.max(0, score - event.penalty); continue; }
     if (event.weight <= 0) continue;
     weightSum = Math.min(weightSum + event.weight, SCORE.maxWeight);
@@ -57,8 +126,10 @@ export function foldScore(events) {
 
 // Rows are one per (task, assignee) with the task's deadline already resolved.
 // `asOf` replays history: later-created tasks are ignored and later completions count as open.
+// A season reset applies strictly after its boundary, so the score as of a boundary is the
+// season's final score.
 export function scoreFor(rows, userId, asOf = new Date()) {
-  const events = [];
+  const events = seasonBoundaries(asOf).filter(({ at }) => at < asOf).map(({ day, at }) => ({ key: `reset:${day}`, time: at, reset: true }));
   for (const row of rows) {
     if (row.userId !== userId) continue;
     if (row.kind === 'afk') {
@@ -103,6 +174,9 @@ export async function scoreboard(db, user, teammate, now = new Date()) {
   const [rows, { rows: users }] = await Promise.all([
     loadScoreRows(db), db.query('SELECT id, username, display_name AS "displayName", color FROM users')]);
   const weekAgo = new Date(now.getTime() - SCORE.trendDays * DAY);
+  // The trend never reaches back past the current season's reset.
+  const lastReset = seasonBoundaries(now).filter(({ at }) => at < now).at(-1)?.at;
+  const trendFrom = lastReset && lastReset > weekAgo ? new Date(lastReset.getTime() + 1) : weekAgo;
   const entry = (person) => {
     if (!person) return null;
     const score = scoreFor(rows, person.id, now);
@@ -112,7 +186,7 @@ export async function scoreboard(db, user, teammate, now = new Date()) {
       user: users.find((candidate) => candidate.id === person.id),
       score,
       label: labelFor(score),
-      trend: score - scoreFor(rows, person.id, weekAgo),
+      trend: score - scoreFor(rows, person.id, trendFrom),
       doneThisWeek: mine.filter((row) => row.done && row.doneAt > weekAgo && row.doneAt <= now).length,
       overdue: mine.filter((row) => !row.done && row.deadline < now).length,
       afkPenaltyThisWeek: penalties.filter((row) => row.at > weekAgo).reduce((sum, row) => sum + row.points, 0),

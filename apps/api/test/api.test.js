@@ -18,6 +18,8 @@ process.env.PUBLIC_API_URL = '';
 // Never send real email from tests; notification tests enable a fake sender explicitly.
 process.env.RESEND_API_KEY = '';
 process.env.EMAIL_FROM = '';
+// No season resets unless a test opts in, so backdated fixtures never straddle a real boundary.
+process.env.SEASONS_START = '2100-01-01';
 const schema = `todoer_test_${randomUUID().replaceAll('-', '')}`;
 process.env.API_DB_SCHEMA = schema;
 const admin = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -109,7 +111,7 @@ after(async () => {
 
 test('health is public, API resources require authentication', async () => {
   assert.deepEqual((await request(app).get('/api/health').expect(200)).body, { ok: true });
-  for (const url of ['/api/me', '/api/users', '/api/tasks', '/api/counts', '/api/projects', '/api/tags', '/api/tokens']) {
+  for (const url of ['/api/me', '/api/users', '/api/tasks', '/api/counts', '/api/projects', '/api/tags', '/api/tokens', '/api/score', '/api/stats']) {
     assert.deepEqual((await request(app).get(url).expect(401)).body, { error: 'unauthorized' });
   }
   await api('get', '/api/me', 'tdr_invalid').expect(401);
@@ -1165,4 +1167,144 @@ test('AFK penalties fold into the score as direct deductions, floored at 0', () 
   assert.equal(foldScore([{ key: 'p', time: 1, penalty: 5 }]), 45);
   assert.equal(foldScore([{ key: 'a', time: 1, weight: 1, grade: 100 }, { key: 'p', time: 2, penalty: 5 }]), 53);
   assert.equal(foldScore(Array.from({ length: 20 }, (_, i) => ({ key: `p${i}`, time: i, penalty: 5 }))), 0);
+});
+
+test('season resets pull the score halfway back to 50 and restore the prior memory', () => {
+  const strong = { key: 'a', time: 1, weight: 10, grade: 100 };
+  assert.equal(foldScore([strong]), 83);
+  assert.equal(foldScore([strong, { key: 'reset:x', time: 2, reset: true }]), 67);
+  // After the reset one task moves the score as much as on a fresh start (memory back to 5).
+  assert.equal(foldScore([strong, { key: 'reset:x', time: 2, reset: true }, { key: 'b', time: 3, weight: 1, grade: 100 }]), 72);
+  // At the same instant the reset comes last: the last day's AFK penalty belongs to the old season.
+  assert.equal(foldScore([{ key: 'reset:x', time: 2, reset: true }, { key: 'zzz', time: 2, penalty: 10 }]), 45);
+});
+
+test('seasons: results are frozen at the boundary, scores soft-reset, tally and emails', async () => {
+  const { finalizeSeasons, sendSeasonEmails } = await import('../src/lib/seasons.js');
+  const { scoreboard, startOfDay, addDays, addMonths } = await import('../src/lib/score.js');
+  const month = `${dateFromToday(0).slice(0, 7)}-01`;
+  const boundary = startOfDay(month);
+  const DAY = 86400000;
+  const after = (days) => new Date(boundary.getTime() + days * DAY);
+  await pool.query('DELETE FROM tasks'); await pool.query('DELETE FROM afk_days'); await pool.query('DELETE FROM seasons');
+  await withEnv({ SEASONS_START: month }, async () => {
+    // Before the boundary Maxim finished three high-priority tasks on time; German had nothing.
+    const done = [];
+    for (let i = 0; i < 3; i++) {
+      const task = await create({ title: `QA season ${i}`, assignees: ['me'], priority: 3 });
+      await pool.query(`UPDATE tasks SET created_at = $2, done = true, done_at = $3, due_date = $4 WHERE id = $1`,
+        [task.id, new Date(boundary.getTime() - 4 * DAY), new Date(boundary.getTime() - 2 * DAY), addDays(month, -1)]);
+      done.push(task);
+    }
+    const final = scoreFor((await (await import('../src/lib/score.js')).loadScoreRows(pool)), first.id, boundary);
+    assert.ok(final > 70, `expected a strong season, got ${final}`);
+
+    const [season] = await finalizeSeasons(after(0.01));
+    assert.equal(season.id, addMonths(month, -1).slice(0, 7));
+    assert.equal(season.number, 1);
+    assert.deepEqual(season.scores, { [first.id]: final, [second.id]: 50 });
+    assert.equal(season.winnerId, first.id);
+    const carried = season.carried[first.id];
+    assert.ok(Math.abs(carried - (50 + (final - 50) / 2)) <= 1, `carried ${carried} from ${final}`);
+    assert.equal(season.carried[second.id], 50);
+    assert.deepEqual(await finalizeSeasons(after(0.02)), []); // decided once
+
+    // The live board shows the reset score and the new season; the trend doesn't count the reset as a drop.
+    const view = await scoreboard(pool, first, second, after(2));
+    assert.equal(view.me.score, carried);
+    assert.equal(view.me.trend, 0);
+    let state = await board();
+    assert.equal(state.season.id, month.slice(0, 7));
+    assert.equal(state.season.number, 2);
+    assert.deepEqual(state.season.tally, { me: 1, teammate: 0, ties: 0 });
+    assert.equal(state.season.previous.winner, 'me');
+    assert.deepEqual(state.season.previous.me, { score: final, label: labelFor(final), carriedOver: carried });
+    assert.deepEqual(state.season.previous.teammate, { score: 50, label: 'Doing okay', carriedOver: 50 });
+    const mirror = await board(secondToken);
+    assert.equal(mirror.season.previous.winner, 'teammate');
+    assert.deepEqual(mirror.season.tally, { me: 0, teammate: 1, ties: 0 });
+
+    // Editing old tasks later moves the live score but never the frozen result.
+    await patch(done[0].id, { done: false });
+    state = await board();
+    assert.equal(state.season.previous.me.score, final);
+    assert.notEqual(state.me.score, carried);
+
+    const outbox = [];
+    await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>', PUBLIC_WEB_URL: 'https://todo.example.com' }, async () => {
+      await api('patch', '/api/me').send({ email: 'maxim.season@example.com' }).expect(200);
+      await api('patch', '/api/me', secondToken).send({ email: 'partner.season@example.com' }).expect(200);
+      const send = async (mail) => { outbox.push(mail); };
+      assert.equal(await sendSeasonEmails({ send, now: after(1) }), 2);
+      assert.equal(await sendSeasonEmails({ send, now: after(1) }), 0);
+      await api('patch', '/api/me').send({ email: null }).expect(200);
+      await api('patch', '/api/me', secondToken).send({ email: null }).expect(200);
+    });
+    const [mine, theirs] = ['maxim.season@example.com', 'partner.season@example.com'].map((to) => outbox.find((mail) => mail.to === to));
+    assert.match(mine.subject, /^You won Season 1 \(.+\)!$/);
+    assert.match(theirs.subject, /^Maxim Test won Season 1 \(.+\)$/);
+    assert.match(mine.text, new RegExp(`You won Season 1 with ${final} points\\.`));
+    assert.match(theirs.text, /Seasons won: Maxim Test 1, Teammate Test 0/);
+    assert.match(theirs.text, new RegExp(`New season, fresh start: Maxim Test ${carried}, Teammate Test 50\\.`));
+    assert.match(theirs.text, /https:\/\/todo\.example\.com\/stats/);
+    assert.notEqual(mine.idempotencyKey, theirs.idempotencyKey);
+  });
+  await pool.query('DELETE FROM seasons'); await pool.query('DELETE FROM tasks');
+});
+
+test('stats: score history, head-to-head totals, streaks, records and activity', async () => {
+  await pool.query('DELETE FROM tasks'); await pool.query('DELETE FROM afk_days'); await pool.query('DELETE FROM github_events');
+  await api('patch', '/api/me').send({ githubLogin: 'Maxim-Test' }).expect(200);
+  // Maxim: done yesterday (on time) and today (late); German: one open task Maxim assigned to him.
+  const a = await create({ title: 'QA stats a', assignees: ['me'] });
+  const b = await create({ title: 'QA stats b', assignees: ['me'], dueDate: dateFromToday(-3) });
+  await create({ title: 'QA stats c', assignees: [second.username] });
+  await create({ title: '', assignees: ['me'] }); // empty: never counted as completed
+  await pool.query(`UPDATE tasks SET created_at = now() - interval '3 days', done = true, done_at = now() - interval '1 day' WHERE id = $1`, [a.id]);
+  await pool.query(`UPDATE tasks SET created_at = now() - interval '5 days' WHERE id = $1`, [b.id]);
+  await patch(b.id, { done: true });
+  await pool.query(`INSERT INTO github_events (delivery_id, kind, github_login, repo, commits, at) VALUES ('s1', 'push', 'maxim-test', 'o/r', 4, now())`);
+  await pool.query(`INSERT INTO afk_days (user_id, day, points, applied_at) VALUES ($1, $2::date, 5, now() - interval '2 days')`, [second.id, dateFromToday(-3)]);
+
+  const { body } = await api('get', '/api/stats').expect(200);
+  const state = await board();
+  assert.equal(body.timezone, process.env.SCORE_TIMEZONE || 'UTC');
+  assert.deepEqual(body.season, state.season);
+  assert.deepEqual(body.seasons, []);
+  assert.equal(body.history.at(-1).day, dateFromToday(0));
+  assert.deepEqual([body.history.at(-1).me, body.history.at(-1).teammate], [state.me.score, state.teammate.score]);
+  assert.equal(body.history[0].day, dateFromToday(-5));
+  const me = body.me;
+  assert.equal(me.user.id, first.id);
+  assert.deepEqual([me.score, me.label], [state.me.score, state.me.label]);
+  assert.equal(me.allTime.completed, 2);
+  assert.equal(me.allTime.onTime, 1);
+  assert.equal(me.allTime.onTimeRate, 0.5);
+  assert.equal(me.allTime.commits, 4);
+  assert.equal(me.allTime.activeDays, 2);
+  assert.equal(me.allTime.created, 4);
+  assert.equal(me.allTime.assignedToTeammate, 1);
+  assert.ok(me.allTime.medianHoursToDone > 24);
+  assert.equal(me.open, 1);
+  assert.deepEqual(me.streak, { current: 2, best: 2 });
+  assert.equal(me.bestDay.completed, 1);
+  assert.equal(me.weekdays.reduce((x, y) => x + y, 0), 2);
+  assert.equal(me.hours.length, 24);
+  assert.equal(me.activity.length, 182);
+  assert.deepEqual(me.activity.at(-1), { day: dateFromToday(0), completed: 1, commits: 4, merges: 0 });
+  assert.equal(me.best.score >= me.worst.score, true);
+  const other = body.teammate;
+  assert.equal(other.user.id, second.id);
+  assert.equal(other.allTime.completed, 0);
+  assert.equal(other.allTime.onTimeRate, null);
+  assert.equal(other.allTime.afkDays, 1);
+  assert.equal(other.allTime.afkPoints, 5);
+  assert.equal(other.bestDay, null);
+  assert.deepEqual(other.streak, { current: 0, best: 0 });
+  // The teammate sees the same data mirrored.
+  const mirror = (await api('get', '/api/stats', secondToken).expect(200)).body;
+  assert.equal(mirror.me.user.id, second.id);
+  assert.deepEqual(mirror.history.map((h) => [h.me, h.teammate]), body.history.map((h) => [h.teammate, h.me]));
+  await api('patch', '/api/me').send({ githubLogin: null }).expect(200);
+  await pool.query('DELETE FROM github_events'); await pool.query('DELETE FROM afk_days'); await pool.query('DELETE FROM tasks');
 });

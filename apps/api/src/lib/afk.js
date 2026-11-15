@@ -1,6 +1,7 @@
 import { pool } from '../db.js';
 import { dateFromToday, labelFor, SCORE, scoreSnapshot, scoreTimezone } from './score.js';
 import { notificationsConfigured, sendEmail } from './notifications.js';
+import { finalizeSeasons, sendSeasonEmails } from './seasons.js';
 
 // AFK penalty: at the end of every day (in SCORE_TIMEZONE), anyone who had open tasks assigned in
 // Now but no activity that day (no assigned task completed, no commits pushed to any branch of a
@@ -139,7 +140,10 @@ export function startAfkWorker(intervalMs = 60 * 1000) {
     running = true;
     try {
       await applyAfkPenalties();
+      // Seasons are decided right after the last day's penalty is in.
+      await finalizeSeasons();
       await sendAfkEmails();
+      await sendSeasonEmails();
     } catch (error) { console.error(`AFK worker: ${error.message}`); }
     finally { running = false; }
   };

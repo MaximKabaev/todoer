@@ -60,6 +60,7 @@ function totals(done, from = -Infinity) {
 
 function person(tasks, user, other, history, key, now) {
   const scored = scoredFor(tasks, user);
+  const assigned = tasks.filter((t) => t.list === "now" && t.assignees.some((u) => u.id === user.id));
   const done = scored.filter((t) => t.done && t.doneAt && Date.parse(t.doneAt) <= now);
   const score = scoreAt(scored, now);
   const perDay = new Map();
@@ -96,8 +97,9 @@ function person(tasks, user, other, history, key, now) {
   }
   return {
     user, score, label: labelFor(score),
-    open: scored.filter((t) => !t.done).length,
-    overdue: scored.filter((t) => !t.done && now > deadline(t)).length,
+    // Open and overdue count every assigned Now task, empty ones included (like the score card).
+    open: assigned.filter((t) => !t.done).length,
+    overdue: assigned.filter((t) => !t.done && now > deadline(t)).length,
     best: pick((a, b) => a > b), worst: pick((a, b) => a < b),
     streak: { current, best },
     bestDay: bestDay ? { day: bestDay[0], completed: bestDay[1] } : null,
