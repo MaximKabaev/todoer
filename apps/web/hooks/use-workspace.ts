@@ -22,7 +22,7 @@ import {
 import { useToast } from "@/components/providers";
 import { defaultDueDate, transitionDueDate } from "@/lib/task-dates";
 import { taskAssignment } from "@/lib/task-assignment";
-export type Selection = { kind: View | "tag"; id?: string };
+export type Selection = { kind: View | "tag" | "stats"; id?: string };
 export function viewQuery(
   selection: Selection,
   segment: number,
@@ -38,7 +38,9 @@ export function viewQuery(
               ? (["mine", "mine_created", "mine_from_teammate"] as const)[
                   segment
                 ]
-              : selection.kind,
+              : selection.kind === "stats"
+                ? "mine"
+                : selection.kind,
         }),
     ...(projectId ? { projectId } : {}),
     ...(q ? { q } : {}),

@@ -18,3 +18,7 @@
 .atRisk { color: var(--orange); }
 .githubHint { grid-column: 1 / -1; color: var(--secondary); font-size: 11px; text-decoration: underline; text-underline-offset: 3px; width: fit-content; }
 .githubHint:hover { color: var(--text); }
+
+.season { grid-column: 1 / -1; font-size: 11px; color: var(--secondary); line-height: 1.7; width: fit-content; }
+.season:hover { color: var(--blue); }
+.previous { display: block; }

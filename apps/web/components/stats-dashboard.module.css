@@ -1,0 +1,448 @@
+.dashboard {
+  padding: 38px 42px 50px;
+  max-width: 1150px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.pageHead,
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.pageHead h1 {
+  font-size: 42px;
+  letter-spacing: -2px;
+  margin-top: 7px;
+}
+.pageHead h1 span {
+  color: var(--purple);
+}
+.kicker {
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  font-weight: 700;
+  color: var(--secondary);
+}
+.scope,
+.note,
+.footer {
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.footer {
+  text-align: center;
+}
+.panel,
+.hero {
+  padding: 25px;
+  border: 1px solid var(--line-strong);
+  border-radius: 19px;
+  background: var(--bg);
+  min-width: 0;
+}
+.hero {
+  background:
+    radial-gradient(
+      ellipse at top right,
+      color-mix(in srgb, var(--purple) 11%, transparent),
+      transparent 65%
+    ),
+    var(--bg);
+}
+.sectionHead h2 {
+  font-size: 19px;
+  letter-spacing: -0.5px;
+  margin-top: 4px;
+}
+.seasonBadge,
+.countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+}
+.seasonBadge {
+  color: var(--purple);
+  font-weight: 650;
+}
+.countdown {
+  color: var(--secondary);
+  background: var(--surface);
+  padding: 7px 10px;
+  border-radius: 20px;
+}
+.hero > h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 24px 0 9px;
+  font-size: clamp(24px, 3vw, 34px);
+  letter-spacing: -1px;
+}
+.heroCopy {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.standings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin: 27px 0;
+}
+.personName {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.personName small {
+  font-size: 10px;
+  color: var(--secondary);
+  font-weight: 400;
+}
+.dot,
+.legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--person);
+  margin-right: 5px;
+}
+.standings strong {
+  display: block;
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: -3px;
+  margin: 5px 0;
+}
+.standings strong small {
+  font-size: 12px;
+  letter-spacing: 0;
+  margin-left: 5px;
+  font-weight: 400;
+  color: var(--secondary);
+}
+.scoreTrack {
+  height: 5px;
+  background: var(--surface);
+  border-radius: 4px;
+  margin: 10px 0;
+}
+.scoreTrack span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--person);
+}
+.standings > div > small {
+  color: var(--secondary);
+  font-size: 11px;
+}
+.tally {
+  border-top: 1px solid var(--line-strong);
+  padding-top: 19px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tally > span {
+  font-size: 9px;
+  color: var(--secondary);
+  letter-spacing: 0.1em;
+}
+.tally strong {
+  font-size: 13px;
+}
+.tally strong span,
+.pastSeason strong span {
+  color: var(--muted);
+  margin: 0 4px;
+}
+.tally small {
+  font-size: 10px;
+  color: var(--secondary);
+  margin-left: auto;
+}
+.previous {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--secondary);
+  margin-top: 14px;
+}
+.switch {
+  display: flex;
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+.switch button {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--secondary);
+}
+.switch button[aria-pressed="true"] {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 1px 4px #0001;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 22px 0 12px;
+  font-size: 11px;
+}
+.legend small {
+  margin-left: auto;
+  color: var(--secondary);
+  font-size: 10px;
+}
+.chart {
+  width: 100%;
+  display: block;
+  overflow: visible;
+}
+.chart text {
+  fill: var(--secondary);
+  font-family: var(--font);
+  font-size: 10px;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  font-size: 12px;
+  table-layout: fixed;
+}
+.table th,
+.table td {
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.table th:first-child {
+  text-align: left;
+  width: 46%;
+  color: var(--secondary);
+  font-weight: 400;
+}
+.table thead th {
+  color: var(--person);
+  font-size: 11px;
+}
+.table td {
+  font-weight: 600;
+}
+.panel > .note {
+  margin-top: 14px;
+}
+.peopleGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.records {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px 12px;
+  margin: 25px 0 28px;
+}
+.records strong {
+  display: block;
+  font-size: 25px;
+  letter-spacing: -0.8px;
+  margin: 5px 0;
+}
+.records small {
+  display: block;
+  font-size: 10px;
+  color: var(--secondary);
+}
+.personPanel h3 {
+  font-size: 12px;
+  margin-top: 24px;
+}
+.personPanel h3 + .note {
+  margin-top: 6px;
+  font-size: 10px;
+}
+.heatmap {
+  display: grid;
+  grid-template-rows: repeat(7, 1fr);
+  grid-auto-flow: column;
+  grid-template-columns: repeat(26, 1fr);
+  gap: 3px;
+  margin-top: 14px;
+}
+.heatmap span {
+  aspect-ratio: 1;
+  border-radius: 2px;
+}
+.heatLegend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 8px;
+  color: var(--secondary);
+}
+.heatLegend span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.heatLegend i {
+  background: var(--person);
+  width: 6px;
+  height: 6px;
+  opacity: 0.3;
+}
+.heatLegend i:nth-child(2) {
+  opacity: 0.6;
+}
+.heatLegend i:nth-child(3) {
+  opacity: 1;
+}
+.bars {
+  display: flex;
+  gap: 4px;
+  margin-top: 17px;
+}
+.bars > div {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+.barTrack {
+  height: 55px;
+  display: flex;
+  align-items: flex-end;
+  background: var(--surface);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.barTrack span {
+  display: block;
+  background: var(--person);
+  width: 100%;
+  opacity: 0.75;
+  min-height: 0;
+}
+.bars small {
+  font-size: 8px;
+  color: var(--secondary);
+  white-space: nowrap;
+}
+.pastSeason {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 19px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.pastSeason:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.pastSeason small {
+  display: block;
+  color: var(--secondary);
+  font-size: 10px;
+  margin-top: 5px;
+}
+.pastSeason > span {
+  color: var(--secondary);
+}
+@media (max-width: 1000px) {
+  .dashboard {
+    padding: 28px 24px;
+  }
+  .peopleGrid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .dashboard {
+    padding: 24px 16px 40px;
+    gap: 18px;
+  }
+  .panel,
+  .hero {
+    padding: 19px 16px;
+    border-radius: 16px;
+  }
+  .pageHead {
+    align-items: flex-start;
+  }
+  .pageHead h1 {
+    font-size: 34px;
+  }
+  .scope {
+    font-size: 9px;
+  }
+  .kicker {
+    font-size: 8px;
+  }
+  .seasonBadge {
+    font-size: 10px;
+  }
+  .countdown {
+    font-size: 10px;
+    padding: 6px 8px;
+  }
+  .standings {
+    gap: 20px;
+  }
+  .standings strong {
+    font-size: 47px;
+  }
+  .tally small {
+    margin-left: 0;
+    width: 100%;
+  }
+  .sectionHead h2 {
+    font-size: 18px;
+  }
+  .switch button {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+  .legend {
+    gap: 10px;
+    font-size: 10px;
+  }
+  .legend small {
+    font-size: 8px;
+  }
+  .pastSeason {
+    font-size: 11px;
+    gap: 8px;
+  }
+  .heroCopy {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 600px) {
+  /* Keep SVG labels legible as its viewBox scales to a narrow screen. */
+  .chart text {
+    font-size: 20px;
+  }
+}

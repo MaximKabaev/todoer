@@ -52,6 +52,7 @@ import { ScoreCard } from "./score-card";
 import { Composer } from "./composer";
 import { TaskRow } from "./task-row";
 import { TaskDetail } from "./task-detail";
+import { StatsDashboard } from "./stats-dashboard";
 import { Settings } from "./settings";
 import { Avatar, Brand, Confirm, Skeleton } from "./ui";
 import { useLocalDay } from "@/hooks/use-local-day";
@@ -113,6 +114,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     });
     return () => cancelAnimationFrame(frame);
   }, [captureToOpen, nav, mutate]);
+  const stats = nav.pathname === "/stats";
   const settings = nav.pathname === "/settings";
   const selectedId = nav.pathname.startsWith("/tasks/")
     ? decodeURIComponent(nav.pathname.slice(7))
@@ -294,15 +296,17 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     );
     return () => clearTimeout(timer);
   }, [queryDraft, search, nav]);
-  const pageTitle = settings
-    ? "Settings"
-    : selectedId
-      ? missingId === selectedId
-        ? "Task not found"
-        : selected.data?.task?.title || "Untitled task"
-      : selection.kind === "teammate"
-        ? `${teammate.displayName}'s Tasks`
-        : title;
+  const pageTitle = stats
+    ? "Stats"
+    : settings
+      ? "Settings"
+      : selectedId
+        ? missingId === selectedId
+          ? "Task not found"
+          : selected.data?.task?.title || "Untitled task"
+        : selection.kind === "teammate"
+          ? `${teammate.displayName}'s Tasks`
+          : title;
   useEffect(() => {
     if (nav.pathname === `/people/${encodeURIComponent(user.username)}`)
       nav.navigate("/my", { replace: true });
@@ -448,6 +452,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
       if (
         (e.target instanceof Element &&
           e.target.closest("input,textarea,select,[contenteditable=true]")) ||
+        stats ||
         settings ||
         deleteTask
       )
@@ -472,9 +477,10 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [settings, deleteTask, setSelectedId, selectedId, mobileHome, nav]);
+  }, [stats, settings, deleteTask, setSelectedId, selectedId, mobileHome, nav]);
   function handleToggle(task: Task) {
-    if (task.id.startsWith("pending-") || completionPending.has(task.id)) return;
+    if (task.id.startsWith("pending-") || completionPending.has(task.id))
+      return;
     completionPending.add(task.id);
     const done = !task.done;
     if (done && selection.kind !== "completed") {
@@ -633,7 +639,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
       <main className="main-panel">
         <header className="app-toolbar">
           <div className="toolbar-location">
-            {activeProject?.name || "All projects"}
+            {stats ? "All projects" : activeProject?.name || "All projects"}
           </div>
           <button
             className="mobile-back text-button"
@@ -675,230 +681,242 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
             </div>
           </div>
         </header>
-        <div className="main-content">
-          {!!activeProject?.githubRepos.length && (
-            <div className="project-repo-links">
-              {activeProject.githubRepos.map((repo) => (
-                <a
-                  key={repo}
-                  className="project-repo-link"
-                  href={`https://github.com/${repo}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Github size={14} aria-hidden="true" />
-                  <span>{repo}</span>
-                  <ArrowUpRight size={13} aria-hidden="true" />
-                </a>
-              ))}
-            </div>
-          )}
-          <div className="list-heading">
-            <div className="heading-symbol">
-              <Icon size={30} strokeWidth={1.8} />
-            </div>
-            <div className="list-heading-top">
-              <div className="list-title-group">
-                <h1>{title}</h1>
-                <span className="list-total" aria-label={`${visible.length} tasks`}>{visible.length}</span>
-              </div>
-              <div className="list-controls">
-                <div className="sort-wrap">
-                  <button
-                    className="icon-button"
-                    aria-label="Sort tasks"
-                    aria-expanded={sortOpen}
-                    onClick={() => setSortOpen(!sortOpen)}
+        {stats ? (
+          <StatsDashboard />
+        ) : (
+          <div className="main-content">
+            {!!activeProject?.githubRepos.length && (
+              <div className="project-repo-links">
+                {activeProject.githubRepos.map((repo) => (
+                  <a
+                    key={repo}
+                    className="project-repo-link"
+                    href={`https://github.com/${repo}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                   >
-                    <ArrowDownUp size={18} />
-                  </button>
-                  {sortOpen && (
-                    <div className="sort-menu">
-                      {(["manual", "priority", "due"] as const).map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => {
-                            setSort(s);
-                            setSortOpen(false);
-                          }}
-                        >
-                          {s === "manual"
-                            ? "Newest first"
-                            : s === "priority"
-                              ? "Priority"
-                              : "Due date"}
-                          {sort === s && <Check size={14} />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                    <Github size={14} aria-hidden="true" />
+                    <span>{repo}</span>
+                    <ArrowUpRight size={13} aria-hidden="true" />
+                  </a>
+                ))}
+              </div>
+            )}
+            <div className="list-heading">
+              <div className="heading-symbol">
+                <Icon size={30} strokeWidth={1.8} />
+              </div>
+              <div className="list-heading-top">
+                <div className="list-title-group">
+                  <h1>{title}</h1>
+                  <span
+                    className="list-total"
+                    aria-label={`${visible.length} tasks`}
+                  >
+                    {visible.length}
+                  </span>
+                </div>
+                <div className="list-controls">
+                  <div className="sort-wrap">
+                    <button
+                      className="icon-button"
+                      aria-label="Sort tasks"
+                      aria-expanded={sortOpen}
+                      onClick={() => setSortOpen(!sortOpen)}
+                    >
+                      <ArrowDownUp size={18} />
+                    </button>
+                    {sortOpen && (
+                      <div className="sort-menu">
+                        {(["manual", "priority", "due"] as const).map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => {
+                              setSort(s);
+                              setSortOpen(false);
+                            }}
+                          >
+                            {s === "manual"
+                              ? "Newest first"
+                              : s === "priority"
+                                ? "Priority"
+                                : "Due date"}
+                            {sort === s && <Check size={14} />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+              <p>{subtitle}</p>
             </div>
-            <p>{subtitle}</p>
-          </div>
-          {(selection.kind === "mine" || selection.kind === "teammate") && (
-            <ScoreCard
-              score={store.score.error ? undefined : store.score.data}
-              viewed={selection.kind === "mine" ? "me" : "teammate"}
-            />
-          )}
-          {(searchOpen || selection.kind === "all") && (
-            <div className="search-field">
-              <Search size={17} />
-              <input
-                ref={searchRef}
-                aria-label="Search title and notes"
-                placeholder="Search this list…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+            {(selection.kind === "mine" || selection.kind === "teammate") && (
+              <ScoreCard
+                score={store.score.error ? undefined : store.score.data}
+                viewed={selection.kind === "mine" ? "me" : "teammate"}
               />
-              <button
-                className="icon-button"
-                aria-label="Clear and close search"
-                onClick={() => {
-                  setSearchOpen(false);
-                  setQueryDraft(null);
-                  if (selection.kind === "all") nav.back("/my", true);
-                }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-          )}
-          {selection.kind === "mine" && (
-            <div className="segmented-control" aria-label="Filter my tasks">
-              {["All", "Made by me", `From ${teammate.displayName}`].map(
-                (s, i) => (
-                  <button
-                    key={s}
-                    onClick={() => setSegment(i)}
-                    aria-pressed={segment === i}
-                    className={segment === i ? "selected" : ""}
-                  >
-                    {s}
-                  </button>
-                ),
-              )}
-            </div>
-          )}
-          <div className="task-list">
-            {store.tasks.isLoading && !store.tasks.data ? (
-              <Skeleton />
-            ) : store.tasks.error ? (
-              <div className="empty-state">
-                <span className="empty-illustration">
-                  <ArrowUpRight size={38} />
-                </span>
-                <h2>A little connection trouble.</h2>
-                <p>Your list will be here when you reconnect.</p>
+            )}
+            {(searchOpen || selection.kind === "all") && (
+              <div className="search-field">
+                <Search size={17} />
+                <input
+                  ref={searchRef}
+                  aria-label="Search title and notes"
+                  placeholder="Search this list…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
                 <button
-                  className="secondary-button"
-                  onClick={() => store.tasks.mutate()}
+                  className="icon-button"
+                  aria-label="Clear and close search"
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setQueryDraft(null);
+                    if (selection.kind === "all") nav.back("/my", true);
+                  }}
                 >
-                  Try again
+                  <X size={16} />
                 </button>
               </div>
-            ) : visible.length ? (
-              groups
-                .filter((g) => g.tasks.length > 0)
-                .map((group) => (
-                  <section className="task-group" key={group.title}>
-                    <div className="task-group-heading">
-                      <h2>{group.title}</h2>
-                      <span>{group.tasks.length}</span>
-                    </div>
-                    {group.tasks.map((task) => (
-                      <TaskRow
-                        key={task.id}
-                        task={task}
-                        selected={selectedId === task.id}
-                        completing={completing.has(task.id)}
-                        onOpen={() => {
-                          if (!task.id.startsWith("pending-")) openTask(task);
-                        }}
-                        onToggle={() => handleToggle(task)}
-                        onDelete={() => setDeleteTask(task)}
-                        handoffLabel={
-                          task.assignees.some((a) => a.id === user.id)
-                            ? `Pass to ${teammate.displayName}`
-                            : "Take"
-                        }
-                        onHandoff={() => {
-                          const to = task.assignees.some(
-                            (a) => a.id === user.id,
-                          )
-                            ? teammate.id
-                            : user.id;
-                          void store
-                            .patch(task, { assignees: [to] }, true)
-                            .catch(() => {});
-                        }}
-                      />
-                    ))}
-                  </section>
-                ))
-            ) : (
-              <div className="empty-state">
-                <div className={`empty-illustration empty-${selection.kind}`}>
-                  <CheckCheck size={42} strokeWidth={1.4} />
-                  <Sparkles className="empty-sparkle" size={19} />
-                </div>
-                <h2>
-                  {search
-                    ? "Nothing here by that name."
-                    : selection.kind === "completed"
-                      ? "Good things take little steps."
-                      : "A little breathing room."}
-                </h2>
-                <p>
-                  {search
-                    ? "Try another word, or clear your search."
-                    : selection.kind === "later"
-                      ? "Save the ideas you’d love to come back to."
-                      : selection.kind === "completed"
-                        ? "Your completed tasks will find a home here."
-                        : "Nothing on this list. Add a thought below,\nand take it one thing at a time."}
-                </p>
-                {search && (
-                  <button className="text-button" onClick={() => setQuery("")}>
-                    Clear search
-                  </button>
+            )}
+            {selection.kind === "mine" && (
+              <div className="segmented-control" aria-label="Filter my tasks">
+                {["All", "Made by me", `From ${teammate.displayName}`].map(
+                  (s, i) => (
+                    <button
+                      key={s}
+                      onClick={() => setSegment(i)}
+                      aria-pressed={segment === i}
+                      className={segment === i ? "selected" : ""}
+                    >
+                      {s}
+                    </button>
+                  ),
                 )}
               </div>
             )}
+            <div className="task-list">
+              {store.tasks.isLoading && !store.tasks.data ? (
+                <Skeleton />
+              ) : store.tasks.error ? (
+                <div className="empty-state">
+                  <span className="empty-illustration">
+                    <ArrowUpRight size={38} />
+                  </span>
+                  <h2>A little connection trouble.</h2>
+                  <p>Your list will be here when you reconnect.</p>
+                  <button
+                    className="secondary-button"
+                    onClick={() => store.tasks.mutate()}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : visible.length ? (
+                groups
+                  .filter((g) => g.tasks.length > 0)
+                  .map((group) => (
+                    <section className="task-group" key={group.title}>
+                      <div className="task-group-heading">
+                        <h2>{group.title}</h2>
+                        <span>{group.tasks.length}</span>
+                      </div>
+                      {group.tasks.map((task) => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          selected={selectedId === task.id}
+                          completing={completing.has(task.id)}
+                          onOpen={() => {
+                            if (!task.id.startsWith("pending-")) openTask(task);
+                          }}
+                          onToggle={() => handleToggle(task)}
+                          onDelete={() => setDeleteTask(task)}
+                          handoffLabel={
+                            task.assignees.some((a) => a.id === user.id)
+                              ? `Pass to ${teammate.displayName}`
+                              : "Take"
+                          }
+                          onHandoff={() => {
+                            const to = task.assignees.some(
+                              (a) => a.id === user.id,
+                            )
+                              ? teammate.id
+                              : user.id;
+                            void store
+                              .patch(task, { assignees: [to] }, true)
+                              .catch(() => {});
+                          }}
+                        />
+                      ))}
+                    </section>
+                  ))
+              ) : (
+                <div className="empty-state">
+                  <div className={`empty-illustration empty-${selection.kind}`}>
+                    <CheckCheck size={42} strokeWidth={1.4} />
+                    <Sparkles className="empty-sparkle" size={19} />
+                  </div>
+                  <h2>
+                    {search
+                      ? "Nothing here by that name."
+                      : selection.kind === "completed"
+                        ? "Good things take little steps."
+                        : "A little breathing room."}
+                  </h2>
+                  <p>
+                    {search
+                      ? "Try another word, or clear your search."
+                      : selection.kind === "later"
+                        ? "Save the ideas you’d love to come back to."
+                        : selection.kind === "completed"
+                          ? "Your completed tasks will find a home here."
+                          : "Nothing on this list. Add a thought below,\nand take it one thing at a time."}
+                  </p>
+                  {search && (
+                    <button
+                      className="text-button"
+                      onClick={() => setQuery("")}
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="list-endnote">
+              {visible.length > 0 && (
+                <>
+                  <Sun size={15} /> One thing at a time is plenty.
+                </>
+              )}
+            </div>
+            <Composer
+              ref={composer}
+              later={selection.kind === "later"}
+              users={[user, teammate]}
+              onCreate={create}
+              onImages={(files) => upload(files)}
+              uploading={uploading}
+            />
+            <div className="desktop-shortcuts">
+              <span>
+                <kbd>N</kbd> new task
+              </span>
+              <span>
+                <kbd>↑</kbd>
+                <kbd>↓</kbd> navigate
+              </span>
+              <span>
+                <kbd>↵</kbd> open
+              </span>
+              <span>
+                <kbd>space</kbd> complete
+              </span>
+            </div>
           </div>
-          <div className="list-endnote">
-            {visible.length > 0 && (
-              <>
-                <Sun size={15} /> One thing at a time is plenty.
-              </>
-            )}
-          </div>
-          <Composer
-            ref={composer}
-            later={selection.kind === "later"}
-            users={[user, teammate]}
-            onCreate={create}
-            onImages={(files) => upload(files)}
-            uploading={uploading}
-          />
-          <div className="desktop-shortcuts">
-            <span>
-              <kbd>N</kbd> new task
-            </span>
-            <span>
-              <kbd>↑</kbd>
-              <kbd>↓</kbd> navigate
-            </span>
-            <span>
-              <kbd>↵</kbd> open
-            </span>
-            <span>
-              <kbd>space</kbd> complete
-            </span>
-          </div>
-        </div>
+        )}
       </main>
       {selectedId && missingId !== selectedId && selected.data?.task && (
         <TaskDetail
@@ -911,7 +929,11 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
           activeProjectId={user.activeProjectId}
           onSwitchProject={setActiveProject}
           onPatch={async (input, handoff) => {
-            const { task } = await store.patch(selected.data!.task, input, handoff);
+            const { task } = await store.patch(
+              selected.data!.task,
+              input,
+              handoff,
+            );
             if (
               input.projectId !== undefined &&
               user.activeProjectId &&
