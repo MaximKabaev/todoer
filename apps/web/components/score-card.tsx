@@ -101,8 +101,11 @@ export function ScoreCard({
             </Link>
           )}
           <Link href="/stats" className={styles.season}>
-            Season {score.season.number} · {score.season.daysLeft} days left ·{" "}
-            {score.season.tally.me}–{score.season.tally.teammate}
+            Season {score.season.number} ·{" "}
+            {score.season.daysLeft === 1
+              ? "last day"
+              : `${score.season.daysLeft} days left`}{" "}
+            · {score.season.tally.me}–{score.season.tally.teammate}
             {score.season.tally.ties > 0 &&
               ` · ${score.season.tally.ties} ties`}{" "}
             <span aria-hidden="true">↗</span>

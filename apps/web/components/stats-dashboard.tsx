@@ -1,5 +1,5 @@
 "use client";
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import useSWR from "swr";
 import { Trophy, Timer, ArrowUpRight, Flame } from "lucide-react";
 import { request, type Stats, type PersonStats } from "@/lib/api";
@@ -12,13 +12,29 @@ const date = (day: string) =>
     day: "numeric",
     timeZone: "UTC",
   });
+const days = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
 const accent = (person: PersonStats): CSSProperties =>
   ({ "--person": `var(--${person.user.color})` }) as CSSProperties;
 function History({ data }: { data: Stats }) {
   const [range, setRange] = useState(30);
+  // Draw at the container's real width so the chart keeps its height and legible labels on phones.
+  const frame = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(780);
+  useEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setWidth(Math.max(280, Math.round(entry.contentRect.width))),
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const right = width - 42;
   const history = range ? data.history.slice(-range) : data.history;
   const x = (i: number) =>
-    history.length < 2 ? 380 : 42 + (i / (history.length - 1)) * 696;
+    history.length < 2
+      ? width / 2
+      : 42 + (i / (history.length - 1)) * (right - 42);
   const y = (score: number) => 190 - score * 1.6;
   const people = [data.me, data.teammate].filter((p): p is PersonStats => !!p);
   return (
@@ -53,96 +69,98 @@ function History({ data }: { data: Stats }) {
         ))}
         <small>End-of-day · /100</small>
       </div>
-      <svg
-        className={styles.chart}
-        viewBox="0 0 780 232"
-        role="img"
-        aria-label="Score history chart: end-of-day scores, 0 to 100"
-      >
-        {[0, 25, 50, 75, 100].map((n) => (
-          <g key={n}>
-            <line
-              x1="42"
-              x2="738"
-              y1={y(n)}
-              y2={y(n)}
-              stroke="var(--line-strong)"
-              strokeDasharray={n === 50 ? "4 4" : undefined}
-            />
-            <text x="28" y={y(n) + 4} textAnchor="end">
-              {n}
-            </text>
-          </g>
-        ))}
-        {history.map(
-          (h, i) =>
-            h.day.endsWith("-01") && (
-              <g key={h.day}>
-                <line
-                  x1={x(i)}
-                  x2={x(i)}
-                  y1="22"
-                  y2="195"
-                  stroke="var(--secondary)"
-                  strokeDasharray="3 5"
-                />
-                <text x={x(i)} y="14" textAnchor="middle">
-                  {new Date(h.day).toLocaleDateString("en-US", {
-                    month: "short",
-                    timeZone: "UTC",
-                  })}{" "}
-                  · season
-                </text>
-              </g>
-            ),
-        )}
-        {(["me", "teammate"] as const).map(
-          (key, pi) =>
-            data[key] && (
-              <g key={key} style={accent(data[key]!)}>
-                <polyline
-                  points={history
-                    .map((h, i) =>
-                      h[key] === null ? "" : `${x(i)},${y(h[key]!)}`,
-                    )
-                    .join(" ")}
-                  fill="none"
-                  stroke="var(--person)"
-                  strokeWidth="3"
-                  strokeLinejoin="round"
-                  strokeDasharray={pi ? "6 4" : undefined}
-                />
-                {history.map(
-                  (h, i) =>
-                    h[key] !== null && (
-                      <circle
-                        key={h.day}
-                        cx={x(i)}
-                        cy={y(h[key]!)}
-                        r={history.length < 3 ? 5 : 2}
-                        fill="var(--person)"
-                      >
-                        <title>
-                          {date(h.day)} · {data[key]!.user.displayName}:{" "}
-                          {h[key]}
-                        </title>
-                      </circle>
-                    ),
-                )}
-              </g>
-            ),
-        )}
-        {history.length > 0 && (
-          <>
-            <text x="42" y="222">
-              {date(history[0].day)}
-            </text>
-            <text x="738" y="222" textAnchor="end">
-              {date(history.at(-1)!.day)}
-            </text>
-          </>
-        )}
-      </svg>
+      <div ref={frame}>
+        <svg
+          className={styles.chart}
+          viewBox={`0 0 ${width} 232`}
+          role="img"
+          aria-label="Score history chart: end-of-day scores, 0 to 100"
+        >
+          {[0, 25, 50, 75, 100].map((n) => (
+            <g key={n}>
+              <line
+                x1="42"
+                x2={right}
+                y1={y(n)}
+                y2={y(n)}
+                stroke="var(--line-strong)"
+                strokeDasharray={n === 50 ? "4 4" : undefined}
+              />
+              <text x="28" y={y(n) + 4} textAnchor="end">
+                {n}
+              </text>
+            </g>
+          ))}
+          {history.map(
+            (h, i) =>
+              h.day.endsWith("-01") && (
+                <g key={h.day}>
+                  <line
+                    x1={x(i)}
+                    x2={x(i)}
+                    y1="22"
+                    y2="195"
+                    stroke="var(--secondary)"
+                    strokeDasharray="3 5"
+                  />
+                  <text x={x(i)} y="14" textAnchor="middle">
+                    {new Date(h.day).toLocaleDateString("en-US", {
+                      month: "short",
+                      timeZone: "UTC",
+                    })}{" "}
+                    · season
+                  </text>
+                </g>
+              ),
+          )}
+          {(["me", "teammate"] as const).map(
+            (key, pi) =>
+              data[key] && (
+                <g key={key} style={accent(data[key]!)}>
+                  <polyline
+                    points={history
+                      .map((h, i) =>
+                        h[key] === null ? "" : `${x(i)},${y(h[key]!)}`,
+                      )
+                      .join(" ")}
+                    fill="none"
+                    stroke="var(--person)"
+                    strokeWidth="3"
+                    strokeLinejoin="round"
+                    strokeDasharray={pi ? "6 4" : undefined}
+                  />
+                  {history.map(
+                    (h, i) =>
+                      h[key] !== null && (
+                        <circle
+                          key={h.day}
+                          cx={x(i)}
+                          cy={y(h[key]!)}
+                          r={history.length < 3 ? 5 : 2}
+                          fill="var(--person)"
+                        >
+                          <title>
+                            {date(h.day)} · {data[key]!.user.displayName}:{" "}
+                            {h[key]}
+                          </title>
+                        </circle>
+                      ),
+                  )}
+                </g>
+              ),
+          )}
+          {history.length > 0 && (
+            <>
+              <text x="42" y="222">
+                {date(history[0].day)}
+              </text>
+              <text x={right} y="222" textAnchor="end">
+                {date(history.at(-1)!.day)}
+              </text>
+            </>
+          )}
+        </svg>
+      </div>
       {history.length < 3 && (
         <p className={styles.note}>
           The story starts here. Each day adds another point to the chart.
@@ -289,8 +307,8 @@ function PersonPanel({
   const records = [
     [
       "Active streak",
-      `${person.streak.current} days`,
-      `Personal best · ${person.streak.best} days`,
+      days(person.streak.current),
+      `Personal best · ${days(person.streak.best)}`,
     ],
     [
       "Highest score",
@@ -426,7 +444,9 @@ export function StatsDashboard() {
           </span>
           <span className={styles.countdown} title={season.endsAt}>
             <Timer size={14} />
-            {season.daysLeft} days left
+            {season.daysLeft === 1
+              ? "Last day!"
+              : `${days(season.daysLeft)} left`}
           </span>
         </div>
         <h2>

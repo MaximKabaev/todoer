@@ -218,7 +218,7 @@
 .chart text {
   fill: var(--secondary);
   font-family: var(--font);
-  font-size: 10px;
+  font-size: 11px;
 }
 .table {
   width: 100%;
@@ -440,9 +440,4 @@
   }
 }
 
-@media (max-width: 600px) {
-  /* Keep SVG labels legible as its viewBox scales to a narrow screen. */
-  .chart text {
-    font-size: 20px;
-  }
-}
+
