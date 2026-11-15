@@ -1,5 +1,4 @@
 "use client";
-import { useEffect, useState } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -9,7 +8,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { Score } from "@/lib/api";
-import { seasonOutcome } from "@/lib/seasons";
 import { scoreComparison } from "@/lib/score";
 import styles from "./score-card.module.css";
 
@@ -20,11 +18,6 @@ export function ScoreCard({
   score?: Score;
   viewed: "me" | "teammate";
 }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 60000);
-    return () => clearInterval(timer);
-  }, []);
   const entry = score?.teammate ? score[viewed] : null;
   const Trend =
     entry && entry.trend > 0
@@ -100,28 +93,6 @@ export function ScoreCard({
               Connect GitHub in Settings <span aria-hidden="true">↗</span>
             </Link>
           )}
-          <Link href="/stats" className={styles.season}>
-            Season {score.season.number} ·{" "}
-            {score.season.daysLeft === 1
-              ? "last day"
-              : `${score.season.daysLeft} days left`}{" "}
-            · {score.season.tally.me}–{score.season.tally.teammate}
-            {score.season.tally.ties > 0 &&
-              ` · ${score.season.tally.ties} ties`}{" "}
-            <span aria-hidden="true">↗</span>
-            {score.season.previous &&
-              now >= Date.parse(score.season.startsAt) &&
-              now - Date.parse(score.season.startsAt) < 3 * 86400000 && (
-                <span className={styles.previous}>
-                  Last season:{" "}
-                  {seasonOutcome(
-                    score.season.previous,
-                    score.me.user.displayName,
-                    score.teammate?.user.displayName,
-                  )}
-                </span>
-              )}
-          </Link>
           <div className={styles.stats}>
             {entry.doneThisWeek} done this week
             {entry.afkPenaltyThisWeek > 0 && (

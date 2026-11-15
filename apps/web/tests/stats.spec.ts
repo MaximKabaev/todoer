@@ -6,7 +6,7 @@ async function login(page: import("@playwright/test").Page) {
   });
 }
 
-test("Stats navigation, standings, comparison and history; season card links back", async ({
+test("Stats navigation, standings, comparison and history; the score card has no season line", async ({
   page,
 }) => {
   await login(page);
@@ -15,9 +15,8 @@ test("Stats navigation, standings, comparison and history; season card links bac
     name: "Your good boy score",
     exact: true,
   });
-  await expect(
-    card.getByRole("link", { name: /Season \d+.*days left/ }),
-  ).toBeVisible();
+  await expect(card).toBeVisible();
+  await expect(card).not.toContainText(/Season \d+/);
   await page
     .locator(".sidebar")
     .getByRole("link", { name: "Stats", exact: true })
@@ -44,9 +43,6 @@ test("Stats navigation, standings, comparison and history; season card links bac
   await expect(
     page.getByRole("row", { name: /Median hours to done/ }),
   ).toBeVisible();
-  await page.goto("/my");
-  await card.getByRole("link", { name: /Season \d+/ }).click();
-  await expect(page.getByRole("heading", { name: "Stats." })).toBeVisible();
 });
 
 test("phone navigation and sparse data have no page overflow", async ({
@@ -96,33 +92,4 @@ test("missing teammate, null records and short history remain usable", async ({
     page.getByText("The story starts here.", { exact: false }),
   ).toBeVisible();
   await expect(page.getByText("No history yet").first()).toBeVisible();
-});
-
-test("score card celebrates the previous result only in the first three days", async ({
-  page,
-}) => {
-  await login(page);
-  for (const [days, visible] of [
-    [1, true],
-    [4, false],
-  ] as const) {
-    await page.route("**/api/score", async (route) => {
-      const response = await route.fetch();
-      const data = await response.json();
-      data.season.startsAt = new Date(
-        Date.now() - days * 86400000,
-      ).toISOString();
-      data.season.previous.winner = null;
-      await route.fulfill({ response, json: data });
-    });
-    await page.goto("/my");
-    const card = page.getByRole("region", {
-      name: "Your good boy score",
-      exact: true,
-    });
-    await expect(card).toBeVisible();
-    if (visible) await expect(card).toContainText("Last season: A tie");
-    else await expect(card).not.toContainText("Last season:");
-    await page.unroute("**/api/score");
-  }
 });
