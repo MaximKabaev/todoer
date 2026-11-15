@@ -27,6 +27,7 @@ const withRepos = (project, repos) => Object.assign(project, { githubRepos: repo
 // Development mock never queues or delivers email, including Later assignment digests.
 /** Development-only, in-memory SPEC.md API. Never imported by the app. */
 import { defaultDate, scoreEntry } from "./mock-score.mjs";
+import { demoTasks, seasonFor, statsFor } from "./mock-stats.mjs";
 import { createServer } from "node:http";
 import { randomUUID, randomBytes, randomInt } from "node:crypto";
 const port = Number(process.env.MOCK_PORT || 4000);
@@ -218,6 +219,7 @@ const resolveUser = (identifier, me) =>
             (v) => v.toLowerCase() === String(identifier).toLowerCase(),
           ),
         );
+if (process.env.MOCK_STATS_DEMO === "1") for (const { title, ...options } of demoTasks(users)) fixture(title, options);
 function resolveTag(identifier) {
   let tag = tags.find(
     (t) =>
@@ -551,8 +553,9 @@ const server = createServer(async (req, res) => {
       const otherUser = users.find((u) => u.id !== me.id);
       const other = otherUser ? scoreEntry(tasks, otherUser, now, githubLogins.get(otherUser.id)) : null;
       const difference = other ? own.score - other.score : 0;
-      return send({ me: own, teammate: other, leader: difference > 0 ? "me" : difference < 0 ? "teammate" : null, lead: Math.abs(difference) });
+      return send({ me: own, teammate: other, leader: difference > 0 ? "me" : difference < 0 ? "teammate" : null, lead: Math.abs(difference), season: seasonFor(users, me, now) });
     }
+    if (parts[1] === "stats" && method === "GET") return send(statsFor(tasks, users, me, Date.now()));
     if (parts[1] === "counts") {
       const count = (view) =>
         filterTasks(

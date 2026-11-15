@@ -134,11 +134,77 @@ export type ScoreEntry = {
     githubLinked: boolean;
   };
 };
+export type SeasonFinal = { score: number; label: string; carriedOver: number };
+export type SeasonResult = {
+  id: string;
+  number: number;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  winner: "me" | "teammate" | null;
+  me: SeasonFinal;
+  teammate: SeasonFinal | null;
+};
+export type Season = {
+  id: string;
+  number: number;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  daysLeft: number;
+  tally: { me: number; teammate: number; ties: number };
+  previous: SeasonResult | null;
+};
 export type Score = {
   me: ScoreEntry;
   teammate: ScoreEntry | null;
   leader: "me" | "teammate" | null;
   lead: number;
+  season: Season;
+};
+export type StatsTotals = {
+  completed: number;
+  onTime: number;
+  onTimeRate: number | null;
+  afkDays: number;
+  afkPoints: number;
+  commits: number;
+  merges: number;
+  activeDays: number;
+};
+export type PersonStats = {
+  user: User;
+  score: number;
+  label: string;
+  open: number;
+  overdue: number;
+  best: { score: number; day: string } | null;
+  worst: { score: number; day: string } | null;
+  streak: { current: number; best: number };
+  bestDay: { day: string; completed: number } | null;
+  season: StatsTotals & { daysLed: number };
+  allTime: StatsTotals & {
+    created: number;
+    assignedToTeammate: number;
+    medianHoursToDone: number | null;
+  };
+  /** Completions by weekday, Monday first. */
+  weekdays: number[];
+  /** Completions by local hour, 0-23. */
+  hours: number[];
+  /** The last 182 days, oldest first. */
+  activity: { day: string; completed: number; commits: number; merges: number }[];
+};
+export type Stats = {
+  generatedAt: string;
+  timezone: string;
+  season: Season;
+  /** Finished seasons, newest first. */
+  seasons: SeasonResult[];
+  /** End-of-day scores, oldest first, ending today. */
+  history: { day: string; me: number; teammate: number | null }[];
+  me: PersonStats;
+  teammate: PersonStats | null;
 };
 export type AgentToken = {
   id: string;
@@ -186,7 +252,7 @@ export const scopeKey = (path: string, projectId?: string | null) =>
   projectId ? `${path}?${new URLSearchParams({ projectId })}` : path;
 export const workspaceKey = (key: unknown) =>
   typeof key === "string" &&
-  ["/api/tasks", "/api/counts", "/api/score", "/api/tags", "/api/projects"].some(
+  ["/api/tasks", "/api/counts", "/api/score", "/api/stats", "/api/tags", "/api/projects"].some(
     (path) => key === path || key.startsWith(`${path}?`),
   );
 export const taskKey = (query: TaskQuery = {}) =>

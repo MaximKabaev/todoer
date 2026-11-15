@@ -206,6 +206,29 @@ Unknown body fields are ignored. Everything is camelCase.
   `activity = { day, completed, commits, merges, active, atRisk, githubLinked }` is today's AFK check so far:
   tasks completed, commits pushed and PRs merged today; `atRisk` = open assigned Now tasks and no activity yet.
   `leader` is null when tied; `lead` is the integer point gap.
+  The response also has `season: Season` (see **Seasons**):
+  `Season = { id: "YYYY-MM", number, name: "November 2026", startsAt, endsAt, daysLeft, tally: { me, teammate, ties }, previous: SeasonResult | null }`,
+  where `tally` counts finished seasons won by each side and `previous` is the season that ended last.
+  `SeasonResult = { id, number, name, startsAt, endsAt, winner: "me" | "teammate" | null, me: Final, teammate: Final | null }`,
+  `Final = { score, label, carriedOver }`: the score frozen when the season ended, and the score the person
+  started the next season with after the soft reset.
+- `GET /api/stats` → the Stats page data, from the caller's point of view, not scoped by project:
+  ```
+  { generatedAt, timezone, season: Season, seasons: SeasonResult[] (finished, newest first),
+    history: [{ day, me, teammate }] (end-of-day scores, oldest first: today and up to 364 days back, from the first scored day),
+    me: PersonStats, teammate: PersonStats | null }
+  PersonStats = { user, score, label, open, overdue,
+    best: { score, day } | null, worst: { score, day } | null,       // over `history`
+    streak: { current, best },                                       // consecutive active days (AFK definition)
+    bestDay: { day, completed } | null,                              // most assigned tasks completed in one day
+    season: Totals & { daysLed },                                    // this season so far; daysLed counts finished days ended ahead
+    allTime: Totals & { created, assignedToTeammate, medianHoursToDone },
+    weekdays: [Mon..Sun completions], hours: [0..23 completions],    // all time, local time
+    activity: [{ day, completed, commits, merges }] }                // the last 182 days, oldest first
+  Totals = { completed, onTime, onTimeRate (0-1 | null), afkDays, afkPoints, commits, merges, activeDays }
+  ```
+  "Completed" means assigned Now tasks the person completed (the same tasks the score uses, empty ones
+  excluded); `onTime` = completed by the deadline. Days and hours use `SCORE_TIMEZONE`.
 - See the **Good boy score** section for how it is computed.
 
 ### Task JSON shape
@@ -332,6 +355,20 @@ editing a due date is always reflected.
   (idempotent per `X-GitHub-Delivery`; bots ignored) with the authenticated sender's login and the
   delivery time. They count for whoever has that login linked (`users.github_login`, set in Settings,
   matched case-insensitively). Repos are connected by installing the webhook (`deploy/github-webhooks.sh`).
+- **Seasons**: the competition runs in monthly seasons. Each season is a calendar month in
+  `SCORE_TIMEZONE`, and the first one, Season 1, is November 2026 (it carries all earlier history).
+  At midnight on the 1st (`SEASONS_START`, default `2026-12-01`, is the first reset) the season ends:
+  - The result is **frozen** in `seasons`: each person's score at that moment (including the AFK penalty
+    for the last day), and the winner (higher score; equal scores are a tie). Later edits to old tasks
+    never change a finished season.
+  - Then a **soft reset**: every score is pulled halfway back to 50 (`score = 50 + (score − 50) / 2`)
+    and the running-average memory drops back to the 5-task prior, so work from the old season still
+    gives a head start while the new season's first tasks move the score noticeably. Like everything else,
+    the reset is part of the derived score (it is replayed at every boundary).
+  - `trend` never reaches back past the start of the current season, so the reset doesn't read as a drop.
+  - Both users are emailed "Season results" (winner, final scores, overall tally, new starting scores)
+    if they have an email and notifications on. The AFK worker decides seasons right after the day's
+    penalties, every minute.
 - **Emails**: a digest that contains a task completion ends with a "Good boy score" block: each
   person's score and label, the net change across the batch, and who leads. Edits and reopening alone
   carry no score block.
@@ -351,6 +388,7 @@ cache across list/detail/settings navigation. Unknown paths use Next’s not-fou
 | Tag | `/tags/:name` (URL-encoded name) |
 | Search all tasks | `/search?q=…` |
 | Task | `/tasks/:id` |
+| Stats (season standings, score history, records) | `/stats` |
 | Settings | `/settings` |
 | Login | `/login?next=<original path+query>` |
 
