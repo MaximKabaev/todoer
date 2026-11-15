@@ -1187,6 +1187,7 @@ test('seasons: results are frozen at the boundary, scores soft-reset, tally and 
   const DAY = 86400000;
   const after = (days) => new Date(boundary.getTime() + days * DAY);
   await pool.query('DELETE FROM tasks'); await pool.query('DELETE FROM afk_days'); await pool.query('DELETE FROM seasons');
+  try {
   await withEnv({ SEASONS_START: month }, async () => {
     // Before the boundary Maxim finished three high-priority tasks on time; German had nothing.
     const done = [];
@@ -1244,12 +1245,18 @@ test('seasons: results are frozen at the boundary, scores soft-reset, tally and 
     assert.match(mine.subject, /^You won Season 1 \(.+\)!$/);
     assert.match(theirs.subject, /^Maxim Test won Season 1 \(.+\)$/);
     assert.match(mine.text, new RegExp(`You won Season 1 with ${final} points\\.`));
-    assert.match(theirs.text, /Seasons won: Maxim Test 1, Teammate Test 0/);
-    assert.match(theirs.text, new RegExp(`New season, fresh start: Maxim Test ${carried}, Teammate Test 50\\.`));
+    // People are listed in account order, which ties for the two test users: check each part.
+    assert.match(theirs.text, /Seasons won: .*Maxim Test 1/);
+    assert.match(theirs.text, /Seasons won: .*Teammate Test 0/);
+    assert.match(theirs.text, new RegExp(`New season, fresh start: .*Maxim Test ${carried}`));
+    assert.match(theirs.text, /New season, fresh start: .*Teammate Test 50/);
     assert.match(theirs.text, /https:\/\/todo\.example\.com\/stats/);
     assert.notEqual(mine.idempotencyKey, theirs.idempotencyKey);
   });
-  await pool.query('DELETE FROM seasons'); await pool.query('DELETE FROM tasks');
+  } finally {
+    await pool.query('UPDATE users SET email = NULL');
+    await pool.query('DELETE FROM seasons'); await pool.query('DELETE FROM tasks');
+  }
 });
 
 test('stats: score history, head-to-head totals, streaks, records and activity', async () => {
