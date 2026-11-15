@@ -440,4 +440,28 @@
   }
 }
 
-
+.chartTooltip {
+  position: fixed;
+  z-index: 1000;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 4px 18px #0002;
+  font: 500 12px/1.6 var(--font);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+.heatmap [data-chart-item],
+.barTrack {
+  cursor: crosshair;
+}
+.heatmap [data-chart-item]:focus-visible,
+.barTrack:focus-visible {
+  outline: 2px solid var(--person);
+  outline-offset: 2px;
+}
