@@ -27,7 +27,8 @@ test("historical score treats future completion as open; counts are per assigned
 });
 test("comparison is relative to the viewed person", () => {
   const entry = scoreEntry([], user, now);
-  const score: Score = { me: entry, teammate: { ...entry, user: { ...user, id: "other", displayName: "German" } }, leader: "teammate", lead: 4 };
+  const season = { id: "2026-11", number: 1, name: "November 2026", startsAt: "2026-11-01T00:00:00Z", endsAt: "2026-12-01T00:00:00Z", daysLeft: 22, tally: { me: 0, teammate: 0, ties: 0 }, previous: null };
+  const score: Score = { season, me: entry, teammate: { ...entry, user: { ...user, id: "other", displayName: "German" } }, leader: "teammate", lead: 4 };
   assert.equal(scoreComparison(score, "me"), "German leads by 4");
   assert.equal(scoreComparison(score, "teammate"), "German leads you by 4");
   assert.equal(scoreComparison({ ...score, leader: "me" }, "teammate"), "You lead German by 4");

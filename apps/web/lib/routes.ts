@@ -55,7 +55,10 @@ export function parseListUrl(url: string): {
         ? { kind: "teammate" }
         : kind === "search"
           ? { kind: "all" }
-          : kind === "later" || kind === "unassigned" || kind === "completed"
+          : kind === "stats" ||
+              kind === "later" ||
+              kind === "unassigned" ||
+              kind === "completed"
             ? { kind }
             : { kind: "mine" };
   return {

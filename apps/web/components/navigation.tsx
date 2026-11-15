@@ -4,6 +4,7 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { selectionUrl } from "@/lib/routes";
 import {
+  ChartNoAxesCombined,
   Archive,
   CheckCheck,
   ChevronRight,
@@ -181,6 +182,21 @@ export function Navigation({
             {home && kind === "unassigned" && <ChevronRight size={17} />}
           </Link>
         ))}
+        <Link
+          href="/stats"
+          className={`${home ? "list-card" : "nav-item"} ${selection.kind === "stats" && !home ? "active" : ""}`}
+          style={{ "--accent": "var(--purple)" } as React.CSSProperties}
+          onNavigate={(e) => {
+            e.preventDefault();
+            onSelect({ kind: "stats" });
+          }}
+        >
+          <span className="list-icon">
+            <ChartNoAxesCombined size={home ? 22 : 18} />
+          </span>
+          <span className="nav-title">Stats</span>
+          {home && <ChevronRight size={17} />}
+        </Link>
       </nav>
       <div className="nav-section tags-section">
         <div className="section-label">
@@ -266,7 +282,9 @@ function ProjectRepositories({
             aria-label={`GitHub repository ${index + 1}`}
             value={repo}
             onChange={(e) =>
-              onChange(rows.map((value, i) => i === index ? e.target.value : value))
+              onChange(
+                rows.map((value, i) => (i === index ? e.target.value : value)),
+              )
             }
             placeholder="owner/name or GitHub URL"
             autoCapitalize="none"
@@ -279,7 +297,9 @@ function ProjectRepositories({
             aria-label={`Remove repository ${repo.trim() || index + 1}`}
             onClick={() => {
               focusRow.current = Math.max(0, Math.min(index, rows.length - 2));
-              onChange(rows.length === 1 ? [""] : rows.filter((_, i) => i !== index));
+              onChange(
+                rows.length === 1 ? [""] : rows.filter((_, i) => i !== index),
+              );
             }}
           >
             ×
@@ -339,14 +359,18 @@ function ProjectEditor({
                 name: name.trim() || "New Project",
                 color,
                 emoji: emoji || null,
-                githubRepos: githubRepos.map((repo) => repo.trim()).filter(Boolean),
+                githubRepos: githubRepos
+                  .map((repo) => repo.trim())
+                  .filter(Boolean),
               });
             else
               await api.createProject({
                 name: name.trim() || "New Project",
                 color,
                 emoji: emoji || null,
-                githubRepos: githubRepos.map((repo) => repo.trim()).filter(Boolean),
+                githubRepos: githubRepos
+                  .map((repo) => repo.trim())
+                  .filter(Boolean),
               });
             await onSave();
           } catch (err) {
@@ -383,7 +407,11 @@ function ProjectEditor({
           onChange={setGithubRepos}
           invalid={!!error}
         />
-        {error && <p className="text-danger" role="alert">{error}</p>}
+        {error && (
+          <p className="text-danger" role="alert">
+            {error}
+          </p>
+        )}
         <label>Color</label>
         <div className="color-picker">
           {colors.map((c) => (
@@ -448,8 +476,8 @@ function InlineProject({
           onClose();
         } catch (err) {
           setError(
-              err instanceof Error ? err.message : "Could not save project.",
-            );
+            err instanceof Error ? err.message : "Could not save project.",
+          );
           setBusy(false);
         }
       }}
@@ -478,7 +506,11 @@ function InlineProject({
         onChange={setGithubRepos}
         invalid={!!error}
       />
-      {error && <p className="text-danger" role="alert">{error}</p>}
+      {error && (
+        <p className="text-danger" role="alert">
+          {error}
+        </p>
+      )}
       <div className="color-picker">
         {colors.map((c) => (
           <button
@@ -503,7 +535,6 @@ function InlineProject({
     </form>
   );
 }
-
 
 export function ProjectSelector({
   projects,
