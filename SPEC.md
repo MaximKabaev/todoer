@@ -335,7 +335,7 @@ editing a due date is always reflected.
   `W = min(W + weight, 15); score += weight / W * (grade - score)`. Someone with no task events keeps
   exactly their score; the other person's workload never changes it.
 - **Label** by score: 100 Perfect boy (the card turns gold), ≥90 Best boy ever, ≥75 Very good boy, ≥60 Good boy, ≥45 Doing okay,
-  ≥30 Naughty, otherwise Bad boy. The whole score card is tinted by label: Bad boy red, Naughty coral, Doing okay amber, Good boy lime, Very good boy green, Best boy ever emerald, and Perfect boy gold. Tints adapt to light and dark mode.
+  ≥30 Naughty, otherwise Bad boy. Score cards use a white surface in light mode and a neutral dark surface in dark mode, with higher-contrast supporting text. The border, label, and score are colored by tier: Bad boy red, Naughty coral, Doing okay amber, Good boy lime, Very good boy green, Best boy ever emerald. Perfect boy keeps its full gold card.
 - `trend` = score now minus the score computed as of 7 days ago; `doneThisWeek` = tasks completed in the
   last 7 days; `overdue` = open assigned Now tasks past their deadline; `afkPenaltyThisWeek` = AFK points
   taken in the last 7 days.

@@ -10,7 +10,7 @@
 .trend { display: flex; justify-content: flex-end; align-items: center; gap: 3px; font-size: 10px; color: var(--secondary); }
 .stats { grid-column: 1 / -1; border-top: 1px solid var(--line-strong); padding-top: 9px; font-size: 11px; color: var(--secondary); display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .overdue { color: var(--red); }
-/* Each label has its own tint; surface mixing follows the system theme. */
+/* Keep tier colors on the border and key text, with a clear neutral surface. */
 .card[data-tone="red"] { --score-tint: #dc2626; }
 .card[data-tone="coral"] { --score-tint: #ea580c; }
 .card[data-tone="amber"] { --score-tint: #d99a08; }
@@ -19,14 +19,22 @@
 .card[data-tone="emerald"] { --score-tint: #059669; }
 .card[data-tone]:not(.perfect) {
   border-color: color-mix(in srgb, var(--score-tint) 48%, var(--line-strong));
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--score-tint) 9%, var(--surface)),
-    color-mix(in srgb, var(--score-tint) 22%, var(--surface)));
-  box-shadow: 0 6px 24px color-mix(in srgb, var(--score-tint) 10%, transparent);
+  --secondary: #59616e;
+  background: var(--elevated);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--score-tint) 6%, transparent);
 }
 .card[data-tone]:not(.perfect) .label,
 .card[data-tone]:not(.perfect) .number strong {
   color: color-mix(in srgb, var(--score-tint) 45%, var(--text));
+}
+.card[data-tone]:not(.perfect) .active { color: #17703f; }
+.card[data-tone]:not(.perfect) .atRisk { color: #99500b; }
+.card[data-tone]:not(.perfect) .overdue { color: #c22a1f; }
+@media (prefers-color-scheme: dark) {
+  .card[data-tone]:not(.perfect) { --secondary: #bdc3cf; }
+  .card[data-tone]:not(.perfect) .active { color: #7be0a6; }
+  .card[data-tone]:not(.perfect) .atRisk { color: #ffb469; }
+  .card[data-tone]:not(.perfect) .overdue { color: #ff8a80; }
 }
 /* 100/100: the whole card turns gold. */
 .perfect {
