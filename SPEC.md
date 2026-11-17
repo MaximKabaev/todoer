@@ -216,7 +216,8 @@ Unknown body fields are ignored. Everything is camelCase.
   ```
   { generatedAt, timezone, season: Season, seasons: SeasonResult[] (finished, newest first),
     history: [{ day, me, teammate }] (end-of-day scores, oldest first: today and up to 364 days back, from the first scored day),
-    me: PersonStats, teammate: PersonStats | null }
+    me: PersonStats, teammate: PersonStats | null,
+    achievements: Achievement[] }                                     // see **Achievements**
   PersonStats = { user, score, label, open, overdue,
     best: { score, day } | null, worst: { score, day } | null,       // over `history`
     streak: { current, best },                                       // consecutive active days (AFK definition)
@@ -373,6 +374,42 @@ editing a due date is always reflected.
   person's score and label, the net change across the batch, and who leads. Edits and reopening alone
   carry no score block.
 
+## Achievements
+
+22 badges per person, shown on Stats. They are derived from the same data as the score and Stats
+(assigned Now tasks, AFK days, GitHub events, frozen seasons; "completed" excludes empty tasks), then
+**stored the first time they are earned** (`achievements`: user, id, `unlocked_at` = the derived moment
+it was earned), so reopening a task, editing a date or a season reset never takes one away.
+
+| id | Title | Earned when |
+|---|---|---|
+| `score-80` / `score-90` / `score-95` / `score-100` | Good Boy / Very Good Boy / Elite Boy / Perfect Boy | the score reaches 80 / 90 / 95 / 100 (checked after every completion and AFK penalty, at the end of every day, and now) |
+| `streak-7` / `streak-30` | On a Roll / Unstoppable | 7 / 30 active days in a row (the AFK definition of active); earned at the first activity of the last day |
+| `first-bone` / `century` / `thousand-club` | First Bone / Century / Thousand Club | the 1st / 100th / 1,000th completed task |
+| `zoomies` | Zoomies | 10 tasks completed in one day |
+| `clockwork` | Clockwork | 20 completions in a row, all on time (by the deadline) |
+| `clean-slate` | Clean Slate | 7 finished days in a row, each with a scored task open at some point that day and none overdue (none still open past its deadline at the end of the day, none completed late during it); earned at the end of the 7th day |
+| `season-champion` / `dynasty` | Season Champion / Dynasty | win a season / 3 consecutive seasons |
+| `comeback-kid` | Comeback Kid | win a season after ending one of its days 15+ points behind |
+| `top-dog` | Top Dog | win a season while ahead at the end of every one of its days |
+| `redemption-arc` | Redemption Arc | reach 80 after having been under 45 |
+| `night-owl` / `early-bird` | Night Owl / Early Bird | complete a task between 00:00–04:59 / 05:00–06:59 |
+| `weekend-warrior` | Weekend Warrior | 5 tasks completed on one Saturday + Sunday |
+| `delegator` | Delegator | 25 tasks you created assigned only to your teammate (the Stats `assignedToTeammate` count) |
+| `shipper` | Shipper | 10 merged pull requests |
+
+Days and hours use `SCORE_TIMEZONE`.
+
+- `GET /api/stats` → `achievements: [{ id, category ("score" | "streak" | "volume" | "punctuality" |
+  "competition" | "fun"), title, description, target (number | null), me: State, teammate: State | null }]`
+  in catalog order, `State = { unlocked, unlockedAt (ISO | null), progress: { current, target } | null }`.
+  `progress` is null for yes/no achievements; `current` is capped at `target` (for score badges it is the
+  best score so far). Building the response also records anything newly earned.
+- The AFK worker (every minute) records new unlocks right after deciding seasons, then emails **both
+  people** one "Achievement unlocked" message per batch (who earned what, link to Stats), if they have an
+  email and notifications on. Unlocks that were already more than 3 days old when first recorded (the
+  initial backfill) are stored as announced and never emailed. A failed send retries on the next tick.
+
 ## Web routes
 
 The persistent App Router workspace shell uses client navigation and keeps composer state and SWR
@@ -388,7 +425,7 @@ cache across list/detail/settings navigation. Unknown paths use Next’s not-fou
 | Tag | `/tags/:name` (URL-encoded name) |
 | Search all tasks | `/search?q=…` |
 | Task | `/tasks/:id` |
-| Stats (season standings, score history, records) | `/stats` |
+| Stats (season standings, score history, records, achievements) | `/stats` |
 | Settings | `/settings` |
 | Login | `/login?next=<original path+query>` |
 

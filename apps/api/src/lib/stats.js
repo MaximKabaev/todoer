@@ -1,5 +1,6 @@
 import { addDays, dateFromToday, labelFor, loadScoreRows, localParts, scoreFor, scoreTimezone, startOfDay } from './score.js';
 import { seasonView } from './seasons.js';
+import { achievementsView } from './achievements.js';
 
 // GET /api/stats: everything the Stats page shows, from the viewer's point of view. Derived on the fly
 // from tasks, AFK days and GitHub events (plus the frozen season results); not scoped by project.
@@ -118,10 +119,12 @@ export async function stats(db, user, teammate, now = new Date()) {
   const history = scoreHistory(rows, people.map((p) => p.id), today, now);
   const context = { rows, history, season: seasons.season, today, now };
   const [me, other] = await Promise.all(people.map((p, index) => personStats(db, { ...context, person: p, other: people[1 - index] ?? null, index })));
+  const achievements = await achievementsView(db, user, teammate, now, rows);
   return {
     generatedAt: now, timezone: scoreTimezone(),
     season: seasons.season, seasons: seasons.seasons,
     history: history.map((entry) => ({ day: entry.day, me: entry.scores[0], teammate: entry.scores[1] ?? null })),
     me, teammate: other ?? null,
+    achievements,
   };
 }
