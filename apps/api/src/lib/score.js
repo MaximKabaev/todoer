@@ -22,7 +22,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 // Label tiers, best first.
 export const labels = [
-  [90, 'Best boy ever'], [75, 'Very good boy'], [60, 'Good boy'], [45, 'Doing okay'], [30, 'Naughty'], [0, 'Bad boy'],
+  [100, 'Perfect boy'], [90, 'Best boy ever'], [75, 'Very good boy'], [60, 'Good boy'], [45, 'Doing okay'], [30, 'Naughty'], [0, 'Bad boy'],
 ];
 export const labelFor = (score) => labels.find(([min]) => score >= min)[1];
 

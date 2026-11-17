@@ -35,7 +35,7 @@ export function scoreAt(tasks, asOf) {
 export function scoreEntry(tasks, user, now = Date.now(), githubLogin = null) {
   const scored = tasks.filter((t) => t.list === "now" && t.assignees.some((u) => u.id === user.id));
   const score = scoreAt(scored, now);
-  const label = score >= 90 ? "Best boy ever" : score >= 75 ? "Very good boy" : score >= 60 ? "Good boy" : score >= 45 ? "Doing okay" : score >= 30 ? "Naughty" : "Bad boy";
+  const label = score >= 100 ? "Perfect boy" : score >= 90 ? "Best boy ever" : score >= 75 ? "Very good boy" : score >= 60 ? "Good boy" : score >= 45 ? "Doing okay" : score >= 30 ? "Naughty" : "Bad boy";
   const day = new Date(now).toISOString().slice(0, 10);
   const completed = scored.filter((t) => t.done && t.doneAt?.slice(0, 10) === day && Date.parse(t.doneAt) <= now).length;
   return {

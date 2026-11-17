@@ -5,7 +5,7 @@ import { deadline, scoreAt } from "./mock-score.mjs";
 
 const DAY = 86400000;
 const labelFor = (score) =>
-  score >= 90 ? "Best boy ever" : score >= 75 ? "Very good boy" : score >= 60 ? "Good boy" : score >= 45 ? "Doing okay" : score >= 30 ? "Naughty" : "Bad boy";
+  score >= 100 ? "Perfect boy" : score >= 90 ? "Best boy ever" : score >= 75 ? "Very good boy" : score >= 60 ? "Good boy" : score >= 45 ? "Doing okay" : score >= 30 ? "Naughty" : "Bad boy";
 const dayOf = (time) => new Date(time).toISOString().slice(0, 10);
 const monthStart = (now, offset = 0) => {
   const d = new Date(now);

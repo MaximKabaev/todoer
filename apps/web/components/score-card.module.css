@@ -10,6 +10,38 @@
 .trend { display: flex; justify-content: flex-end; align-items: center; gap: 3px; font-size: 10px; color: var(--secondary); }
 .stats { grid-column: 1 / -1; border-top: 1px solid var(--line-strong); padding-top: 9px; font-size: 11px; color: var(--secondary); display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .overdue { color: var(--red); }
+/* 100/100: the whole card turns gold. */
+.perfect {
+  --gold-ink: #4d3700; --gold-soft: #7a5a12; --gold-line: rgba(122, 90, 18, .22);
+  position: relative; overflow: hidden; isolation: isolate;
+  color: var(--gold-ink); border-color: #e2ad2c;
+  background: linear-gradient(135deg, #fff7d9 0%, #ffe28f 45%, #f5c443 100%);
+  box-shadow: 0 0 0 1px #f5c44355, 0 10px 32px #e9a8204d;
+}
+.perfect .eyebrow, .perfect .comparison, .perfect .number span, .perfect .trend, .perfect .stats { color: var(--gold-soft); }
+.perfect .stats { border-top-color: var(--gold-line); }
+.perfect .label { display: flex; align-items: center; gap: 7px; }
+.crown { flex: none; color: #b8860b; }
+.perfect .overdue { color: #c22a1f; }
+.perfect::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, .55) 45%, transparent 60%);
+  background-size: 250% 100%; background-position: 130% 0;
+  animation: shimmer 4.5s ease-in-out infinite;
+}
+@keyframes shimmer { 0%, 40% { background-position: 130% 0; } 100% { background-position: -130% 0; } }
+@media (prefers-color-scheme: dark) {
+  .perfect {
+    --gold-ink: #ffe9a8; --gold-soft: #e3c072; --gold-line: rgba(255, 214, 112, .2);
+    border-color: #c8952a;
+    background: linear-gradient(135deg, #3b2c0b 0%, #6a4d12 55%, #8f6a18 100%);
+    box-shadow: 0 0 0 1px #c8952a55, 0 10px 36px #d4a0303a;
+  }
+  .crown { color: #ffd166; }
+  .perfect .overdue { color: #ff8a80; }
+  .perfect::after { background-image: linear-gradient(110deg, transparent 30%, rgba(255, 230, 160, .16) 45%, transparent 60%); }
+}
+@media (prefers-reduced-motion: reduce) { .perfect::after { animation: none; opacity: 0; } }
 @media (max-width: 420px) { .card { padding: 14px; gap: 8px; } .label { font-size: 21px; } .eyebrow { font-size: 9px; } .number strong { font-size: 31px; } }
 
 .activity { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.6; color: var(--secondary); margin-top: 3px; }
@@ -19,3 +51,8 @@
 .githubHint { grid-column: 1 / -1; color: var(--secondary); font-size: 11px; text-decoration: underline; text-underline-offset: 3px; width: fit-content; }
 .githubHint:hover { color: var(--text); }
 
+.perfect .activity, .perfect .githubHint { color: var(--gold-soft); }
+.perfect .githubHint:hover { color: var(--gold-ink); }
+.perfect .active { color: #17703f; }
+.perfect .atRisk { color: #a34a06; }
+@media (prefers-color-scheme: dark) { .perfect .active { color: #7be0a6; } .perfect .atRisk { color: #ffb469; } }

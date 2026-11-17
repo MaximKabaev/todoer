@@ -3,6 +3,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Minus,
+  Crown,
   Check,
   TriangleAlert,
 } from "lucide-react";
@@ -49,11 +50,13 @@ export function ScoreCard({
     : activity?.atRisk
       ? TriangleAlert
       : Minus;
+  const perfect = !!entry && entry.score >= 100;
   return (
     <div className={styles.slot}>
       {entry && score && (
         <section
-          className={styles.card}
+          className={perfect ? `${styles.card} ${styles.perfect}` : styles.card}
+          data-perfect={perfect || undefined}
           aria-label={`${viewed === "me" ? "Your" : entry.user.displayName + "’s"} good boy score`}
         >
           <div>
@@ -61,7 +64,10 @@ export function ScoreCard({
               {viewed === "me" ? "Your" : `${entry.user.displayName}’s`} good
               boy score <span>· All projects</span>
             </div>
-            <div className={styles.label}>{entry.label}</div>
+            <div className={styles.label}>
+              {perfect && <Crown className={styles.crown} size={22} aria-hidden="true" />}
+              {entry.label}
+            </div>
             <div className={styles.comparison}>
               {scoreComparison(score, viewed)}
             </div>

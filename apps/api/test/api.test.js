@@ -821,7 +821,7 @@ test('score grading, weighting and labels', () => {
   assert.equal(foldScore(events), foldScore([...events].reverse()));
   assert.equal(foldScore([{ key: 'a', time: 1, weight: 1, grade: 100 }]), 58); // one task can't swing a fresh score
   assert.ok(foldScore(Array.from({ length: 40 }, (_, i) => ({ key: `${i}`, time: i, weight: 1, grade: 100 }))) > 95);
-  assert.deepEqual([95, 80, 65, 50, 35, 10].map(labelFor), ['Best boy ever', 'Very good boy', 'Good boy', 'Doing okay', 'Naughty', 'Bad boy']);
+  assert.deepEqual([100, 99, 80, 65, 50, 35, 10].map(labelFor), ['Perfect boy', 'Best boy ever', 'Very good boy', 'Good boy', 'Doing okay', 'Naughty', 'Bad boy']);
   // Replay: tasks created after asOf are ignored and later completions count as still open.
   const day = 86400000, now = new Date('2026-06-15T12:00:00Z');
   const row = { id: 't', userId: 'u', done: true, doneAt: now, createdAt: new Date(now - 3 * day), priority: 0, empty: false, deadline: new Date(now - 1 * day) };

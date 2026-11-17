@@ -116,3 +116,19 @@ for (const delta of [0, -2, undefined]) {
     }
   });
 }
+
+test("a perfect 100 shows the Perfect boy label on a gold card", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Username or email", { exact: true }).fill("maxim");
+  await page.getByLabel("Password", { exact: true }).fill("todoer");
+  await page.route("**/api/score", async (route) => {
+    const real = await (await route.fetch()).json();
+    await route.fulfill({ json: { ...real, me: { ...real.me, score: 100, label: "Perfect boy" } } });
+  });
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const card = page.getByRole("region", { name: "Your good boy score", exact: true });
+  await expect(card).toContainText("Perfect boy");
+  await expect(card).toHaveAttribute("data-perfect", "true");
+  await page.goto("/people/teammate");
+  await expect(page.getByRole("region", { name: "Teammate’s good boy score", exact: true })).not.toHaveAttribute("data-perfect", /.*/);
+});

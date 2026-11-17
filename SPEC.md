@@ -334,7 +334,7 @@ editing a due date is always reflected.
   50 that counts as 5 tasks and capped at a memory of 15 task-weights:
   `W = min(W + weight, 15); score += weight / W * (grade - score)`. Someone with no task events keeps
   exactly their score; the other person's workload never changes it.
-- **Label** by score: ≥90 Best boy ever, ≥75 Very good boy, ≥60 Good boy, ≥45 Doing okay,
+- **Label** by score: 100 Perfect boy (the card turns gold), ≥90 Best boy ever, ≥75 Very good boy, ≥60 Good boy, ≥45 Doing okay,
   ≥30 Naughty, otherwise Bad boy.
 - `trend` = score now minus the score computed as of 7 days ago; `doneThisWeek` = tasks completed in the
   last 7 days; `overdue` = open assigned Now tasks past their deadline; `afkPenaltyThisWeek` = AFK points
