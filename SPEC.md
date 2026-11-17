@@ -455,6 +455,8 @@ Completion celebrations say “Who’s a good boy?” and display the server-rep
 
 Open Now tasks show a deadline warning above the title in rows and details when due within three calendar days (browser-local dates). Two or three days away: “Future you is watching.” Tomorrow: “Don’t make us say bad boy.” Today: “Good boys don’t leave it till tomorrow.” Overdue: the number of days late and “Who’s being a bad boy?” Warnings use amber for approaching/today and red for overdue, update at local midnight, and are absent for completed, undated, distant, or Later tasks. These are visual reminders; scoring and sort order are unchanged.
 
+Stats includes a responsive Achievements collection grouped by category, with per-person earned counts and a person switch, muted locked art, earned dates, counted progress, and keyboard-accessible tooltips in both themes.
+
 ### Stats chart inspection
 - Activity days, weekday bars, hour bars and score history show exact values in styled tooltips on hover, focus or tap. Outside taps and Escape dismiss them without blocking controls.
 - Heatmaps and bar charts each have one tab stop; arrow keys move between values (heatmap left/right moves a week, up/down a day), with Home/End for the first/last value. Score history has one focus target, left/right day navigation and Home/End; its guide selects the nearest day and shows both available users’ scores. Hour ranges use the Stats timezone. Tooltips fit the viewport in both themes and have no motion.
