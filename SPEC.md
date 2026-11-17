@@ -444,7 +444,7 @@ Page titles reflect the private view in the browser only. OpenGraph/Twitter meta
 Task details offer Copy link and mobile native Share with a copy fallback.
 
 ### Task presentation
-- Task details groups due date, priority, project, tags, and the creation/delete footer in an “Extra options” disclosure, collapsed by default. Its arrow points right when collapsed and down when expanded. Images and main task actions stay visible outside the disclosure.
+- Task details groups due date, priority, project, tags, and the creation/delete footer in an “Extra options” disclosure, collapsed by default. Its arrow points right when collapsed and down when expanded. Images stay visible above the disclosure, and main task actions remain visible.
 - Capture has no helper tagline or photo button; image paste and task-detail attachments remain available.
 - The visible task count sits beside the list title. Task details has a prominent heading.
 - The detail panel uses “I ain’t doing all that rn” to move to Later, with “Send it back to Later” explanatory text and the two-week random review, and offers “Okay, let’s do this” to move back to Now and assign it to yourself.
