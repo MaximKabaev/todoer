@@ -476,8 +476,14 @@
 }
 .achievementGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(155px, 100%), 1fr));
+  /* Fixed columns keep every badge card the same width (no stretched pairs, no lone orphan). */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+@media (max-width: 900px) {
+  .achievementGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .achievement {
   min-width: 0;
