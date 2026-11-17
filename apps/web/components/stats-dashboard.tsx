@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Trophy, Timer, ArrowUpRight, Flame } from "lucide-react";
-import { request, type Stats, type PersonStats } from "@/lib/api";
+import { request, type Stats, type PersonStats, type Achievement } from "@/lib/api";
 import { seasonOutcome } from "@/lib/seasons";
 import styles from "./stats-dashboard.module.css";
 
@@ -209,6 +209,107 @@ function useChartTooltip(labels: string[]) {
       <ChartTooltip id={id} anchor={active} label={labels[active.index]} />
     ) : null,
   };
+}
+
+const achievementArtPath = (id: string) => `/achievements/${id}.png`;
+const achievementCategories = [
+  { id: "score", title: "Score", color: "purple" },
+  { id: "streak", title: "Streaks", color: "orange" },
+  { id: "volume", title: "Getting things done", color: "teal" },
+  { id: "punctuality", title: "Right on time", color: "blue" },
+  { id: "competition", title: "Friendly competition", color: "orange" },
+  { id: "fun", title: "Little victories", color: "purple" },
+] as const;
+
+function Achievements({ data }: { data: Stats }) {
+  const [selected, setSelected] = useState<"me" | "teammate">("me");
+  const person = selected === "teammate" && data.teammate ? "teammate" : "me";
+  const entries = data.achievements;
+  const earned = (key: "me" | "teammate") =>
+    entries.filter((entry) => entry[key]?.unlocked).length;
+  const status = (entry: Achievement) => {
+    const state = entry[person];
+    return state?.unlocked
+      ? `Earned${state.unlockedAt ? ` ${date(state.unlockedAt)}` : ""}`
+      : state?.progress
+        ? `Locked · ${state.progress.current}/${state.progress.target}`
+        : "Locked";
+  };
+  const tip = useChartTooltip(
+    entries.map((entry) => `${entry.title} · ${entry.description} · ${status(entry)}`),
+  );
+  return (
+    <section className={styles.panel} aria-labelledby="achievements-title">
+      <div className={styles.sectionHead}>
+        <div>
+          <span className={styles.kicker}>A LITTLE PROOF OF PROGRESS</span>
+          <h2 id="achievements-title">Achievements</h2>
+          <p className={styles.note} data-testid="achievement-counts">
+            {data.me.user.displayName} {earned("me")}/{entries.length}
+            {data.teammate &&
+              ` · ${data.teammate.user.displayName} ${earned("teammate")}/${entries.length}`} · earned
+          </p>
+        </div>
+        <div className={styles.switch} role="group" aria-label="Achievement person">
+          {(["me", "teammate"] as const).map((key) => data[key] && (
+            <button key={key} aria-pressed={person === key} onClick={() => setSelected(key)}>
+              {data[key]!.user.displayName}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div
+        {...tip.rootProps}
+        {...tip.dismiss}
+        role="group"
+        aria-label={`${data[person]!.user.displayName} achievements`}
+      >
+        {achievementCategories.map(({ id, title, color }) => (
+          <div
+            className={styles.achievementCategory}
+            key={id}
+            style={{ "--badge": `var(--${color})` } as CSSProperties}
+          >
+            <h3>{title}</h3>
+            <div className={styles.achievementGrid}>
+              {entries.filter((entry) => entry.category === id).map((entry) => {
+                const state = entry[person];
+                const index = entries.indexOf(entry);
+                return (
+                  <div
+                    key={entry.id}
+                    data-testid="achievement-badge"
+                    data-achievement={entry.id}
+                    data-unlocked={!!state?.unlocked}
+                    className={styles.achievement}
+                    {...tip.item(index)}
+                    role="group"
+                  >
+                    <div className={styles.achievementArt}>
+                      {/* Serve the original pixels without image optimization or smoothing. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={achievementArtPath(entry.id)} alt={`${entry.title} badge`} width={64} height={64} />
+                    </div>
+                    <h4>{entry.title}</h4>
+                    <p>{entry.description}</p>
+                    <span className={styles.achievementStatus}>{status(entry)}</span>
+                    {!state?.unlocked && state?.progress && (
+                      <progress
+                        aria-label={`${entry.title} progress`}
+                        value={state.progress.current}
+                        max={state.progress.target}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        {tip.tooltip}
+      </div>
+    </section>
+  );
 }
 
 function History({ data }: { data: Stats }) {
@@ -842,6 +943,7 @@ export function StatsDashboard() {
       </section>
       <History data={data} />
       <HeadToHead data={data} />
+      <Achievements data={data} />
       <div className={styles.sectionHead}>
         <div>
           <span className={styles.kicker}>CONSISTENCY IS THE FLEX</span>

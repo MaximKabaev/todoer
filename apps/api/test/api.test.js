@@ -1315,3 +1315,113 @@ test('stats: score history, head-to-head totals, streaks, records and activity',
   await api('patch', '/api/me').send({ githubLogin: null }).expect(200);
   await pool.query('DELETE FROM github_events'); await pool.query('DELETE FROM afk_days'); await pool.query('DELETE FROM tasks');
 });
+
+test('achievements: derived milestones, streaks, punctuality, seasons and progress', async () => {
+  const { deriveFor } = await import('../src/lib/achievements.js');
+  await withEnv({ SCORE_TIMEZONE: 'UTC' }, async () => {
+    const P = { id: 'p' }, O = { id: 'o' };
+    const at = (iso) => new Date(iso);
+    const day = (n) => `2026-06-${String(n).padStart(2, '0')}`;
+    // One task a day: created the day before at 10:00, completed at 01:00 (on time), June 1..20.
+    const rows = Array.from({ length: 20 }, (_, i) => ({
+      id: `t${i}`, userId: 'p', priority: 0, empty: false, done: true,
+      createdAt: i ? at(`${day(i)}T10:00:00Z`) : at('2026-05-31T10:00:00Z'), doneAt: at(`${day(i + 1)}T01:00:00Z`),
+      deadline: at(`${day(i + 8)}T00:00:00Z`),
+    }));
+    const github = Array.from({ length: 10 }, (_, i) => ({ kind: 'merge', commits: 0, at: at(`${day(i + 1)}T12:00:00Z`) }));
+    const now = at('2026-06-20T12:00:00Z');
+    const got = deriveFor({ person: P, other: O, rows, github, delegated: [at('2026-06-01T00:00:00Z')], seasons: [], now });
+    assert.deepEqual(got['first-bone'], { unlockedAt: at('2026-06-01T01:00:00Z'), progress: { current: 1, target: 1 } });
+    assert.ok(got['score-80'].unlockedAt && got['score-90'].unlockedAt);
+    assert.equal(got['score-95'].unlockedAt, null);
+    assert.ok(got['score-95'].progress.current >= 90 && got['score-95'].progress.current < 95);
+    assert.deepEqual(got['streak-7'].unlockedAt, at('2026-06-07T01:00:00Z'));
+    assert.deepEqual(got['streak-30'], { unlockedAt: null, progress: { current: 20, target: 30 } });
+    assert.deepEqual(got.clockwork.unlockedAt, at('2026-06-20T01:00:00Z'));
+    assert.deepEqual(got['clean-slate'].unlockedAt, at('2026-06-07T00:00:00Z')); // May 31 .. June 6
+    assert.deepEqual(got['night-owl'].unlockedAt, at('2026-06-01T01:00:00Z'));
+    assert.equal(got['early-bird'].unlockedAt, null);
+    assert.equal(got['early-bird'].progress, null);
+    assert.deepEqual(got['weekend-warrior'].progress, { current: 2, target: 5 });
+    assert.deepEqual(got.shipper.unlockedAt, at('2026-06-10T12:00:00Z'));
+    assert.deepEqual(got.delegator.progress, { current: 1, target: 25 });
+    assert.deepEqual(got.zoomies.progress, { current: 1, target: 10 });
+    assert.equal(got['season-champion'].unlockedAt, null);
+    assert.equal(got['redemption-arc'].unlockedAt, null);
+    // Nothing is earned before it happens.
+    const early = deriveFor({ person: P, other: O, rows, github, delegated: [], seasons: [], now: at('2026-06-05T12:00:00Z') });
+    assert.equal(early['streak-7'].unlockedAt, null);
+    assert.equal(early.shipper.unlockedAt, null);
+
+    // Three consecutive won seasons: champion, dynasty, top dog (led every day); a comeback needs a 15-point deficit.
+    const seasons = [1, 2, 3].map((n) => ({ id: `s${n}`, number: n, winnerId: 'p',
+      startsAt: at(`${day(1 + (n - 1) * 3)}T00:00:00Z`), endsAt: at(`${day(4 + (n - 1) * 3)}T00:00:00Z`) }));
+    const later = deriveFor({ person: P, other: O, rows, github, delegated: [], seasons, now });
+    assert.deepEqual(later['season-champion'].unlockedAt, seasons[0].endsAt);
+    assert.deepEqual(later.dynasty.unlockedAt, seasons[2].endsAt);
+    assert.equal(later['comeback-kid'].unlockedAt, null);
+    // P's first completion lands at 01:00 on June 1, so P leads at the end of every day.
+    assert.deepEqual(later['top-dog'].unlockedAt, seasons[0].endsAt);
+    const lost = deriveFor({ person: O, other: P, rows, github: [], delegated: [], seasons, now });
+    assert.equal(lost['season-champion'].unlockedAt, null);
+    assert.deepEqual(lost.dynasty.progress, { current: 0, target: 3 });
+
+    // Redemption arc: sink under 45 with an overdue task, then climb back to 80.
+    const sink = [{ id: 'late', userId: 'p', priority: 3, empty: false, done: true, createdAt: at('2026-05-01T10:00:00Z'),
+      deadline: at('2026-05-02T00:00:00Z'), doneAt: at('2026-05-20T10:00:00Z') }];
+    const arc = deriveFor({ person: P, other: O, rows: [...sink, ...rows], github: [], delegated: [], seasons: [], now });
+    assert.ok(arc['redemption-arc'].unlockedAt, 'expected the redemption arc');
+  });
+});
+
+test('achievements: stored when earned, shown on Stats, emailed once (backfill stays quiet)', async () => {
+  const { syncAchievements, sendAchievementEmails } = await import('../src/lib/achievements.js');
+  await pool.query('DELETE FROM tasks'); await pool.query('DELETE FROM achievements');
+  try {
+    // An old completion (backfill: never emailed) and a fresh one today.
+    const old = await create({ title: 'QA ach old', assignees: ['me'] });
+    await pool.query(`UPDATE tasks SET created_at = now() - interval '20 days', done = true, done_at = now() - interval '19 days' WHERE id = $1`, [old.id]);
+    const { created } = await syncAchievements(pool);
+    assert.deepEqual(created.map((row) => [row.userId, row.id]), [[first.id, 'first-bone']]);
+    assert.equal((await pool.query("SELECT emailed FROM achievements WHERE id = 'first-bone'")).rows[0].emailed, true);
+
+    const { body } = await api('get', '/api/stats').expect(200);
+    assert.equal(body.achievements.length, 22);
+    const bone = body.achievements.find((entry) => entry.id === 'first-bone');
+    assert.equal(bone.title, 'First Bone');
+    assert.equal(bone.me.unlocked, true);
+    assert.equal(bone.teammate.unlocked, false);
+    assert.deepEqual(bone.teammate.progress, { current: 0, target: 1 });
+    assert.deepEqual(body.achievements.find((entry) => entry.id === 'century').me.progress, { current: 1, target: 100 });
+    assert.equal(body.achievements.find((entry) => entry.id === 'night-owl').me.progress, null);
+    const mirror = (await api('get', '/api/stats', secondToken).expect(200)).body;
+    assert.equal(mirror.achievements.find((entry) => entry.id === 'first-bone').teammate.unlocked, true);
+
+    // A permanent unlock survives the task being reopened.
+    await patch(old.id, { done: false });
+    assert.equal((await api('get', '/api/stats').expect(200)).body.achievements.find((entry) => entry.id === 'first-bone').me.unlocked, true);
+
+    // German completes his first task now: announced to both people in one email each, exactly once.
+    const fresh = await create({ title: 'QA ach new', assignees: ['me'] }, secondToken);
+    await pool.query(`UPDATE tasks SET created_at = now() - interval '1 hour' WHERE id = $1`, [fresh.id]);
+    await api('patch', `/api/tasks/${fresh.id}`, secondToken).send({ done: true }).expect(200);
+    const outbox = [];
+    await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>', PUBLIC_WEB_URL: 'https://todo.example.com' }, async () => {
+      await api('patch', '/api/me').send({ email: 'maxim.ach@example.com' }).expect(200);
+      await api('patch', '/api/me', secondToken).send({ email: 'partner.ach@example.com' }).expect(200);
+      await syncAchievements(pool);
+      const send = async (mail) => { outbox.push(mail); };
+      assert.equal(await sendAchievementEmails({ send }), 2);
+      assert.equal(await sendAchievementEmails({ send }), 0);
+    });
+    const [mine, theirs] = ['maxim.ach@example.com', 'partner.ach@example.com'].map((to) => outbox.find((mail) => mail.to === to));
+    assert.equal(mine.subject, 'Teammate Test unlocked “First Bone”');
+    assert.equal(theirs.subject, 'You unlocked “First Bone”!');
+    assert.match(theirs.text, /You: First Bone \(Complete your first task\)/);
+    assert.match(theirs.text, /https:\/\/todo\.example\.com\/stats/);
+    assert.notEqual(mine.idempotencyKey, theirs.idempotencyKey);
+  } finally {
+    await pool.query('UPDATE users SET email = NULL');
+    await pool.query('DELETE FROM achievements'); await pool.query('DELETE FROM tasks');
+  }
+});

@@ -240,3 +240,65 @@ test.describe("touch tooltips", () => {
     }
   });
 });
+
+test("achievements show counts, dates, progress and switch people with keyboard inspection", async ({ page }) => {
+  await login(page);
+  let counts = "";
+  await page.route("**/api/stats", async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    expect(data.achievements).toHaveLength(22);
+    for (const entry of data.achievements) {
+      if (entry.id === "first-bone") entry.me = {
+        unlocked: true, unlockedAt: "2026-11-12T12:00:00Z", progress: { current: 1, target: 1 },
+      };
+      if (entry.id === "thousand-club") {
+        entry.me = { unlocked: false, unlockedAt: null, progress: { current: 60, target: 1000 } };
+        entry.teammate = { unlocked: false, unlockedAt: null, progress: { current: 15, target: 1000 } };
+      }
+    }
+    counts = `${data.me.user.displayName} ${data.achievements.filter((a: { me: { unlocked: boolean } }) => a.me.unlocked).length}/22 · ${data.teammate.user.displayName} ${data.achievements.filter((a: { teammate: { unlocked: boolean } }) => a.teammate.unlocked).length}/22 · earned`;
+    await route.fulfill({ response, json: data });
+  });
+  await page.goto("/stats");
+  const section = page.getByRole("region", { name: "Achievements", exact: true });
+  await expect(section.getByTestId("achievement-badge")).toHaveCount(22);
+  await expect(section.getByTestId("achievement-counts")).toHaveText(counts);
+  const art = section.getByRole("img", { name: / badge$/ });
+  await expect(art).toHaveCount(22);
+  await expect.poll(() => art.evaluateAll((images) =>
+    images.every((image) => image instanceof HTMLImageElement && image.complete && image.naturalWidth === 256),
+  )).toBe(true);
+  await expect(art.first()).toHaveCSS("image-rendering", "pixelated");
+  const first = section.locator('[data-achievement="first-bone"]');
+  await expect(first).toContainText("Earned Nov 12");
+  await expect(first).toHaveAttribute("aria-label", /Earned Nov 12/);
+  const counted = section.locator('[data-achievement="thousand-club"]');
+  await expect(counted).toContainText("Locked · 60/1000");
+  await expect(counted.getByRole("progressbar")).toHaveAttribute("value", "60");
+  await counted.focus();
+  await expect(page.getByRole("tooltip")).toContainText("Locked · 60/1000");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await section.getByRole("button", { name: "Teammate", exact: true }).click();
+  await expect(counted).toContainText("Locked · 15/1000");
+  await expect(section.getByRole("button", { name: "Teammate", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await section.getByRole("button", { name: "Maxim", exact: true }).click();
+  await expect(counted).toContainText("Locked · 60/1000");
+});
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`achievements fit a 390px phone in ${colorScheme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+    await login(page);
+    await page.goto("/stats");
+    const section = page.getByRole("region", { name: "Achievements", exact: true });
+    await expect(section.getByTestId("achievement-badge")).toHaveCount(22);
+    await section.scrollIntoViewIfNeeded();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await section.getByRole("button", { name: "Teammate", exact: true }).click();
+    await expect(section.getByRole("group", { name: "Teammate achievements", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}

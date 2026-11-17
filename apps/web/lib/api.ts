@@ -195,7 +195,22 @@ export type PersonStats = {
   /** The last 182 days, oldest first. */
   activity: { day: string; completed: number; commits: number; merges: number }[];
 };
+export type AchievementState = {
+  unlocked: boolean;
+  unlockedAt: string | null;
+  progress: { current: number; target: number } | null;
+};
+export type Achievement = {
+  id: string;
+  category: "score" | "streak" | "volume" | "punctuality" | "competition" | "fun";
+  title: string;
+  description: string;
+  target: number | null;
+  me: AchievementState;
+  teammate: AchievementState | null;
+};
 export type Stats = {
+  achievements: Achievement[];
   generatedAt: string;
   timezone: string;
   season: Season;

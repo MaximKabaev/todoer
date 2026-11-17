@@ -555,7 +555,10 @@ const server = createServer(async (req, res) => {
       const difference = other ? own.score - other.score : 0;
       return send({ me: own, teammate: other, leader: difference > 0 ? "me" : difference < 0 ? "teammate" : null, lead: Math.abs(difference), season: seasonFor(users, me, now) });
     }
-    if (parts[1] === "stats" && method === "GET") return send(statsFor(tasks, users, me, Date.now()));
+    if (parts[1] === "stats" && method === "GET") {
+      // Includes the achievement catalog and both people’s task-derived state.
+      return send(statsFor(tasks, users, me, Date.now()));
+    }
     if (parts[1] === "counts") {
       const count = (view) =>
         filterTasks(

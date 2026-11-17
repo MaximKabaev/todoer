@@ -3,6 +3,32 @@
 // finished seasons before the current month are fixed sample results so the UI has a history to show.
 import { deadline, scoreAt } from "./mock-score.mjs";
 
+// Catalog mirrors apps/api/src/lib/achievements.js.
+const ACHIEVEMENTS = [
+  { id: 'score-80', category: 'score', title: 'Good Boy', description: 'Reach a score of 80', target: 80 },
+  { id: 'score-90', category: 'score', title: 'Very Good Boy', description: 'Reach a score of 90', target: 90 },
+  { id: 'score-95', category: 'score', title: 'Elite Boy', description: 'Reach a score of 95', target: 95 },
+  { id: 'score-100', category: 'score', title: 'Perfect Boy', description: 'Reach a perfect score of 100', target: 100 },
+  { id: 'streak-7', category: 'streak', title: 'On a Roll', description: 'Be active 7 days in a row', target: 7 },
+  { id: 'streak-30', category: 'streak', title: 'Unstoppable', description: 'Be active 30 days in a row', target: 30 },
+  { id: 'first-bone', category: 'volume', title: 'First Bone', description: 'Complete your first task', target: 1 },
+  { id: 'century', category: 'volume', title: 'Century', description: 'Complete 100 tasks', target: 100 },
+  { id: 'thousand-club', category: 'volume', title: 'Thousand Club', description: 'Complete 1,000 tasks', target: 1000 },
+  { id: 'zoomies', category: 'volume', title: 'Zoomies', description: 'Complete 10 tasks in one day', target: 10 },
+  { id: 'clockwork', category: 'punctuality', title: 'Clockwork', description: 'Complete 20 tasks in a row on time', target: 20 },
+  { id: 'clean-slate', category: 'punctuality', title: 'Clean Slate', description: '7 days in a row with tasks assigned and none overdue', target: 7 },
+  { id: 'season-champion', category: 'competition', title: 'Season Champion', description: 'Win a season', target: 1 },
+  { id: 'dynasty', category: 'competition', title: 'Dynasty', description: 'Win 3 seasons in a row', target: 3 },
+  { id: 'comeback-kid', category: 'competition', title: 'Comeback Kid', description: 'Win a season after trailing by 15+ points at the end of a day in it', target: null },
+  { id: 'top-dog', category: 'competition', title: 'Top Dog', description: 'Win a season leading at the end of every one of its days', target: null },
+  { id: 'redemption-arc', category: 'fun', title: 'Redemption Arc', description: 'Climb from under 45 back up to 80', target: null },
+  { id: 'night-owl', category: 'fun', title: 'Night Owl', description: 'Complete a task between midnight and 5am', target: null },
+  { id: 'early-bird', category: 'fun', title: 'Early Bird', description: 'Complete a task between 5am and 7am', target: null },
+  { id: 'weekend-warrior', category: 'fun', title: 'Weekend Warrior', description: 'Complete 5 tasks in one weekend', target: 5 },
+  { id: 'delegator', category: 'fun', title: 'Delegator', description: 'Assign 25 tasks you created to your teammate', target: 25 },
+  { id: 'shipper', category: 'fun', title: 'Shipper', description: 'Merge 10 pull requests', target: 10 },
+];
+
 const DAY = 86400000;
 const labelFor = (score) =>
   score >= 100 ? "Perfect boy" : score >= 90 ? "Best boy ever" : score >= 75 ? "Very good boy" : score >= 60 ? "Good boy" : score >= 45 ? "Doing okay" : score >= 30 ? "Naughty" : "Bad boy";
@@ -114,6 +140,56 @@ function person(tasks, user, other, history, key, now) {
   };
 }
 
+// Task-derived UTC sample progress; production additionally persists unlocks and scans
+// scoring instants. No GitHub activity is simulated; season wins use SAMPLE above.
+function achievementStates(tasks, user, summary, finished, key, now) {
+  const done = scoredFor(tasks, user).filter((t) => t.done && t.doneAt && Date.parse(t.doneAt) <= now)
+    .sort((a, b) => Date.parse(a.doneAt) - Date.parse(b.doneAt));
+  const values = {};
+  const dates = {};
+  const last = done.at(-1)?.doneAt ?? null;
+  const peak = Math.max(summary.score, summary.best?.score ?? 0);
+  for (const target of [80, 90, 95, 100]) {
+    values[`score-${target}`] = peak;
+    dates[`score-${target}`] = new Date(summary.best?.day ?? now).toISOString();
+  }
+  for (const target of [7, 30]) values[`streak-${target}`] = summary.streak.best;
+  for (const [id, target] of [["first-bone", 1], ["century", 100], ["thousand-club", 1000]]) {
+    values[id] = done.length;
+    dates[id] = done[target - 1]?.doneAt;
+  }
+  const perDay = new Map();
+  const weekends = new Map();
+  let onTime = 0;
+  values.clockwork = 0;
+  for (const task of done) {
+    const day = task.doneAt.slice(0, 10);
+    perDay.set(day, (perDay.get(day) ?? 0) + 1);
+    onTime = Date.parse(task.doneAt) <= deadline(task) ? onTime + 1 : 0;
+    values.clockwork = Math.max(values.clockwork, onTime);
+    const d = new Date(task.doneAt);
+    if (d.getUTCHours() < 5) dates["night-owl"] ??= task.doneAt;
+    if (d.getUTCHours() >= 5 && d.getUTCHours() < 7) dates["early-bird"] ??= task.doneAt;
+    if ([0, 6].includes(d.getUTCDay())) {
+      const saturday = dayOf(Date.parse(day) - (d.getUTCDay() === 0 ? DAY : 0));
+      weekends.set(saturday, (weekends.get(saturday) ?? 0) + 1);
+    }
+  }
+  values.zoomies = Math.max(0, ...perDay.values());
+  values["weekend-warrior"] = Math.max(0, ...weekends.values());
+  const wins = finished.filter((season) => season.winner === key);
+  values["season-champion"] = wins.length;
+  dates["season-champion"] = wins.at(-1)?.endsAt;
+  values.dynasty = wins.length ? 1 : 0; // alternating sample winners
+  values.delegator = summary.allTime.assignedToTeammate;
+  dates.delegator = new Date(now).toISOString();
+  return Object.fromEntries(ACHIEVEMENTS.map(({ id, target }) => {
+    const unlocked = target === null ? !!dates[id] : (values[id] ?? 0) >= target;
+    return [id, { unlocked, unlockedAt: unlocked ? dates[id] ?? last : null,
+      progress: target === null ? null : { current: Math.min(values[id] ?? 0, target), target } }];
+  }));
+}
+
 export function statsFor(tasks, users, me, now = Date.now()) {
   const other = users.find((u) => u.id !== me.id) ?? null;
   const today = Date.parse(dayOf(now));
@@ -128,14 +204,20 @@ export function statsFor(tasks, users, me, now = Date.now()) {
       teammate: other ? scoreAt(scoredFor(tasks, other), asOf) : null,
     });
   }
+  const mine = person(tasks, me, other, history, "me", now);
+  const theirs = other ? person(tasks, other, me, history, "teammate", now) : null;
+  const finished = results(users, me, now);
+  const myBadges = achievementStates(tasks, me, mine, finished, "me", now);
+  const theirBadges = other ? achievementStates(tasks, other, theirs, finished, "teammate", now) : null;
   return {
+    achievements: ACHIEVEMENTS.map((entry) => ({ ...entry, me: myBadges[entry.id], teammate: theirBadges?.[entry.id] ?? null })),
     generatedAt: new Date(now).toISOString(),
     timezone: "UTC",
     season: seasonFor(users, me, now),
     seasons: results(users, me, now),
     history,
-    me: person(tasks, me, other, history, "me", now),
-    teammate: other ? person(tasks, other, me, history, "teammate", now) : null,
+    me: mine,
+    teammate: theirs,
   };
 }
 
