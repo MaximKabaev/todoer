@@ -376,6 +376,10 @@ editing a due date is always reflected.
 
 ## Achievements
 
+Stats renders the full Pixel treasures catalog from `/achievements/<id>.png`: transparent
+256 × 256 pixel medallions, displayed with nearest-neighbor scaling. Locked art is grayscale
+at 45% opacity; titles, descriptions, progress and earned dates remain visible.
+
 22 badges per person, shown on Stats. They are derived from the same data as the score and Stats
 (assigned Now tasks, AFK days, GitHub events, frozen seasons; "completed" excludes empty tasks), then
 **stored the first time they are earned** (`achievements`: user, id, `unlocked_at` = the derived moment

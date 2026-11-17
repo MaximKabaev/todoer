@@ -10,7 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { Trophy, Timer, ArrowUpRight, Flame, PawPrint, Target, Clock, Sparkles } from "lucide-react";
+import { Trophy, Timer, ArrowUpRight, Flame } from "lucide-react";
 import { request, type Stats, type PersonStats, type Achievement } from "@/lib/api";
 import { seasonOutcome } from "@/lib/seasons";
 import styles from "./stats-dashboard.module.css";
@@ -211,16 +211,14 @@ function useChartTooltip(labels: string[]) {
   };
 }
 
-// Flip only once the complete catalog has been placed in public/achievements.
-const ACHIEVEMENT_ART_READY = false;
 const achievementArtPath = (id: string) => `/achievements/${id}.png`;
 const achievementCategories = [
-  { id: "score", title: "Score", color: "purple", Icon: Target },
-  { id: "streak", title: "Streaks", color: "orange", Icon: Flame },
-  { id: "volume", title: "Getting things done", color: "teal", Icon: PawPrint },
-  { id: "punctuality", title: "Right on time", color: "blue", Icon: Clock },
-  { id: "competition", title: "Friendly competition", color: "orange", Icon: Trophy },
-  { id: "fun", title: "Little victories", color: "purple", Icon: Sparkles },
+  { id: "score", title: "Score", color: "purple" },
+  { id: "streak", title: "Streaks", color: "orange" },
+  { id: "volume", title: "Getting things done", color: "teal" },
+  { id: "punctuality", title: "Right on time", color: "blue" },
+  { id: "competition", title: "Friendly competition", color: "orange" },
+  { id: "fun", title: "Little victories", color: "purple" },
 ] as const;
 
 function Achievements({ data }: { data: Stats }) {
@@ -266,7 +264,7 @@ function Achievements({ data }: { data: Stats }) {
         role="group"
         aria-label={`${data[person]!.user.displayName} achievements`}
       >
-        {achievementCategories.map(({ id, title, color, Icon }) => (
+        {achievementCategories.map(({ id, title, color }) => (
           <div
             className={styles.achievementCategory}
             key={id}
@@ -287,16 +285,10 @@ function Achievements({ data }: { data: Stats }) {
                     {...tip.item(index)}
                     role="group"
                   >
-                    <div className={styles.achievementArt} aria-hidden="true">
-                      {ACHIEVEMENT_ART_READY ? (
-                        // The fixed slots accommodate the final badge illustrations without layout changes.
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={achievementArtPath(entry.id)} alt="" width={64} height={64} />
-                      ) : (
-                        <span className={styles.medallion}>
-                          <Icon size={27} strokeWidth={1.6} />
-                        </span>
-                      )}
+                    <div className={styles.achievementArt}>
+                      {/* Serve the original pixels without image optimization or smoothing. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={achievementArtPath(entry.id)} alt={`${entry.title} badge`} width={64} height={64} />
                     </div>
                     <h4>{entry.title}</h4>
                     <p>{entry.description}</p>

@@ -264,6 +264,12 @@ test("achievements show counts, dates, progress and switch people with keyboard 
   const section = page.getByRole("region", { name: "Achievements", exact: true });
   await expect(section.getByTestId("achievement-badge")).toHaveCount(22);
   await expect(section.getByTestId("achievement-counts")).toHaveText(counts);
+  const art = section.getByRole("img", { name: / badge$/ });
+  await expect(art).toHaveCount(22);
+  await expect.poll(() => art.evaluateAll((images) =>
+    images.every((image) => image instanceof HTMLImageElement && image.complete && image.naturalWidth === 256),
+  )).toBe(true);
+  await expect(art.first()).toHaveCSS("image-rendering", "pixelated");
   const first = section.locator('[data-achievement="first-bone"]');
   await expect(first).toContainText("Earned Nov 12");
   await expect(first).toHaveAttribute("aria-label", /Earned Nov 12/);
