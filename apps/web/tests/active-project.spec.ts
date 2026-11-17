@@ -301,6 +301,7 @@ for (const mobile of [false, true])
           `Active project: ${b.name}`,
         );
         await page.goto(`/tasks/${fixtures[6].id}`);
+        await page.getByRole("dialog", { name: "Task details" }).locator("summary").filter({ hasText: "Extra options" }).click();
         await page
           .getByRole("dialog", { name: "Task details" })
           .getByLabel("Project", { exact: true })

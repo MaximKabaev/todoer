@@ -11,6 +11,7 @@ import {
   ArrowUpRight,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -436,213 +437,221 @@ export function TaskDetail({
                 ? "Chilling in Later. Back to one of you after two weeks."
                 : "Send it back to Later. We’ll randomly pick one of you to review it in two weeks."}</p>
             </div>
-            <label className="detail-field">
-              <span>
-                <CalendarDays size={17} /> Due date
-              </span>
-              <div className="date-field">
-                <input
-                  type="date"
-                  aria-label="Due date"
-                  value={task.dueDate || ""}
-                  onChange={(e) => patch({ dueDate: e.target.value || null })}
-                />
-                {task.dueDate && (
-                  <button
-                    className="icon-button"
-                    aria-label="Clear due date"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      patch({ dueDate: null });
-                    }}
-                  >
-                    <X size={13} />
-                  </button>
-                )}
+          </div>
+          <details className="detail-extra-options">
+            <summary>
+              Extra options
+              <ChevronDown size={16} />
+            </summary>
+            <div className="detail-fields">
+              <label className="detail-field">
+                <span>
+                  <CalendarDays size={17} /> Due date
+                </span>
+                <div className="date-field">
+                  <input
+                    type="date"
+                    aria-label="Due date"
+                    value={task.dueDate || ""}
+                    onChange={(e) => patch({ dueDate: e.target.value || null })}
+                  />
+                  {task.dueDate && (
+                    <button
+                      className="icon-button"
+                      aria-label="Clear due date"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        patch({ dueDate: null });
+                      }}
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              </label>
+              <div className="detail-field">
+                <span>
+                  <Flag size={17} /> Priority
+                </span>
+                <div className="priority-picker">
+                  {([0, 1, 2, 3] as const).map((p) => (
+                    <button
+                      key={p}
+                      aria-label={
+                        [
+                          "No priority",
+                          "Low priority",
+                          "Medium priority",
+                          "High priority",
+                        ][p]
+                      }
+                      aria-pressed={task.priority === p}
+                      className={`priority-option priority-${p} ${task.priority === p ? "selected" : ""}`}
+                      onClick={() => patch({ priority: p })}
+                    >
+                      {["None", "Low", "Medium", "High"][p]}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </label>
-            <div className="detail-field">
-              <span>
-                <Flag size={17} /> Priority
-              </span>
-              <div className="priority-picker">
-                {([0, 1, 2, 3] as const).map((p) => (
-                  <button
-                    key={p}
-                    aria-label={
-                      [
-                        "No priority",
-                        "Low priority",
-                        "Medium priority",
-                        "High priority",
-                      ][p]
-                    }
-                    aria-pressed={task.priority === p}
-                    className={`priority-option priority-${p} ${task.priority === p ? "selected" : ""}`}
-                    onClick={() => patch({ priority: p })}
-                  >
-                    {["None", "Low", "Medium", "High"][p]}
-                  </button>
+              <label className="detail-field">
+                <span>
+                  <span
+                    className="field-project-dot"
+                    style={{
+                      background: `var(--${task.project?.color || "gray"})`,
+                    }}
+                  />{" "}
+                  Project
+                </span>
+                <select
+                  aria-label="Project"
+                  value={task.projectId || ""}
+                  onChange={(e) => {
+                    const projectId = e.target.value || null;
+                    patch({ projectId });
+                  }}
+                >
+                  <option value="">No project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.emoji ? `${p.emoji} ` : ""}
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="detail-section">
+              <label className="field-label" htmlFor="detail-tags">
+                TAGS
+              </label>
+              <div className="tags-editor">
+                {task.tags.map((t) => (
+                  <span className="editable-tag" key={t.id}>
+                    #{t.name}
+                    <button
+                      aria-label={`Remove tag ${t.name}`}
+                      onClick={() =>
+                        patch({
+                          tags: task.tags
+                            .filter((tag) => tag.id !== t.id)
+                            .map((tag) => tag.id),
+                        })
+                      }
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
                 ))}
+                <input
+                  id="detail-tags"
+                  list="tag-options"
+                  aria-label="Add tag"
+                  placeholder="Add a tag…"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onBlur={() => {
+                    if (tagInput.trim()) addTag(tagInput);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === ",") {
+                      e.preventDefault();
+                      addTag(tagInput);
+                    }
+                    if (e.key === "Backspace" && !tagInput && task.tags.length)
+                      patch({ tags: task.tags.slice(0, -1).map((t) => t.id) });
+                  }}
+                />
+                <datalist id="tag-options">
+                  {tags
+                    .filter((t) => !task.tags.some((a) => a.id === t.id))
+                    .map((t) => (
+                      <option key={t.id} value={t.name} />
+                    ))}
+                </datalist>
               </div>
             </div>
-            <label className="detail-field">
-              <span>
-                <span
-                  className="field-project-dot"
-                  style={{
-                    background: `var(--${task.project?.color || "gray"})`,
-                  }}
-                />{" "}
-                Project
-              </span>
-              <select
-                aria-label="Project"
-                value={task.projectId || ""}
-                onChange={(e) => {
-                  const projectId = e.target.value || null;
-                  patch({ projectId });
-                }}
-              >
-                <option value="">No project</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.emoji ? `${p.emoji} ` : ""}
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="detail-section">
-            <label className="field-label" htmlFor="detail-tags">
-              TAGS
-            </label>
-            <div className="tags-editor">
-              {task.tags.map((t) => (
-                <span className="editable-tag" key={t.id}>
-                  #{t.name}
-                  <button
-                    aria-label={`Remove tag ${t.name}`}
-                    onClick={() =>
-                      patch({
-                        tags: task.tags
-                          .filter((tag) => tag.id !== t.id)
-                          .map((tag) => tag.id),
-                      })
-                    }
-                  >
-                    <X size={12} />
-                  </button>
+            <div className="detail-section attachment-section">
+              <div className="section-label">
+                <span>
+                  IMAGES{" "}
+                  {task.attachments.length > 0 && (
+                    <small>{task.attachments.length}</small>
+                  )}
                 </span>
-              ))}
+                <button
+                  className="icon-button"
+                  aria-label="Attach photos"
+                  onClick={() => file.current?.click()}
+                  disabled={uploading}
+                >
+                  {uploading ? (
+                    <LoaderCircle className="spin" size={17} />
+                  ) : (
+                    <PlusIcon />
+                  )}
+                </button>
+              </div>
               <input
-                id="detail-tags"
-                list="tag-options"
-                aria-label="Add tag"
-                placeholder="Add a tag…"
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onBlur={() => {
-                  if (tagInput.trim()) addTag(tagInput);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === ",") {
-                    e.preventDefault();
-                    addTag(tagInput);
-                  }
-                  if (e.key === "Backspace" && !tagInput && task.tags.length)
-                    patch({ tags: task.tags.slice(0, -1).map((t) => t.id) });
+                ref={file}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={(e) => {
+                  if (e.target.files?.length)
+                    void onImages(Array.from(e.target.files));
+                  e.target.value = "";
                 }}
               />
-              <datalist id="tag-options">
-                {tags
-                  .filter((t) => !task.tags.some((a) => a.id === t.id))
-                  .map((t) => (
-                    <option key={t.id} value={t.name} />
+              {task.attachments.length ? (
+                <div className="image-gallery">
+                  {task.attachments.map((a, index) => (
+                    <button
+                      key={a.id}
+                      aria-label={`View ${a.filename}`}
+                      onClick={() => setLightbox(index)}
+                    >
+                      <Image unoptimized fill src={a.url} alt={a.filename} />
+                      <span className="filename" title={a.filename}>
+                        <b>{a.filename.slice(0, -10)}</b>
+                        <b>{a.filename.slice(-10)}</b>
+                      </span>
+                    </button>
                   ))}
-              </datalist>
+                </div>
+              ) : (
+                <button
+                  className="add-images"
+                  onClick={() => file.current?.click()}
+                  disabled={uploading}
+                >
+                  <ImagePlus size={23} />
+                  <span>
+                    {uploading
+                      ? "Adding your images…"
+                      : "Drop a little inspiration here"}
+                    <small>or choose photos</small>
+                  </span>
+                </button>
+              )}
             </div>
-          </div>
-          <div className="detail-section attachment-section">
-            <div className="section-label">
+            <div className="detail-footer">
               <span>
-                IMAGES{" "}
-                {task.attachments.length > 0 && (
-                  <small>{task.attachments.length}</small>
-                )}
+                Created by {task.createdBy.displayName}
+                <br />
+                <small>{timeAgo(task.createdAt)}</small>
               </span>
               <button
-                className="icon-button"
-                aria-label="Attach photos"
-                onClick={() => file.current?.click()}
-                disabled={uploading}
+                className="icon-button delete-task"
+                aria-label="Delete task"
+                onClick={onDelete}
               >
-                {uploading ? (
-                  <LoaderCircle className="spin" size={17} />
-                ) : (
-                  <PlusIcon />
-                )}
+                <Trash2 size={17} />
               </button>
             </div>
-            <input
-              ref={file}
-              type="file"
-              accept="image/*"
-              multiple
-              hidden
-              onChange={(e) => {
-                if (e.target.files?.length)
-                  void onImages(Array.from(e.target.files));
-                e.target.value = "";
-              }}
-            />
-            {task.attachments.length ? (
-              <div className="image-gallery">
-                {task.attachments.map((a, index) => (
-                  <button
-                    key={a.id}
-                    aria-label={`View ${a.filename}`}
-                    onClick={() => setLightbox(index)}
-                  >
-                    <Image unoptimized fill src={a.url} alt={a.filename} />
-                    <span className="filename" title={a.filename}>
-                      <b>{a.filename.slice(0, -10)}</b>
-                      <b>{a.filename.slice(-10)}</b>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <button
-                className="add-images"
-                onClick={() => file.current?.click()}
-                disabled={uploading}
-              >
-                <ImagePlus size={23} />
-                <span>
-                  {uploading
-                    ? "Adding your images…"
-                    : "Drop a little inspiration here"}
-                  <small>or choose photos</small>
-                </span>
-              </button>
-            )}
-          </div>
-          <div className="detail-footer">
-            <span>
-              Created by {task.createdBy.displayName}
-              <br />
-              <small>{timeAgo(task.createdAt)}</small>
-            </span>
-            <button
-              className="icon-button delete-task"
-              aria-label="Delete task"
-              onClick={onDelete}
-            >
-              <Trash2 size={17} />
-            </button>
-          </div>
+          </details>
         </div>
       </div>
       {lightbox !== null && task.attachments[lightbox] && (

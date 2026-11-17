@@ -1186,6 +1186,37 @@ kbd {
 .handoff-button > svg:last-child {
   margin-left: auto;
 }
+.detail-extra-options {
+  border-top: 1px solid var(--line);
+}
+.detail-extra-options > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  color: var(--secondary);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  list-style: none;
+}
+.detail-extra-options > summary::-webkit-details-marker {
+  display: none;
+}
+.detail-extra-options > summary:hover {
+  color: var(--text);
+}
+.detail-extra-options > summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+.detail-extra-options[open] > summary > svg {
+  transform: rotate(180deg);
+}
+.detail-extra-options > .detail-fields {
+  border-top: 0;
+}
 .detail-fields {
   border-top: 1px solid var(--line);
   padding: 10px 0;

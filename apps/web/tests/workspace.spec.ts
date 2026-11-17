@@ -102,6 +102,7 @@ test("empty tasks, debounced autosave, dual assignment, handoff and delete", asy
   await expect(
     detail.getByRole("button", { name: "Maxim (you)", exact: true }),
   ).toHaveAttribute("aria-pressed", "false");
+  await detail.locator("summary").filter({ hasText: "Extra options" }).click();
   await detail
     .getByRole("button", { name: "Delete task", exact: true })
     .click();
@@ -132,6 +133,7 @@ test("photo capture uses one multipart task request and detail uploads attach to
   expect(task.attachments).toHaveLength(2);
   expect(posts).toBe(1);
   const detail = page.getByRole("dialog", { name: "Task details" });
+  await detail.locator("summary").filter({ hasText: "Extra options" }).click();
   await expect(detail.locator(".image-gallery button")).toHaveCount(2);
   await expect
     .poll(() =>
