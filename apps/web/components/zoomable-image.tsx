@@ -155,7 +155,7 @@ export function ZoomableImage({
         width={width}
         height={height}
         style={{
-          width: "auto",
+          width: `min(100cqw, ${100 * width / height}cqh)`,
           height: "auto",
           transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`,
         }}

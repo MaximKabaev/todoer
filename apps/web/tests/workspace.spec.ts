@@ -155,6 +155,24 @@ test("photo capture uses one multipart task request and detail uploads attach to
   const lightbox = page.getByRole("dialog", { name: "one.png", exact: true });
   await expect(lightbox).toBeVisible();
   const zoomable = lightbox.locator(".zoomable");
+  for (const viewport of [{ width: 1920, height: 1080 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(async () => {
+      const bounds = await lightbox.boundingBox();
+      return bounds && Math.round(bounds.width);
+    }).toBe(viewport.width);
+    const bounds = (await lightbox.boundingBox())!;
+    expect(bounds.x).toBe(0);
+    expect(bounds.y).toBe(0);
+    expect(Math.round(bounds.height)).toBe(viewport.height);
+    const frame = (await zoomable.boundingBox())!;
+    expect(frame.height).toBeGreaterThan(viewport.height * 0.75);
+    const image = (await zoomable.locator("img").boundingBox())!;
+    expect(Math.max(image.width, image.height)).toBeGreaterThan(viewport.width < 500 ? 300 : 700);
+    await expect(lightbox.getByRole("button", { name: "Close dialog" })).toBeInViewport();
+    await expect(lightbox.getByRole("button", { name: "Next image" })).toBeInViewport();
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
   const box = (await zoomable.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -400);

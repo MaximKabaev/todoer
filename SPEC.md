@@ -287,7 +287,7 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
 - Task row: checkbox, title (clicking it opens the task, like the rest of the row), metadata line (assignee avatars, tags as pills,
   due date, project, image thumbnail count). Click → detail panel (right side on desktop, sheet on mobile)
   with all fields editable, assignee toggles for both users, "Pass to <Teammate>" button,
-  move to Later/Now, tags editor (type to create), image gallery with lightbox, delete.
+  move to Later/Now, tags editor (type to create), image gallery with a full-screen lightbox, delete. The lightbox scales images to fill the available viewport while preserving their aspect ratio, with pinch/wheel zoom, drag to pan, and visible close/navigation controls.
 - Completing a task animates and it leaves the list after a short delay (with undo toast).
 - Data freshness: revalidate on window focus and poll every ~10 s so the two users see each other's changes.
 - Settings: change display name/password, email and email notifications, manage agent tokens (create, copy once, revoke),
