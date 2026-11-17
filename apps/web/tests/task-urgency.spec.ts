@@ -32,7 +32,10 @@ for (const mobile of [false, true]) {
       const detail = page.getByRole("dialog", { name: "Task details" });
       await expect(detail.locator(".task-urgency")).toContainText("High priority");
       await expect(detail.getByLabel("Due date", { exact: true })).toBeHidden();
+      await expect(detail.getByRole("button", { name: "Attach photos" })).toBeVisible();
+      await expect(detail.locator("summary svg")).toHaveCSS("transform", "none");
       await detail.locator("summary").filter({ hasText: "Extra options" }).click();
+      await expect(detail.locator("summary svg")).toHaveCSS("transform", "matrix(0, 1, -1, 0, 0, 0)");
       await detail.getByRole("button", { name: "Medium priority", exact: true }).click();
       await expect(detail.locator(".priority-heading")).toHaveText("Medium priority");
       await detail.getByLabel("Due date", { exact: true }).fill("2026-11-11");

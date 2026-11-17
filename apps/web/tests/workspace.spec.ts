@@ -133,7 +133,6 @@ test("photo capture uses one multipart task request and detail uploads attach to
   expect(task.attachments).toHaveLength(2);
   expect(posts).toBe(1);
   const detail = page.getByRole("dialog", { name: "Task details" });
-  await detail.locator("summary").filter({ hasText: "Extra options" }).click();
   await expect(detail.locator(".image-gallery button")).toHaveCount(2);
   await expect
     .poll(() =>

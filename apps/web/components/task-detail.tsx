@@ -11,7 +11,6 @@ import {
   ArrowUpRight,
   CalendarDays,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -441,7 +440,7 @@ export function TaskDetail({
           <details className="detail-extra-options">
             <summary>
               Extra options
-              <ChevronDown size={16} />
+              <ChevronRight size={16} />
             </summary>
             <div className="detail-fields">
               <label className="detail-field">
@@ -572,71 +571,6 @@ export function TaskDetail({
                 </datalist>
               </div>
             </div>
-            <div className="detail-section attachment-section">
-              <div className="section-label">
-                <span>
-                  IMAGES{" "}
-                  {task.attachments.length > 0 && (
-                    <small>{task.attachments.length}</small>
-                  )}
-                </span>
-                <button
-                  className="icon-button"
-                  aria-label="Attach photos"
-                  onClick={() => file.current?.click()}
-                  disabled={uploading}
-                >
-                  {uploading ? (
-                    <LoaderCircle className="spin" size={17} />
-                  ) : (
-                    <PlusIcon />
-                  )}
-                </button>
-              </div>
-              <input
-                ref={file}
-                type="file"
-                accept="image/*"
-                multiple
-                hidden
-                onChange={(e) => {
-                  if (e.target.files?.length)
-                    void onImages(Array.from(e.target.files));
-                  e.target.value = "";
-                }}
-              />
-              {task.attachments.length ? (
-                <div className="image-gallery">
-                  {task.attachments.map((a, index) => (
-                    <button
-                      key={a.id}
-                      aria-label={`View ${a.filename}`}
-                      onClick={() => setLightbox(index)}
-                    >
-                      <Image unoptimized fill src={a.url} alt={a.filename} />
-                      <span className="filename" title={a.filename}>
-                        <b>{a.filename.slice(0, -10)}</b>
-                        <b>{a.filename.slice(-10)}</b>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <button
-                  className="add-images"
-                  onClick={() => file.current?.click()}
-                  disabled={uploading}
-                >
-                  <ImagePlus size={23} />
-                  <span>
-                    {uploading
-                      ? "Adding your images…"
-                      : "Drop a little inspiration here"}
-                    <small>or choose photos</small>
-                  </span>
-                </button>
-              )}
-            </div>
             <div className="detail-footer">
               <span>
                 Created by {task.createdBy.displayName}
@@ -652,6 +586,71 @@ export function TaskDetail({
               </button>
             </div>
           </details>
+          <div className="detail-section attachment-section">
+            <div className="section-label">
+              <span>
+                IMAGES{" "}
+                {task.attachments.length > 0 && (
+                  <small>{task.attachments.length}</small>
+                )}
+              </span>
+              <button
+                className="icon-button"
+                aria-label="Attach photos"
+                onClick={() => file.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <LoaderCircle className="spin" size={17} />
+                ) : (
+                  <PlusIcon />
+                )}
+              </button>
+            </div>
+            <input
+              ref={file}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(e) => {
+                if (e.target.files?.length)
+                  void onImages(Array.from(e.target.files));
+                e.target.value = "";
+              }}
+            />
+            {task.attachments.length ? (
+              <div className="image-gallery">
+                {task.attachments.map((a, index) => (
+                  <button
+                    key={a.id}
+                    aria-label={`View ${a.filename}`}
+                    onClick={() => setLightbox(index)}
+                  >
+                    <Image unoptimized fill src={a.url} alt={a.filename} />
+                    <span className="filename" title={a.filename}>
+                      <b>{a.filename.slice(0, -10)}</b>
+                      <b>{a.filename.slice(-10)}</b>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button
+                className="add-images"
+                onClick={() => file.current?.click()}
+                disabled={uploading}
+              >
+                <ImagePlus size={23} />
+                <span>
+                  {uploading
+                    ? "Adding your images…"
+                    : "Drop a little inspiration here"}
+                  <small>or choose photos</small>
+                </span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
       {lightbox !== null && task.attachments[lightbox] && (
