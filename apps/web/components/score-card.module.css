@@ -10,6 +10,24 @@
 .trend { display: flex; justify-content: flex-end; align-items: center; gap: 3px; font-size: 10px; color: var(--secondary); }
 .stats { grid-column: 1 / -1; border-top: 1px solid var(--line-strong); padding-top: 9px; font-size: 11px; color: var(--secondary); display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .overdue { color: var(--red); }
+/* Each label has its own tint; surface mixing follows the system theme. */
+.card[data-tone="red"] { --score-tint: #dc2626; }
+.card[data-tone="coral"] { --score-tint: #ea580c; }
+.card[data-tone="amber"] { --score-tint: #d99a08; }
+.card[data-tone="lime"] { --score-tint: #65a30d; }
+.card[data-tone="green"] { --score-tint: #16a34a; }
+.card[data-tone="emerald"] { --score-tint: #059669; }
+.card[data-tone]:not(.perfect) {
+  border-color: color-mix(in srgb, var(--score-tint) 48%, var(--line-strong));
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--score-tint) 9%, var(--surface)),
+    color-mix(in srgb, var(--score-tint) 22%, var(--surface)));
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--score-tint) 10%, transparent);
+}
+.card[data-tone]:not(.perfect) .label,
+.card[data-tone]:not(.perfect) .number strong {
+  color: color-mix(in srgb, var(--score-tint) 45%, var(--text));
+}
 /* 100/100: the whole card turns gold. */
 .perfect {
   --gold-ink: #4d3700; --gold-soft: #7a5a12; --gold-line: rgba(122, 90, 18, .22);

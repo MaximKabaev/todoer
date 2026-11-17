@@ -51,11 +51,18 @@ export function ScoreCard({
       ? TriangleAlert
       : Minus;
   const perfect = !!entry && entry.score >= 100;
+  const tone = !entry ? undefined : perfect ? "gold"
+    : entry.score >= 90 ? "emerald"
+    : entry.score >= 75 ? "green"
+    : entry.score >= 60 ? "lime"
+    : entry.score >= 45 ? "amber"
+    : entry.score >= 30 ? "coral" : "red";
   return (
     <div className={styles.slot}>
       {entry && score && (
         <section
           className={perfect ? `${styles.card} ${styles.perfect}` : styles.card}
+          data-tone={tone}
           data-perfect={perfect || undefined}
           aria-label={`${viewed === "me" ? "Your" : entry.user.displayName + "’s"} good boy score`}
         >
