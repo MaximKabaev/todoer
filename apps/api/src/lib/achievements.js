@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { pool } from '../db.js';
 import { addDays, dateFromToday, loadScoreRows, localParts, scoreFor, startOfDay } from './score.js';
 import { notificationsConfigured, sendEmail } from './notifications.js';
@@ -269,10 +270,22 @@ export async function achievementsView(db, user, teammate, now = new Date(), row
   return ACHIEVEMENTS.map((entry) => ({ ...entry, me: state(user, entry.id), teammate: state(teammate, entry.id) }));
 }
 
+// Badge art served by the web app (apps/web/public/achievements/<id>.png), attached to unlock emails
+// as inline images. A missing file just leaves the badge out of the email.
+const artDir = new URL('../../../web/public/achievements/', import.meta.url);
+export function achievementArt(id) {
+  try {
+    return { filename: `${id}.png`, content: readFileSync(new URL(`${id}.png`, artDir)).toString('base64'), content_id: `achievement-${id}` };
+  } catch {
+    return null;
+  }
+}
+
 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 
 // One email per recipient covering every new unlock (theirs and their teammate's).
-export function composeAchievementEmail({ recipient, people, unlocks }) {
+// `art` = the ids that have an inline image attached (see achievementArt).
+export function composeAchievementEmail({ recipient, people, unlocks, art = new Set() }) {
   const base = process.env.PUBLIC_WEB_URL?.replace(/\/+$/, '') || '';
   const name = (userId) => (userId === recipient.id ? 'You' : people.find((person) => person.id === userId)?.display_name ?? 'Someone');
   const lines = unlocks.map((unlock) => ({ who: name(unlock.userId), ...byId.get(unlock.id) }));
@@ -286,7 +299,10 @@ export function composeAchievementEmail({ recipient, people, unlocks }) {
 <p>Hi ${escape(recipient.display_name)},</p>
 <div style="margin:16px 0;padding:12px 16px;border:1px solid #c7d2fe;border-radius:12px;background:#eef2ff">
 <div style="font-weight:700;color:#3730a3;margin-bottom:6px">🏅 Achievement${unlocks.length === 1 ? '' : 's'} unlocked</div>
-${lines.map((line) => `<div style="margin-top:4px"><strong>${escape(line.title)}</strong> · ${escape(line.who)}<div style="color:#4b5563">${escape(line.description)}</div></div>`).join('\n')}
+${lines.map((line) => `<table role="presentation" style="margin-top:8px;border-collapse:collapse"><tr>
+${art.has(line.id) ? `<td style="padding:0 12px 0 0;vertical-align:middle"><img src="cid:achievement-${escape(line.id)}" width="64" height="64" alt="${escape(line.title)} badge" style="display:block;image-rendering:pixelated"></td>` : ''}
+<td style="vertical-align:middle"><strong>${escape(line.title)}</strong> · ${escape(line.who)}<div style="color:#4b5563">${escape(line.description)}</div></td>
+</tr></table>`).join('\n')}
 ${base ? `<div style="margin-top:8px"><a href="${escape(base)}/stats" style="color:#1f2328">See all achievements</a></div>` : ''}
 </div>
 <p style="color:#9ca3af;font-size:12px">You get these because email notifications are on in todoer Settings.</p>
@@ -301,13 +317,15 @@ export async function sendAchievementEmails({ send = sendEmail, now = new Date()
     WHERE NOT emailed ORDER BY unlocked_at, user_id, id`);
   if (!pending.length) return 0;
   const { rows: people } = await db.query('SELECT id, display_name, email, email_notifications FROM users ORDER BY created_at, id');
+  const attachments = [...new Set(pending.map((row) => row.id))].map(achievementArt).filter(Boolean);
+  const art = new Set(attachments.map((file) => file.filename.replace(/\.png$/, '')));
   const key = createHash('sha256').update(pending.map((row) => `${row.userId}:${row.id}`).join(',')).digest('hex').slice(0, 24);
   let sent = 0;
   let ok = true;
   for (const recipient of people) {
     if (!recipient.email || !recipient.email_notifications) continue;
     try {
-      await send({ to: recipient.email, idempotencyKey: `todoer-achievement-${key}-${recipient.id}`, ...composeAchievementEmail({ recipient, people, unlocks: pending }) });
+      await send({ to: recipient.email, idempotencyKey: `todoer-achievement-${key}-${recipient.id}`, ...composeAchievementEmail({ recipient, people, unlocks: pending, art }), attachments });
       sent++;
     } catch (error) {
       ok = false;

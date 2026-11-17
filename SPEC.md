@@ -410,7 +410,7 @@ Days and hours use `SCORE_TIMEZONE`.
   `progress` is null for yes/no achievements; `current` is capped at `target` (for score badges it is the
   best score so far). Building the response also records anything newly earned.
 - The AFK worker (every minute) records new unlocks right after deciding seasons, then emails **both
-  people** one "Achievement unlocked" message per batch (who earned what, link to Stats), if they have an
+  people** one "Achievement unlocked" message per batch (who earned what, each badge's pixel art as an inline image attachment from `apps/web/public/achievements/<id>.png`, link to Stats), if they have an
   email and notifications on. Unlocks that were already more than 3 days old when first recorded (the
   initial backfill) are stored as announced and never emailed. A failed send retries on the next tick.
 

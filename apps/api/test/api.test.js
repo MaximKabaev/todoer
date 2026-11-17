@@ -1420,6 +1420,12 @@ test('achievements: stored when earned, shown on Stats, emailed once (backfill s
     assert.match(theirs.text, /You: First Bone \(Complete your first task\)/);
     assert.match(theirs.text, /https:\/\/todo\.example\.com\/stats/);
     assert.notEqual(mine.idempotencyKey, theirs.idempotencyKey);
+    // The badge art rides along as an inline image.
+    assert.equal(theirs.attachments.length, 1);
+    assert.equal(theirs.attachments[0].filename, 'first-bone.png');
+    assert.equal(theirs.attachments[0].content_id, 'achievement-first-bone');
+    assert.equal(Buffer.from(theirs.attachments[0].content, 'base64').subarray(1, 4).toString(), 'PNG');
+    assert.match(theirs.html, /<img src="cid:achievement-first-bone"/);
   } finally {
     await pool.query('UPDATE users SET email = NULL');
     await pool.query('DELETE FROM achievements'); await pool.query('DELETE FROM tasks');

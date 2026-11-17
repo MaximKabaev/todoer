@@ -145,11 +145,12 @@ ${summary.rows.map((row) => `<div style="color:#4b5563">${escape(row.name)}: <st
   return { subject, text, html };
 }
 
-export async function sendEmail({ to, subject, text, html, idempotencyKey }) {
+// attachments: [{ filename, content (base64), content_id? }]; a content_id makes it an inline image (`cid:` in the HTML).
+export async function sendEmail({ to, subject, text, html, idempotencyKey, attachments }) {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-    body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [to], subject, text, html }),
+    body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [to], subject, text, html, ...(attachments?.length ? { attachments } : {}) }),
   });
   if (!response.ok) throw new Error(`Resend responded ${response.status}: ${(await response.text()).slice(0, 500)}`);
 }
