@@ -218,8 +218,13 @@ const achievementCategories = [
   { id: "volume", title: "Getting things done", color: "teal" },
   { id: "punctuality", title: "Right on time", color: "blue" },
   { id: "competition", title: "Friendly competition", color: "orange" },
+  { id: "team", title: "Teamwork", color: "teal" },
+  { id: "code", title: "Code", color: "blue" },
   { id: "fun", title: "Little victories", color: "purple" },
+  { id: "secret", title: "Secrets", color: "purple" },
 ] as const;
+
+const isMystery = (entry: Achievement) => entry.hidden && entry.title === null;
 
 function Achievements({ data }: { data: Stats }) {
   const [selected, setSelected] = useState<"me" | "teammate">("me");
@@ -236,7 +241,9 @@ function Achievements({ data }: { data: Stats }) {
         : "Locked";
   };
   const tip = useChartTooltip(
-    entries.map((entry) => `${entry.title} · ${entry.description} · ${status(entry)}`),
+    entries.map((entry) => isMystery(entry)
+      ? `Hidden achievement, ${entry[person]?.unlocked ? "earned" : "locked"} · ${status(entry)}`
+      : `${entry.title} · ${entry.description} · ${status(entry)}`),
   );
   return (
     <section className={styles.panel} aria-labelledby="achievements-title">
@@ -281,6 +288,7 @@ function Achievements({ data }: { data: Stats }) {
                     data-testid="achievement-badge"
                     data-achievement={entry.id}
                     data-unlocked={!!state?.unlocked}
+                    data-mystery={isMystery(entry)}
                     className={styles.achievement}
                     {...tip.item(index)}
                     role="group"
@@ -288,12 +296,13 @@ function Achievements({ data }: { data: Stats }) {
                     <div className={styles.achievementArt}>
                       {/* Serve the original pixels without image optimization or smoothing. */}
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={achievementArtPath(entry.id)} alt={`${entry.title} badge`} width={64} height={64} />
+                      <img src={achievementArtPath(isMystery(entry) ? "secret" : entry.id)} alt={isMystery(entry) ? "Hidden achievement badge" : `${entry.title} badge`} width={64} height={64} />
                     </div>
-                    <h4>{entry.title}</h4>
-                    <p>{entry.description}</p>
+                    <h4>{isMystery(entry) ? "???" : entry.title}</h4>
+                    {entry.hidden && !isMystery(entry) && <span className={styles.secretChip}>Secret</span>}
+                    <p>{isMystery(entry) ? "Hidden achievement" : entry.description}</p>
                     <span className={styles.achievementStatus}>{status(entry)}</span>
-                    {!state?.unlocked && state?.progress && (
+                    {!isMystery(entry) && !state?.unlocked && state?.progress && (
                       <progress
                         aria-label={`${entry.title} progress`}
                         value={state.progress.current}

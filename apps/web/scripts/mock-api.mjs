@@ -49,9 +49,11 @@ const users = [
 const activeProjects = new Map(users.map((u) => [u.id, null]));
 const emails = new Map(users.map((u) => [u.id, `${u.username}@example.com`]));
 const emailNotifications = new Map(users.map((u) => [u.id, true]));
+const birthdays = new Map(users.map((u) => [u.id, null]));
 const githubLogins = new Map(users.map((u) => [u.id, null]));
 const currentUser = (u) => ({
   ...u,
+  birthday: birthdays.get(u.id),
   githubLogin: githubLogins.get(u.id),
   activeProjectId: activeProjects.get(u.id),
   email: emails.get(u.id),
@@ -497,6 +499,16 @@ const server = createServer(async (req, res) => {
         const { data } = await body(req);
         if (data.password && passwords.get(me.id) !== data.currentPassword)
           return send({ error: "incorrect_current_password" }, 400);
+        let birthday;
+        if (data.birthday !== undefined) {
+          if (data.birthday !== null && typeof data.birthday !== "string") return send({ error: "Birthday must be MM-DD" }, 400);
+          birthday = data.birthday?.trim() || null;
+          if (birthday && !/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(birthday)) return send({ error: "Birthday must be MM-DD" }, 400);
+          if (birthday) {
+            const [month, day] = birthday.split("-").map(Number);
+            if (day > new Date(Date.UTC(2024, month, 0)).getUTCDate()) return send({ error: "That day does not exist in that month" }, 400);
+          }
+        }
         let githubLogin;
         if (data.githubLogin !== undefined) {
           if (data.githubLogin !== null && typeof data.githubLogin !== "string") return send({ error: "Enter a valid GitHub username" }, 400);
@@ -533,6 +545,7 @@ const server = createServer(async (req, res) => {
             return send({ error: "unknown_project" }, 400);
           activeProjects.set(me.id, data.activeProjectId);
         }
+        if (data.birthday !== undefined) birthdays.set(me.id, birthday);
         if (data.githubLogin !== undefined) githubLogins.set(me.id, githubLogin);
         if (data.email !== undefined) emails.set(me.id, email);
         if (data.emailNotifications !== undefined)

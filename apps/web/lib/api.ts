@@ -15,6 +15,7 @@ export type User = {
   color: Color;
 };
 export type CurrentUser = User & {
+  birthday?: string | null;
   githubLogin: string | null;
   activeProjectId: string | null;
   email?: string | null;
@@ -202,9 +203,10 @@ export type AchievementState = {
 };
 export type Achievement = {
   id: string;
-  category: "score" | "streak" | "volume" | "punctuality" | "competition" | "fun";
-  title: string;
-  description: string;
+  category: "score" | "streak" | "volume" | "punctuality" | "competition" | "team" | "code" | "fun" | "secret";
+  hidden: boolean;
+  title: string | null;
+  description: string | null;
   target: number | null;
   me: AchievementState;
   teammate: AchievementState | null;
@@ -306,6 +308,7 @@ export const api = {
   logout: () => request<{ ok: true }>("/api/auth/logout", json("POST")),
   me: () => request<{ user: CurrentUser; teammate: User }>("/api/me"),
   updateMe: (input: {
+    birthday?: string | null;
     githubLogin?: string | null;
     activeProjectId?: string | null;
     email?: string | null;

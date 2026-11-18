@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import styles from "./settings.module.css";
 import useSWR, { useSWRConfig } from "swr";
 import {
   ArrowUpRight,
@@ -50,6 +51,9 @@ export function Settings({
       setGithubBusy(false);
     }
   }
+  const [birthdayMonth, setBirthdayMonth] = useState(user.birthday?.slice(0, 2) || "");
+  const [birthdayDay, setBirthdayDay] = useState(user.birthday?.slice(3) || "");
+  const birthdayDays = birthdayMonth ? new Date(Date.UTC(2024, Number(birthdayMonth), 0)).getUTCDate() : 31;
   const [name, setName] = useState(user.displayName);
   const [email, setEmail] = useState(user.email || "");
   const [savedEmail, setSavedEmail] = useState(user.email || "");
@@ -84,6 +88,7 @@ export function Settings({
     try {
       await api.updateMe({
         displayName: name.trim() || user.displayName,
+        birthday: birthdayMonth && birthdayDay ? `${birthdayMonth}-${birthdayDay}` : null,
         ...(form.get("password")
           ? {
               password: String(form.get("password")),
@@ -153,6 +158,31 @@ export function Settings({
             autoComplete="nickname"
           />
         </label>
+        <fieldset className={styles.birthday}>
+          <legend>Birthday</legend>
+          <p id="birthday-help" className="small muted">Optional. Only you can see this.</p>
+          <div className={styles.birthdayFields}>
+            <label>
+              Month
+              <select aria-label="Month" aria-describedby="birthday-help" value={birthdayMonth} onChange={(e) => {
+                const month = e.target.value;
+                setBirthdayMonth(month);
+                if (!month || Number(birthdayDay) > new Date(Date.UTC(2024, Number(month), 0)).getUTCDate()) setBirthdayDay("");
+              }}>
+                <option value="">Month</option>
+                {Array.from({ length: 12 }, (_, i) => <option key={i} value={String(i + 1).padStart(2, "0")}>{new Date(Date.UTC(2024, i, 1)).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" })}</option>)}
+              </select>
+            </label>
+            <label>
+              Day
+              <select aria-label="Day" aria-describedby="birthday-help" value={birthdayDay} disabled={!birthdayMonth} required={!!birthdayMonth} onChange={(e) => setBirthdayDay(e.target.value)}>
+                <option value="">Day</option>
+                {Array.from({ length: birthdayDays }, (_, i) => <option key={i} value={String(i + 1).padStart(2, "0")}>{i + 1}</option>)}
+              </select>
+            </label>
+          </div>
+          <button type="button" className="text-button" onClick={() => { setBirthdayMonth(""); setBirthdayDay(""); }}>Clear birthday</button>
+        </fieldset>
         <details>
           <summary>
             <KeyRound size={16} /> Change password <ArrowUpRight size={14} />
