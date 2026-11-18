@@ -9,25 +9,60 @@ const ACHIEVEMENTS = [
   { id: 'score-90', category: 'score', title: 'Very Good Boy', description: 'Reach a score of 90', target: 90 },
   { id: 'score-95', category: 'score', title: 'Elite Boy', description: 'Reach a score of 95', target: 95 },
   { id: 'score-100', category: 'score', title: 'Perfect Boy', description: 'Reach a perfect score of 100', target: 100 },
-  { id: 'streak-7', category: 'streak', title: 'On a Roll', description: 'Be active 7 days in a row', target: 7 },
+
+  { id: 'streak-7', category: 'streak', title: 'On a Roll', description: 'Be active 7 days in a row (a task done, commits pushed or a PR merged)', target: 7 },
   { id: 'streak-30', category: 'streak', title: 'Unstoppable', description: 'Be active 30 days in a row', target: 30 },
-  { id: 'first-bone', category: 'volume', title: 'First Bone', description: 'Complete your first task', target: 1 },
+  { id: 'streak-100', category: 'streak', title: 'Iron Will', description: 'Be active 100 days in a row', target: 100 },
+
+  { id: 'first-bone', category: 'volume', title: 'First Bone', description: 'Complete your first task or push your first commit', target: 1 },
   { id: 'century', category: 'volume', title: 'Century', description: 'Complete 100 tasks', target: 100 },
+  { id: 'half-grand', category: 'volume', title: 'Half a Grand', description: 'Complete 500 tasks', target: 500 },
   { id: 'thousand-club', category: 'volume', title: 'Thousand Club', description: 'Complete 1,000 tasks', target: 1000 },
-  { id: 'zoomies', category: 'volume', title: 'Zoomies', description: 'Complete 10 tasks in one day', target: 10 },
+  { id: 'zoomies', category: 'volume', title: 'Zoomies', description: 'Complete 10 tasks or push 25 commits in one day', target: 10 },
+  { id: 'overdrive', category: 'volume', title: 'Overdrive', description: 'Complete 20 tasks or push 50 commits in one day', target: 20 },
+  { id: 'speedrun', category: 'volume', title: 'Speedrun', description: 'Complete 25 tasks between 10 minutes and an hour after creating them', target: 25 },
+
   { id: 'clockwork', category: 'punctuality', title: 'Clockwork', description: 'Complete 20 tasks in a row on time', target: 20 },
+  { id: 'swiss-watch', category: 'punctuality', title: 'Swiss Watch', description: 'Complete 100 tasks in a row on time', target: 100 },
   { id: 'clean-slate', category: 'punctuality', title: 'Clean Slate', description: '7 days in a row with tasks assigned and none overdue', target: 7 },
+  { id: 'spotless-month', category: 'punctuality', title: 'Spotless Month', description: '30 days in a row with tasks assigned and none overdue', target: 30 },
+
   { id: 'season-champion', category: 'competition', title: 'Season Champion', description: 'Win a season', target: 1 },
   { id: 'dynasty', category: 'competition', title: 'Dynasty', description: 'Win 3 seasons in a row', target: 3 },
+  { id: 'seasons-6', category: 'competition', title: 'Hat Trick of Hat Tricks', description: 'Win 6 seasons', target: 6 },
   { id: 'comeback-kid', category: 'competition', title: 'Comeback Kid', description: 'Win a season after trailing by 15+ points at the end of a day in it', target: null },
   { id: 'top-dog', category: 'competition', title: 'Top Dog', description: 'Win a season leading at the end of every one of its days', target: null },
+  { id: 'commit-champion', category: 'competition', title: 'Commit Champion', description: 'Push more commits than your teammate in a season', target: null },
+
+  { id: 'delegator', category: 'team', title: 'Delegator', description: 'Assign 25 tasks you created to your teammate', target: 25 },
+  { id: 'dynamic-duo', category: 'team', title: 'Dynamic Duo', description: 'Complete a task assigned to both of you (you both earn it)', target: null },
+  { id: 'same-wavelength', category: 'team', title: 'Same Wavelength', description: 'Both be active on the same day, 30 days in a row (you both earn it)', target: 30 },
+  { id: 'tag-team', category: 'team', title: 'Tag Team', description: 'Both push to the same repo on the same day (you both earn it)', target: null },
+
+  { id: 'commits-100', category: 'code', title: 'Centurion Coder', description: 'Push 100 commits', target: 100 },
+  { id: 'commits-500', category: 'code', title: 'Keyboard Warrior', description: 'Push 500 commits', target: 500 },
+  { id: 'commits-1000', category: 'code', title: 'Commit Legend', description: 'Push 1,000 commits', target: 1000 },
+  { id: 'commits-2500', category: 'code', title: 'Code Titan', description: 'Push 2,500 commits', target: 2500 },
+  { id: 'commits-5000', category: 'code', title: 'Git Immortal', description: 'Push 5,000 commits', target: 5000 },
+  { id: 'commit-machine', category: 'code', title: 'Commit Machine', description: 'Push 100 commits within 7 days', target: 100 },
+  { id: 'polyglot', category: 'code', title: 'Polyglot', description: 'Push to 4 different repos within 7 days', target: 4 },
+  { id: 'branch-explorer', category: 'code', title: 'Branch Explorer', description: 'Push to 5 different branches', target: 5 },
+  { id: 'shipper', category: 'code', title: 'Shipper', description: 'Merge 10 pull requests', target: 10 },
+  { id: 'release-train', category: 'code', title: 'Release Train', description: 'Merge 50 pull requests', target: 50 },
+
   { id: 'redemption-arc', category: 'fun', title: 'Redemption Arc', description: 'Climb from under 45 back up to 80', target: null },
-  { id: 'night-owl', category: 'fun', title: 'Night Owl', description: 'Complete a task between midnight and 5am', target: null },
-  { id: 'early-bird', category: 'fun', title: 'Early Bird', description: 'Complete a task between 5am and 7am', target: null },
-  { id: 'weekend-warrior', category: 'fun', title: 'Weekend Warrior', description: 'Complete 5 tasks in one weekend', target: 5 },
-  { id: 'delegator', category: 'fun', title: 'Delegator', description: 'Assign 25 tasks you created to your teammate', target: 25 },
-  { id: 'shipper', category: 'fun', title: 'Shipper', description: 'Merge 10 pull requests', target: 10 },
-];
+  { id: 'night-owl', category: 'fun', title: 'Night Owl', description: 'Complete a task or push a commit between midnight and 5am', target: null },
+  { id: 'early-bird', category: 'fun', title: 'Early Bird', description: 'Complete a task or push a commit between 5am and 7am', target: null },
+  { id: 'weekend-warrior', category: 'fun', title: 'Weekend Warrior', description: 'Complete 5 tasks in one weekend, or push commits on both its Saturday and Sunday', target: 5 },
+  { id: 'back-from-later', category: 'fun', title: 'Back from Later', description: 'Complete 10 tasks that came back from Later', target: 10 },
+
+  { id: 'new-year', category: 'secret', hidden: true, title: 'New Year, New Me', description: 'Complete a task or push a commit on January 1', target: null },
+  { id: 'birthday-boy', category: 'secret', hidden: true, title: 'Birthday Boy', description: 'Complete a task or push a commit on your birthday (set it in Settings)', target: null },
+  { id: 'anniversary', category: 'secret', hidden: true, title: 'Anniversary', description: 'One year of todoer', target: null },
+  { id: 'archaeologist', category: 'secret', hidden: true, title: 'Archaeologist', description: 'Complete a task that was open for 60+ days', target: null },
+  { id: 'inbox-zero', category: 'secret', hidden: true, title: 'Inbox Zero', description: 'End a day with no open tasks after having 10+ open at the end of a day earlier that week', target: null },
+  { id: 'big-push', category: 'secret', hidden: true, title: 'Big Push', description: 'Push 10+ commits at once', target: null },
+].map((entry) => ({ hidden: false, ...entry }));
 
 const DAY = 86400000;
 const labelFor = (score) =>
@@ -183,6 +218,9 @@ function achievementStates(tasks, user, summary, finished, key, now) {
   values.dynasty = wins.length ? 1 : 0; // alternating sample winners
   values.delegator = summary.allTime.assignedToTeammate;
   dates.delegator = new Date(now).toISOString();
+  // Fixed examples cover revealed and teammate-only secrets in the mock.
+  dates["new-year"] = "2026-01-01T12:00:00.000Z";
+  if (user.username === "teammate") dates["birthday-boy"] = "2026-06-15T12:00:00.000Z";
   return Object.fromEntries(ACHIEVEMENTS.map(({ id, target }) => {
     const unlocked = target === null ? !!dates[id] : (values[id] ?? 0) >= target;
     return [id, { unlocked, unlockedAt: unlocked ? dates[id] ?? last : null,
@@ -210,7 +248,16 @@ export function statsFor(tasks, users, me, now = Date.now()) {
   const myBadges = achievementStates(tasks, me, mine, finished, "me", now);
   const theirBadges = other ? achievementStates(tasks, other, theirs, finished, "teammate", now) : null;
   return {
-    achievements: ACHIEVEMENTS.map((entry) => ({ ...entry, me: myBadges[entry.id], teammate: theirBadges?.[entry.id] ?? null })),
+    achievements: ACHIEVEMENTS.map((entry) => {
+      const mine = myBadges[entry.id];
+      const theirs = theirBadges?.[entry.id] ?? null;
+      if (entry.hidden && !mine.unlocked) return {
+        id: `secret-${ACHIEVEMENTS.filter((badge) => badge.hidden).indexOf(entry) + 1}`,
+        category: entry.category, hidden: true, title: null, description: null, target: null,
+        me: { ...mine, progress: null }, teammate: theirs ? { ...theirs, progress: null } : null,
+      };
+      return { ...entry, me: mine, teammate: theirs };
+    }),
     generatedAt: new Date(now).toISOString(),
     timezone: "UTC",
     season: seasonFor(users, me, now),

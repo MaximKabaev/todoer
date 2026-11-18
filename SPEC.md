@@ -135,8 +135,8 @@ Unknown body fields are ignored. Everything is camelCase.
 ### Auth
 - `POST /api/auth/login` `{ username, password }` → `{ user }` + sets cookie. `username` accepts the username or the user's email, case-insensitively.
 - `POST /api/auth/logout` → `{ ok: true }`
-- `GET /api/me` → `{ user, teammate }` (current `user` also includes `activeProjectId: uuid | null`, `email: string | null`, `emailNotifications: boolean`, `githubLogin: string | null`; the teammate's email and GitHub login are never returned anywhere)
-- `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null, email?: string | null, emailNotifications?: boolean, githubLogin?: string | null }` → `{ user }` (password change requires currentPassword; email is trimmed, `""`/`null` clears it, invalid → 400, used by the other user → 409; `githubLogin` accepts `name`, `@name` or a github.com profile URL, `""`/`null` unlinks, invalid → 400, linked to the other user → 409)
+- `GET /api/me` → `{ user, teammate }` (current `user` also includes `activeProjectId: uuid | null`, `email: string | null`, `emailNotifications: boolean`, `githubLogin: string | null`, `birthday: "MM-DD" | null`; the teammate's email, GitHub login and birthday are never returned anywhere)
+- `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null, email?: string | null, emailNotifications?: boolean, githubLogin?: string | null, birthday?: string | null }` → `{ user }` (password change requires currentPassword; email is trimmed, `""`/`null` clears it, invalid → 400, used by the other user → 409; `githubLogin` accepts `name`, `@name` or a github.com profile URL, `""`/`null` unlinks, invalid → 400, linked to the other user → 409; `birthday` is `MM-DD` (a real calendar day, Feb 29 allowed), `""`/`null` clears it, otherwise 400)
 - `GET /api/users` → `{ users: User[] }` (both users)
 - `GET /api/tokens` → `{ tokens: [{ id, name, createdAt, lastUsedAt }] }` (mine only)
 - `POST /api/tokens` `{ name? }` → `{ token: { id, name, createdAt }, secret: "tdr_..." }` (secret shown once)
@@ -376,41 +376,60 @@ editing a due date is always reflected.
 
 ## Achievements
 
-Stats renders the full Pixel treasures catalog from `/achievements/<id>.png`: transparent
-256 × 256 pixel medallions, displayed with nearest-neighbor scaling. Locked art is grayscale
-at 45% opacity; titles, descriptions, progress and earned dates remain visible.
-
-22 badges per person, shown on Stats. They are derived from the same data as the score and Stats
-(assigned Now tasks, AFK days, GitHub events, frozen seasons; "completed" excludes empty tasks), then
-**stored the first time they are earned** (`achievements`: user, id, `unlocked_at` = the derived moment
-it was earned), so reopening a task, editing a date or a season reset never takes one away.
+49 badges per person, shown on Stats. They are derived from the same data as the score and Stats
+(assigned Now tasks, AFK days, GitHub events, frozen seasons; "completed" excludes empty tasks;
+"active" = the AFK definition: a completion, a push with commits, or a merged PR), then **stored the
+first time they are earned** (`achievements`: user, id, `unlocked_at` = the derived moment it was
+earned), so reopening a task, editing a date or a season reset never takes one away. GitHub activity
+counts wherever a task equivalent exists (it is merged into that badge rather than duplicated).
 
 | id | Title | Earned when |
 |---|---|---|
-| `score-80` / `score-90` / `score-95` / `score-100` | Good Boy / Very Good Boy / Elite Boy / Perfect Boy | the score reaches 80 / 90 / 95 / 100 (checked after every completion and AFK penalty, at the end of every day, and now) |
-| `streak-7` / `streak-30` | On a Roll / Unstoppable | 7 / 30 active days in a row (the AFK definition of active); earned at the first activity of the last day |
-| `first-bone` / `century` / `thousand-club` | First Bone / Century / Thousand Club | the 1st / 100th / 1,000th completed task |
-| `zoomies` | Zoomies | 10 tasks completed in one day |
-| `clockwork` | Clockwork | 20 completions in a row, all on time (by the deadline) |
-| `clean-slate` | Clean Slate | 7 finished days in a row, each with a scored task open at some point that day and none overdue (none still open past its deadline at the end of the day, none completed late during it); earned at the end of the 7th day |
-| `season-champion` / `dynasty` | Season Champion / Dynasty | win a season / 3 consecutive seasons |
+| `score-80` / `-90` / `-95` / `-100` | Good Boy / Very Good Boy / Elite Boy / Perfect Boy | the score reaches 80 / 90 / 95 / 100 (checked after every completion and AFK penalty, at the end of every day, and now) |
+| `streak-7` / `-30` / `-100` | On a Roll / Unstoppable / Iron Will | 7 / 30 / 100 active days in a row; earned at the first activity of the last day |
+| `first-bone` | First Bone | the first completed task or pushed commit |
+| `century` / `half-grand` / `thousand-club` | Century / Half a Grand / Thousand Club | the 100th / 500th / 1,000th completed task |
+| `zoomies` / `overdrive` | Zoomies / Overdrive | 10 / 20 tasks completed, or 25 / 50 commits pushed, in one day |
+| `speedrun` | Speedrun | 25 tasks completed between 10 minutes and an hour after being created |
+| `clockwork` / `swiss-watch` | Clockwork / Swiss Watch | 20 / 100 completions in a row, all on time (by the deadline) |
+| `clean-slate` / `spotless-month` | Clean Slate / Spotless Month | 7 / 30 finished days in a row, each with a scored task open at some point that day and none overdue (none still open past its deadline at the end of the day, none completed late during it); earned at the end of the last day |
+| `season-champion` / `dynasty` / `seasons-6` | Season Champion / Dynasty / Hat Trick of Hat Tricks | win a season / 3 consecutive seasons / 6 seasons |
 | `comeback-kid` | Comeback Kid | win a season after ending one of its days 15+ points behind |
 | `top-dog` | Top Dog | win a season while ahead at the end of every one of its days |
-| `redemption-arc` | Redemption Arc | reach 80 after having been under 45 |
-| `night-owl` / `early-bird` | Night Owl / Early Bird | complete a task between 00:00–04:59 / 05:00–06:59 |
-| `weekend-warrior` | Weekend Warrior | 5 tasks completed on one Saturday + Sunday |
+| `commit-champion` | Commit Champion | push more commits than the teammate during a finished season (at least one) |
 | `delegator` | Delegator | 25 tasks you created assigned only to your teammate (the Stats `assignedToTeammate` count) |
-| `shipper` | Shipper | 10 merged pull requests |
+| `dynamic-duo` | Dynamic Duo | a task assigned to both people is completed (both earn it) |
+| `same-wavelength` | Same Wavelength | both people active on the same day, 30 days in a row (both earn it) |
+| `tag-team` | Tag Team | both people push to the same repo on the same day (both earn it) |
+| `commits-100` / `-500` / `-1000` / `-2500` / `-5000` | Centurion Coder / Keyboard Warrior / Commit Legend / Code Titan / Git Immortal | 100 / 500 / 1,000 / 2,500 / 5,000 commits pushed |
+| `commit-machine` | Commit Machine | 100 commits pushed within 7 days (rolling) |
+| `polyglot` | Polyglot | pushes to 4 different repos within 7 days (rolling) |
+| `branch-explorer` | Branch Explorer | pushes to 5 different branches (repo + branch) |
+| `shipper` / `release-train` | Shipper / Release Train | 10 / 50 merged pull requests |
+| `redemption-arc` | Redemption Arc | reach 80 after having been under 45 |
+| `night-owl` / `early-bird` | Night Owl / Early Bird | complete a task or push a commit between 00:00–04:59 / 05:00–06:59 |
+| `weekend-warrior` | Weekend Warrior | 5 tasks completed on one Saturday + Sunday, or commits pushed on both days of one weekend |
+| `back-from-later` | Back from Later | 10 completed tasks that had come back from Later (`tasks.left_later_at`, set when a task leaves Later) |
 
-Days and hours use `SCORE_TIMEZONE`.
+Days and hours use `SCORE_TIMEZONE`; GitHub times are delivery times.
+
+**Hidden achievements**: some achievements (category `secret`) are hidden. Their rules live only in
+`apps/api/src/lib/achievements.js` (`hidden: true`) and are deliberately not listed here. Until a
+person earns one, the API sends them a placeholder (`id: "secret-N"`, `title`/`description`/`target`/
+`progress` null) that only says whether and when their teammate earned it; the web app shows a
+mystery badge. Unlock emails describe a hidden achievement only to people who have it; others read
+"A secret achievement" with the mystery badge. Some of them use an optional private birthday
+(`users.birthday`, `MM-DD`, `PATCH /api/me {birthday}`, set in Settings, never shown to the teammate).
 
 - `GET /api/stats` → `achievements: [{ id, category ("score" | "streak" | "volume" | "punctuality" |
-  "competition" | "fun"), title, description, target (number | null), me: State, teammate: State | null }]`
-  in catalog order, `State = { unlocked, unlockedAt (ISO | null), progress: { current, target } | null }`.
-  `progress` is null for yes/no achievements; `current` is capped at `target` (for score badges it is the
-  best score so far). Building the response also records anything newly earned.
+  "competition" | "team" | "code" | "fun" | "secret"), hidden, title, description, target (number | null),
+  me: State, teammate: State | null }]` in catalog order, `State = { unlocked, unlockedAt (ISO | null),
+  progress: { current, target } | null }`. `progress` is null for yes/no achievements; `current` is capped
+  at `target` (for score badges it is the best score so far). Building the response also records anything
+  newly earned.
 - The AFK worker (every minute) records new unlocks right after deciding seasons, then emails **both
-  people** one "Achievement unlocked" message per batch (who earned what, each badge's pixel art as an inline image attachment from `apps/web/public/achievements/<id>.png`, link to Stats), if they have an
+  people** one "Achievement unlocked" message per batch (who earned what, each badge's pixel art as an
+  inline image attachment from `apps/web/public/achievements/<id>.png`, link to Stats), if they have an
   email and notifications on. Unlocks that were already more than 3 days old when first recorded (the
   initial backfill) are stored as announced and never emailed. A failed send retries on the next tick.
 

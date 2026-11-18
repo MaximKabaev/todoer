@@ -1,0 +1,28 @@
+.birthday {
+  border: 0;
+  padding: 0;
+  margin: 18px 0 0;
+  min-width: 0;
+}
+.birthday legend {
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--secondary);
+  margin-bottom: 9px;
+}
+.birthdayFields {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+.birthdayFields label {
+  flex: 1;
+  min-width: 0;
+}
+.birthdayFields select {
+  width: 100%;
+  font-size: 13px;
+}
+.birthday > button {
+  margin-top: 12px;
+}

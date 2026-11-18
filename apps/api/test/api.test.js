@@ -134,7 +134,7 @@ test('login is case-insensitive, cookie sessions expire and logout revokes them'
   assert.equal(session.forever, true);
   assert.notEqual(session.id, cookie.split(';')[0].split('=')[1]);
   const me = await browser.get('/api/me').expect(200);
-  assert.deepEqual(me.body, { user: { ...first, activeProjectId: null, email: null, emailNotifications: true, githubLogin: null }, teammate: second });
+  assert.deepEqual(me.body, { user: { ...first, activeProjectId: null, email: null, emailNotifications: true, githubLogin: null, birthday: null }, teammate: second });
   // Each app load renews the cookie so a browser session never lapses.
   const renewed = me.headers['set-cookie']?.[0] ?? '';
   assert.equal(renewed.split(';')[0], cookie.split(';')[0]);
@@ -195,7 +195,7 @@ test('remote clients cannot bypass the login rate limit by changing X-Forwarded-
 
 test('bearer tokens act as their owner, are hashed, and update last_used_at', async () => {
   const me = await api('get', '/api/me', secondToken).expect(200);
-  assert.deepEqual(me.body, { user: { ...second, activeProjectId: null, email: null, emailNotifications: true, githubLogin: null }, teammate: first });
+  assert.deepEqual(me.body, { user: { ...second, activeProjectId: null, email: null, emailNotifications: true, githubLogin: null, birthday: null }, teammate: first });
   const token = (await pool.query('SELECT token_hash, last_used_at FROM api_tokens WHERE user_id = $1', [second.id])).rows[0];
   assert.equal(token.token_hash, hash(secondToken));
   assert.ok(token.last_used_at);
@@ -1386,7 +1386,7 @@ test('achievements: stored when earned, shown on Stats, emailed once (backfill s
     assert.equal((await pool.query("SELECT emailed FROM achievements WHERE id = 'first-bone'")).rows[0].emailed, true);
 
     const { body } = await api('get', '/api/stats').expect(200);
-    assert.equal(body.achievements.length, 22);
+    assert.equal(body.achievements.length, 49);
     const bone = body.achievements.find((entry) => entry.id === 'first-bone');
     assert.equal(bone.title, 'First Bone');
     assert.equal(bone.me.unlocked, true);
@@ -1417,7 +1417,7 @@ test('achievements: stored when earned, shown on Stats, emailed once (backfill s
     const [mine, theirs] = ['maxim.ach@example.com', 'partner.ach@example.com'].map((to) => outbox.find((mail) => mail.to === to));
     assert.equal(mine.subject, 'Teammate Test unlocked “First Bone”');
     assert.equal(theirs.subject, 'You unlocked “First Bone”!');
-    assert.match(theirs.text, /You: First Bone \(Complete your first task\)/);
+    assert.match(theirs.text, /You: First Bone \(Complete your first task or push your first commit\)/);
     assert.match(theirs.text, /https:\/\/todo\.example\.com\/stats/);
     assert.notEqual(mine.idempotencyKey, theirs.idempotencyKey);
     // The badge art rides along as an inline image.
@@ -1430,4 +1430,105 @@ test('achievements: stored when earned, shown on Stats, emailed once (backfill s
     await pool.query('UPDATE users SET email = NULL');
     await pool.query('DELETE FROM achievements'); await pool.query('DELETE FROM tasks');
   }
+});
+
+test('achievements: GitHub activity merges into the task badges and powers the code, team and secret ones', async () => {
+  const { deriveFor } = await import('../src/lib/achievements.js');
+  await withEnv({ SCORE_TIMEZONE: 'UTC' }, async () => {
+    const P = { id: 'p', birthday: '06-03', createdAt: new Date('2025-06-01T00:00:00Z') }, O = { id: 'o' };
+    const at = (iso) => new Date(iso);
+    const push = (iso, commits, repo = 'me/a', ref = 'main') => ({ kind: 'push', commits, repo, ref, at: at(iso) });
+    // Saturday June 6 and Sunday June 7, 2026; June 3 is the birthday; 02:00 is night-owl time.
+    const github = [
+      push('2026-06-01T02:00:00Z', 12, 'me/a'), push('2026-06-01T12:00:00Z', 20, 'me/b', 'feature'),
+      push('2026-06-03T12:00:00Z', 30, 'me/c'), push('2026-06-04T12:00:00Z', 40, 'me/d', 'x'),
+      push('2026-06-06T12:00:00Z', 1, 'me/a', 'y'), push('2026-06-07T12:00:00Z', 1, 'me/a'),
+    ];
+    const otherGithub = [push('2026-06-03T18:00:00Z', 1, 'me/c')];
+    // A task assigned to both, done by... either: both earn Dynamic Duo. One sat open 70 days.
+    const task = (id, userId, extra) => ({ id, userId, priority: 0, empty: false, done: true, createdAt: at('2026-05-01T10:00:00Z'),
+      doneAt: at('2026-06-02T10:00:00Z'), deadline: at('2026-06-30T00:00:00Z'), ...extra });
+    const rows = [task('shared', 'p'), task('shared', 'o'), task('old', 'p', { createdAt: at('2026-03-01T10:00:00Z'), doneAt: at('2026-06-05T10:00:00Z') })];
+    const now = at('2026-06-08T12:00:00Z');
+    const got = deriveFor({ person: P, other: O, rows, github, otherGithub, now });
+    assert.deepEqual(got['first-bone'].unlockedAt, at('2026-06-01T02:00:00Z')); // a push beats the first completion
+    assert.deepEqual(got['night-owl'].unlockedAt, at('2026-06-01T02:00:00Z'));
+    assert.deepEqual(got.zoomies.unlockedAt, at('2026-06-01T12:00:00Z')); // 32 commits that day
+    assert.deepEqual(got.overdrive.unlockedAt, null);
+    assert.deepEqual(got.overdrive.progress, { current: 16, target: 20 }); // 40 commits ≈ 16 of 20
+    assert.deepEqual(got['commits-100'].unlockedAt, at('2026-06-04T12:00:00Z'));
+    assert.deepEqual(got['commits-500'].progress, { current: 104, target: 500 });
+    assert.deepEqual(got['commit-machine'].unlockedAt, at('2026-06-04T12:00:00Z'));
+    assert.deepEqual(got.polyglot.unlockedAt, at('2026-06-04T12:00:00Z'));
+    assert.deepEqual(got['branch-explorer'].unlockedAt, at('2026-06-06T12:00:00Z')); // a/main, b/feature, c/main, d/x, a/y
+    assert.deepEqual(got['weekend-warrior'].unlockedAt, at('2026-06-07T12:00:00Z'));
+    assert.deepEqual(got['tag-team'].unlockedAt, at('2026-06-03T18:00:00Z'));
+    assert.deepEqual(got['dynamic-duo'].unlockedAt, at('2026-06-02T10:00:00Z'));
+    assert.deepEqual(deriveFor({ person: O, other: P, rows, github: otherGithub, otherGithub: github, now })['dynamic-duo'].unlockedAt, at('2026-06-02T10:00:00Z'));
+    assert.deepEqual(got['big-push'].unlockedAt, at('2026-06-01T02:00:00Z'));
+    assert.deepEqual(got['birthday-boy'].unlockedAt, at('2026-06-03T12:00:00Z'));
+    assert.deepEqual(got.anniversary.unlockedAt, at('2026-06-01T00:00:00Z'));
+    assert.deepEqual(got.archaeologist.unlockedAt, at('2026-06-05T10:00:00Z'));
+    assert.equal(got['new-year'].unlockedAt, null);
+    // Pushes on June 1, 3, 4, 6, 7 and completions on June 2 and 5: seven active days in a row.
+    assert.deepEqual(got['streak-7'].unlockedAt, at('2026-06-07T12:00:00Z'));
+    // Commit champion: more commits than the teammate in a finished season.
+    const seasons = [{ id: 's1', number: 1, winnerId: 'o', startsAt: at('2026-06-01T00:00:00Z'), endsAt: at('2026-06-08T00:00:00Z') }];
+    assert.deepEqual(deriveFor({ person: P, other: O, rows, github, otherGithub, seasons, now })['commit-champion'].unlockedAt, seasons[0].endsAt);
+    assert.equal(deriveFor({ person: O, other: P, rows, github: otherGithub, otherGithub: github, seasons, now })['commit-champion'].unlockedAt, null);
+  });
+});
+
+test('achievements: hidden ones stay secret from anyone who has not earned them, on Stats and in emails', async () => {
+  const { syncAchievements, sendAchievementEmails } = await import('../src/lib/achievements.js');
+  await pool.query('DELETE FROM tasks'); await pool.query('DELETE FROM achievements');
+  try {
+    // German finishes a task that sat open for 70 days: a hidden achievement.
+    const relic = await create({ title: 'QA ach relic', assignees: ['me'] }, secondToken);
+    await pool.query(`UPDATE tasks SET created_at = now() - interval '70 days', due_date = NULL WHERE id = $1`, [relic.id]);
+    await api('patch', `/api/tasks/${relic.id}`, secondToken).send({ done: true }).expect(200);
+    await syncAchievements(pool);
+
+    const mine = (await api('get', '/api/stats').expect(200)).body.achievements;
+    const secrets = mine.filter((entry) => entry.hidden);
+    assert.ok(secrets.length >= 3);
+    for (const entry of secrets) {
+      assert.match(entry.id, /^secret-\d+$/);
+      assert.equal(entry.title, null); assert.equal(entry.description, null); assert.equal(entry.me.progress, null);
+    }
+    assert.ok(!JSON.stringify(mine).includes('archaeologist'));
+    assert.equal(secrets.filter((entry) => entry.teammate.unlocked).length, 1); // Maxim sees that German has *a* secret
+
+    const his = (await api('get', '/api/stats', secondToken).expect(200)).body.achievements;
+    const revealed = his.find((entry) => entry.id === 'archaeologist');
+    assert.equal(revealed.hidden, true);
+    assert.equal(revealed.title, 'Archaeologist');
+    assert.equal(revealed.me.unlocked, true);
+    assert.equal(his.filter((entry) => entry.title === null).length, secrets.length - 1);
+
+    const outbox = [];
+    await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>', PUBLIC_WEB_URL: 'https://todo.example.com' }, async () => {
+      await api('patch', '/api/me').send({ email: 'maxim.secret@example.com' }).expect(200);
+      await api('patch', '/api/me', secondToken).send({ email: 'partner.secret@example.com' }).expect(200);
+      await pool.query('UPDATE achievements SET emailed = false');
+      assert.equal(await sendAchievementEmails({ send: async (mail) => { outbox.push(mail); } }), 2);
+    });
+    const toMaxim = outbox.find((mail) => mail.to === 'maxim.secret@example.com');
+    const toGerman = outbox.find((mail) => mail.to === 'partner.secret@example.com');
+    assert.match(toMaxim.text, /Teammate Test: A secret achievement/);
+    assert.ok(!/archaeolog/i.test(toMaxim.text + toMaxim.html + toMaxim.subject + JSON.stringify(toMaxim.attachments.map((file) => file.filename))));
+    assert.match(toGerman.text, /You: Archaeologist/);
+  } finally {
+    await pool.query('UPDATE users SET email = NULL');
+    await pool.query('DELETE FROM achievements'); await pool.query('DELETE FROM tasks');
+  }
+});
+
+test('birthday is private, validated, and clearable', async () => {
+  assert.equal((await api('patch', '/api/me').send({ birthday: '02-29' }).expect(200)).body.user.birthday, '02-29');
+  await api('patch', '/api/me').send({ birthday: '02-30' }).expect(400);
+  await api('patch', '/api/me').send({ birthday: '2026-02-01' }).expect(400);
+  assert.equal((await api('get', '/api/me').expect(200)).body.user.birthday, '02-29');
+  assert.equal((await api('get', '/api/me', secondToken).expect(200)).body.teammate.birthday, undefined);
+  assert.equal((await api('patch', '/api/me').send({ birthday: '' }).expect(200)).body.user.birthday, null);
 });

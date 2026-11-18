@@ -58,7 +58,14 @@ authRouter.patch('/me', async (req, res) => {
     // "" or null unlinks GitHub. A leading @ or a profile URL is tolerated.
     githubLogin: z.string().trim().max(200).nullable().optional()
       .transform((value) => (value ? value.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/^@/, '').replace(/\/+$/, '') || null : value === undefined ? undefined : null)),
+    // "MM-DD", or "" / null to clear. Private to its owner.
+    birthday: z.string().trim().nullable().optional().transform((value) => (value === '' ? null : value))
+      .refine((value) => value == null || /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value), 'Birthday must be MM-DD'),
   }).parse(req.body);
+  if (body.birthday) {
+    const [month, day] = body.birthday.split('-').map(Number);
+    if (day > new Date(Date.UTC(2024, month, 0)).getUTCDate()) throw new HttpError(400, 'That day does not exist in that month');
+  }
   if (body.githubLogin) {
     if (!githubLoginPattern.test(body.githubLogin)) throw new HttpError(400, 'Enter a valid GitHub username');
     const { rowCount } = await pool.query('SELECT 1 FROM users WHERE lower(github_login) = lower($1) AND id <> $2', [body.githubLogin, req.user.id]);
@@ -80,11 +87,12 @@ authRouter.patch('/me', async (req, res) => {
     const { rows } = await db.query(`UPDATE users SET display_name = COALESCE($2, display_name), password_hash = COALESCE($3, password_hash),
       active_project_id = CASE WHEN $4 THEN $5::uuid ELSE active_project_id END,
       email = CASE WHEN $6 THEN $7 ELSE email END, email_notifications = COALESCE($8, email_notifications),
-      github_login = CASE WHEN $9 THEN $10 ELSE github_login END
+      github_login = CASE WHEN $9 THEN $10 ELSE github_login END,
+      birthday = CASE WHEN $11 THEN $12 ELSE birthday END
       WHERE id = $1 RETURNING ${meColumns}`,
     [req.user.id, body.displayName, hash, body.activeProjectId !== undefined, body.activeProjectId ?? null,
       body.email !== undefined, body.email ?? null, body.emailNotifications ?? null,
-      body.githubLogin !== undefined, body.githubLogin ?? null]);
+      body.githubLogin !== undefined, body.githubLogin ?? null, body.birthday !== undefined, body.birthday ?? null]);
     return rows[0];
   });
   res.json({ user });
