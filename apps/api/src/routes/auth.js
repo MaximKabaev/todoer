@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { pool, transaction } from '../db.js';
+import { emailTypes } from '../lib/email-preferences.js';
 import { authenticate, cookieName, cookieOptions, dummyPassword, meColumns, newToken, publicUser, sessionHash, cookieLifetime, tokenHash, userColumns } from '../auth.js';
 import { HttpError } from '../lib/errors.js';
 import { githubLoginPattern } from '../lib/github.js';
@@ -55,6 +56,8 @@ authRouter.patch('/me', async (req, res) => {
     // "" or null clears the email.
     email: z.string().trim().max(320).nullable().optional().transform((value) => (value === '' ? null : value)),
     emailNotifications: z.boolean().optional(),
+    // Partial per-type preferences, merged into the stored ones.
+    emailPreferences: z.strictObject(Object.fromEntries(emailTypes.map((type) => [type, z.boolean().optional()]))).optional(),
     // "" or null unlinks GitHub. A leading @ or a profile URL is tolerated.
     githubLogin: z.string().trim().max(200).nullable().optional()
       .transform((value) => (value ? value.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/^@/, '').replace(/\/+$/, '') || null : value === undefined ? undefined : null)),
@@ -88,11 +91,13 @@ authRouter.patch('/me', async (req, res) => {
       active_project_id = CASE WHEN $4 THEN $5::uuid ELSE active_project_id END,
       email = CASE WHEN $6 THEN $7 ELSE email END, email_notifications = COALESCE($8, email_notifications),
       github_login = CASE WHEN $9 THEN $10 ELSE github_login END,
-      birthday = CASE WHEN $11 THEN $12 ELSE birthday END
+      birthday = CASE WHEN $11 THEN $12 ELSE birthday END,
+      email_preferences = email_preferences || $13::jsonb
       WHERE id = $1 RETURNING ${meColumns}`,
     [req.user.id, body.displayName, hash, body.activeProjectId !== undefined, body.activeProjectId ?? null,
       body.email !== undefined, body.email ?? null, body.emailNotifications ?? null,
-      body.githubLogin !== undefined, body.githubLogin ?? null, body.birthday !== undefined, body.birthday ?? null]);
+      body.githubLogin !== undefined, body.githubLogin ?? null, body.birthday !== undefined, body.birthday ?? null,
+      JSON.stringify(Object.fromEntries(Object.entries(body.emailPreferences ?? {}).filter(([, value]) => value !== undefined)))]);
     return rows[0];
   });
   res.json({ user });

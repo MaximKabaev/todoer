@@ -1,6 +1,7 @@
 import { pool } from '../db.js';
 import { dateFromToday, labelFor, SCORE, scoreSnapshot, scoreTimezone } from './score.js';
 import { notificationsConfigured, sendEmail } from './notifications.js';
+import { wantsEmail } from './email-preferences.js';
 import { finalizeSeasons, sendSeasonEmails } from './seasons.js';
 import { sendAchievementEmails, syncAchievements } from './achievements.js';
 
@@ -108,7 +109,7 @@ export async function sendAfkEmails({ send = sendEmail, now = new Date(), db = p
   const { rows: pending } = await db.query(`SELECT user_id AS "userId", to_char(day, 'YYYY-MM-DD') AS day, points FROM afk_days
     WHERE points > 0 AND NOT emailed AND day >= $1::date ORDER BY day, user_id`, [addDays(dateFromToday(0, now), -3)]);
   if (!pending.length) return 0;
-  const { rows: people } = await db.query('SELECT id, display_name, email, email_notifications FROM users ORDER BY created_at, id');
+  const { rows: people } = await db.query('SELECT id, display_name, email, email_notifications, email_preferences FROM users ORDER BY created_at, id');
   const scores = await scoreSnapshot(db, now);
   let sent = 0;
   for (const penalty of pending) {
@@ -119,7 +120,7 @@ export async function sendAfkEmails({ send = sendEmail, now = new Date(), db = p
     const streakDays = await streak(db, penalty.userId, penalty.day);
     let ok = true;
     for (const recipient of people) {
-      if (!recipient.email || !recipient.email_notifications) continue;
+      if (!wantsEmail(recipient, 'afk')) continue;
       try {
         await send({ to: recipient.email, idempotencyKey: `todoer-afk-${penalty.userId}-${penalty.day}-${recipient.id}`,
           ...composeAfkEmail({ penalized, recipient, day: penalty.day, points: penalty.points, open, streakDays, scores, people }) });

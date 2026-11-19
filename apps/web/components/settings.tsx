@@ -14,16 +14,52 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { api, type AgentToken, type CurrentUser, type User } from "@/lib/api";
+import { api, type AgentToken, type CurrentUser, type EmailPreferences } from "@/lib/api";
 import { Avatar, Confirm, Modal } from "./ui";
 import { useToast } from "./providers";
+
+const emailPreferenceOptions: {
+  key: keyof EmailPreferences;
+  label: string;
+  description: string;
+}[] = [
+  {
+    key: "assigned",
+    label: "Assigned to you",
+    description: "Your teammate assigns you a task, a task returns from Later for review, or you take one from Later.",
+  },
+  {
+    key: "completed",
+    label: "Completed tasks",
+    description: "Your teammate completes or reopens a task involving you. Includes good boy score.",
+  },
+  {
+    key: "updates",
+    label: "Other task changes",
+    description: "New tasks, edits, due dates, priorities, tags, images, moves, unassignments, and deletions.",
+  },
+  {
+    key: "achievements",
+    label: "Achievements",
+    description: "Either of you unlocks a badge.",
+  },
+  {
+    key: "afk",
+    label: "AFK penalties",
+    description: "Daily inactivity penalties.",
+  },
+  {
+    key: "seasons",
+    label: "Season results",
+    description: "The monthly season winner and scores.",
+  },
+];
+
 export function Settings({
   user,
-  teammate,
   onClose,
 }: {
   user: CurrentUser;
-  teammate: User;
   onClose: () => void;
 }) {
   const { data, mutate: refresh } = useSWR<{ tokens: AgentToken[] }>(
@@ -60,6 +96,8 @@ export function Settings({
   const [notifications, setNotifications] = useState(
     user.emailNotifications ?? false,
   );
+  const [emailPreferences, setEmailPreferences] = useState(user.emailPreferences);
+  const emailPreferencesDisabled = !savedEmail || !notifications;
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -109,13 +147,17 @@ export function Settings({
       setBusy(false);
     }
   }
-  async function saveEmail(input: {
-    email?: string;
-    emailNotifications?: boolean;
-  }) {
+  async function saveEmail(input: Pick<
+    Parameters<typeof api.updateMe>[0],
+    "email" | "emailNotifications" | "emailPreferences"
+  >) {
+    if (emailBusy) return;
     const previousNotifications = notifications;
+    const previousPreferences = emailPreferences;
     if (input.emailNotifications !== undefined)
       setNotifications(input.emailNotifications);
+    if (input.emailPreferences)
+      setEmailPreferences({ ...emailPreferences, ...input.emailPreferences });
     setEmailBusy(true);
     setEmailError("");
     try {
@@ -123,11 +165,13 @@ export function Settings({
       setSavedEmail(updated.email || "");
       if (input.email !== undefined) setEmail(updated.email || "");
       setNotifications(updated.emailNotifications ?? false);
+      setEmailPreferences(updated.emailPreferences);
       await mutate("/api/me");
       toast({ message: "Your email preferences are up to date." });
     } catch (err) {
       if (input.emailNotifications !== undefined)
         setNotifications(previousNotifications);
+      if (input.emailPreferences) setEmailPreferences(previousPreferences);
       setEmailError(
         err instanceof Error ? err.message : "Could not update email preferences.",
       );
@@ -266,7 +310,7 @@ export function Settings({
         <label
           className={`email-notifications ${!savedEmail ? "is-disabled" : ""}`}
         >
-          <span>Email me when {teammate.displayName} changes my tasks</span>
+          <span>Email notifications</span>
           <input
             type="checkbox"
             role="switch"
@@ -283,6 +327,32 @@ export function Settings({
             Save an email address to receive notifications.
           </p>
         )}
+        <div className="email-preferences" role="group" aria-label="Email alert types">
+          {emailPreferenceOptions.map(({ key, label, description }) => (
+            <label
+              className={`email-notifications ${emailPreferencesDisabled ? "is-disabled" : ""}`}
+              key={key}
+            >
+              <span>
+                <span id={`email-preference-${key}`}>{label}</span>
+                <span className="email-preference-description" id={`email-preference-${key}-help`}>
+                  {description}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={emailPreferences[key]}
+                disabled={emailPreferencesDisabled || emailBusy}
+                aria-labelledby={`email-preference-${key}`}
+                aria-describedby={`email-preference-${key}-help`}
+                onChange={(e) =>
+                  void saveEmail({ emailPreferences: { [key]: e.target.checked } })
+                }
+              />
+            </label>
+          ))}
+        </div>
         {emailError && (
           <p className="form-error" role="alert">{emailError}</p>
         )}

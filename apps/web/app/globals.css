@@ -3691,6 +3691,18 @@ kbd {
 .email-notifications input:checked::before {
   transform: translateX(16px);
 }
+.email-preferences .email-notifications {
+  margin-top: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-weight: 600;
+}
+.email-preference-description {
+  display: block;
+  color: var(--secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
 
 /* Clear task hierarchy and explicit planning actions. */
 .list-title-group {

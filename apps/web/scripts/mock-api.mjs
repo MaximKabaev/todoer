@@ -49,6 +49,15 @@ const users = [
 const activeProjects = new Map(users.map((u) => [u.id, null]));
 const emails = new Map(users.map((u) => [u.id, `${u.username}@example.com`]));
 const emailNotifications = new Map(users.map((u) => [u.id, true]));
+const defaultEmailPreferences = {
+  assigned: true,
+  completed: true,
+  updates: true,
+  achievements: true,
+  afk: true,
+  seasons: true,
+};
+const emailPreferences = new Map(users.map((u) => [u.id, { ...defaultEmailPreferences }]));
 const birthdays = new Map(users.map((u) => [u.id, null]));
 const githubLogins = new Map(users.map((u) => [u.id, null]));
 const currentUser = (u) => ({
@@ -58,6 +67,7 @@ const currentUser = (u) => ({
   activeProjectId: activeProjects.get(u.id),
   email: emails.get(u.id),
   emailNotifications: emailNotifications.get(u.id),
+  emailPreferences: emailPreferences.get(u.id),
 });
 const passwords = new Map(users.map((u) => [u.id, "todoer"]));
 const sessions = new Map();
@@ -537,6 +547,15 @@ const server = createServer(async (req, res) => {
           typeof data.emailNotifications !== "boolean"
         )
           return send({ error: "emailNotifications must be a boolean" }, 400);
+        const preferences = data.emailPreferences;
+        if (preferences !== undefined) {
+          if (!preferences || typeof preferences !== "object" || Array.isArray(preferences))
+            return send({ error: "emailPreferences must be an object" }, 400);
+          for (const [key, value] of Object.entries(preferences)) {
+            if (!Object.hasOwn(defaultEmailPreferences, key) || typeof value !== "boolean")
+              return send({ error: `Invalid email preference: ${key}` }, 400);
+          }
+        }
         if (data.activeProjectId !== undefined) {
           if (
             data.activeProjectId !== null &&
@@ -550,6 +569,8 @@ const server = createServer(async (req, res) => {
         if (data.email !== undefined) emails.set(me.id, email);
         if (data.emailNotifications !== undefined)
           emailNotifications.set(me.id, data.emailNotifications);
+        if (preferences !== undefined)
+          emailPreferences.set(me.id, { ...emailPreferences.get(me.id), ...preferences });
         if (data.displayName) me.displayName = data.displayName;
         if (data.password) passwords.set(me.id, data.password);
         return send({ user: currentUser(me) });

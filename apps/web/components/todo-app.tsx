@@ -995,7 +995,6 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
       {settings && (
         <Settings
           user={user}
-          teammate={teammate}
           onClose={() => setSettings(false)}
         />
       )}

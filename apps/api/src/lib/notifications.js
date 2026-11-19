@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { pool } from '../db.js';
 import { labelFor, scoreSnapshot } from './score.js';
+import { wantedChanges } from './email-preferences.js';
 
 // Email digests: every task change that involves the teammate (assigned to them now or before,
 // or created by them) is queued in notification_events inside the same transaction, then the
@@ -47,12 +48,15 @@ export function describeChanges(before, after, recipientId, actorId) {
 }
 
 // Keep delivery preferences common to manual and automatic assignments.
+// Only the change lines the recipient's per-type preferences allow are queued (and re-checked at send time).
 async function queueChange(db, recipientId, actorId, task, changes, scores = null) {
   if (!notificationsConfigured() || !changes.length) return;
+  const { rows: [recipient] } = await db.query('SELECT email, email_notifications, email_preferences FROM users WHERE id = $1', [recipientId]);
+  const wanted = wantedChanges(recipient, changes);
+  if (!wanted.length) return;
   await db.query(`INSERT INTO notification_events (recipient_id, actor_id, task_id, task_title, changes, scores)
-    SELECT id, $2, $3, $4, $5, $6 FROM users
-    WHERE id = $1 AND email IS NOT NULL AND email_notifications`,
-  [recipientId, actorId, task.id, task.title, changes, scores && JSON.stringify(scores)]);
+    VALUES ($1, $2, $3, $4, $5, $6)`,
+  [recipientId, actorId, task.id, task.title, wanted, wanted.includes('completed it') && scores ? JSON.stringify(scores) : null]);
 }
 
 export async function recordLaterReview(db, task, recipientId) {
@@ -167,11 +171,16 @@ export async function flushNotifications({ send = sendEmail, quiet = quietMs, ma
     const { rows: events } = await pool.query(`SELECT e.id, e.task_id AS "taskId", e.task_title AS "taskTitle", e.changes, e.scores, COALESCE(a.display_name, 'todoer') AS "actorName"
       FROM notification_events e LEFT JOIN users a ON a.id = e.actor_id WHERE e.recipient_id = $1 ORDER BY e.id`, [recipientId]);
     const ids = events.map((event) => event.id);
-    const { rows: [recipient] } = await pool.query('SELECT email, display_name, email_notifications FROM users WHERE id = $1', [recipientId]);
-    if (recipient?.email && recipient.email_notifications && events.length) {
-      const idempotencyKey = `todoer-${createHash('sha256').update(`${recipientId}:${ids.join(',')}`).digest('hex').slice(0, 32)}`;
+    const { rows: [recipient] } = await pool.query('SELECT email, display_name, email_notifications, email_preferences FROM users WHERE id = $1', [recipientId]);
+    // Preferences may have changed since the events were queued.
+    const wanted = events.map((event) => {
+      const changes = wantedChanges(recipient, event.changes);
+      return { ...event, changes, scores: changes.includes('completed it') ? event.scores : null };
+    }).filter((event) => event.changes.length);
+    if (wanted.length) {
+      const idempotencyKey = `todoer-${createHash('sha256').update(`${recipientId}:${wanted.map((event) => event.id).join(',')}`).digest('hex').slice(0, 32)}`;
       try {
-        await send({ to: recipient.email, ...composeDigest(events, recipient.display_name, recipientId), idempotencyKey });
+        await send({ to: recipient.email, ...composeDigest(wanted, recipient.display_name, recipientId), idempotencyKey });
         sent++;
       } catch (error) {
         console.error(`Notification email to user ${recipientId} failed: ${error.message}`);

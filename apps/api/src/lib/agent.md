@@ -24,8 +24,8 @@ Use JSON and `Content-Type: application/json` unless uploading. Responses use ca
 | GET /api/agent, GET /agent | Public | This markdown document |
 | POST /api/auth/login | `{username,password}`; username or email, case-insensitive | `{user}` + session cookie |
 | POST /api/auth/logout | None | `{ok:true}`; clears session |
-| GET /api/me | None | `{user,teammate}`; `user` includes your `email` and `emailNotifications` |
-| PATCH /api/me | `{displayName?,password?,currentPassword?,email?,emailNotifications?,githubLogin?,birthday?}`; currentPassword required to change password; `email: ""` or `null` clears it; `githubLogin` links the user's GitHub account (`""`/`null` unlinks); `birthday` is private `MM-DD` (`""`/`null` clears) | `{user}` |
+| GET /api/me | None | `{user,teammate}`; `user` includes your `email`, `emailNotifications` (master switch) and `emailPreferences` (`{assigned,completed,updates,achievements,afk,seasons}` booleans) |
+| PATCH /api/me | `{displayName?,password?,currentPassword?,email?,emailNotifications?,emailPreferences?,githubLogin?,birthday?}`; currentPassword required to change password; `email: ""` or `null` clears it; `githubLogin` links the user's GitHub account (`""`/`null` unlinks); `birthday` is private `MM-DD` (`""`/`null` clears); `emailPreferences` is a partial object merged into the stored per-type email preferences | `{user}` |
 | GET /api/users | None | `{users:[User]}` |
 | GET /api/tokens | None | `{tokens:[{id,name,createdAt,lastUsedAt}]}`; yours only |
 | POST /api/tokens | `{name?}` | `201 {token:{id,name,createdAt},secret:"tdr_..."}` |

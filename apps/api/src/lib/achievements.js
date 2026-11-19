@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { pool } from '../db.js';
 import { addDays, dateFromToday, loadScoreRows, localParts, scoreFor, startOfDay } from './score.js';
 import { notificationsConfigured, sendEmail } from './notifications.js';
+import { wantsEmail } from './email-preferences.js';
 
 // Achievements: derived from the same data as the score and Stats (assigned Now tasks, AFK days,
 // GitHub events, frozen seasons), then stored the first time they are earned (with the derived
@@ -518,14 +519,14 @@ export async function sendAchievementEmails({ send = sendEmail, now = new Date()
     WHERE NOT emailed ORDER BY unlocked_at, user_id, id`);
   if (!pending.length) return 0;
   const [{ rows: people }, { rows: all }] = await Promise.all([
-    db.query('SELECT id, display_name, email, email_notifications FROM users ORDER BY created_at, id'),
+    db.query('SELECT id, display_name, email, email_notifications, email_preferences FROM users ORDER BY created_at, id'),
     db.query('SELECT user_id AS "userId", id FROM achievements'),
   ]);
   const key = createHash('sha256').update(pending.map((row) => `${row.userId}:${row.id}`).join(',')).digest('hex').slice(0, 24);
   let sent = 0;
   let ok = true;
   for (const recipient of people) {
-    if (!recipient.email || !recipient.email_notifications) continue;
+    if (!wantsEmail(recipient, 'achievements')) continue;
     const owned = new Set(all.filter((row) => row.userId === recipient.id).map((row) => row.id));
     const names = composeAchievementEmail({ recipient, people, unlocks: pending, owned }).art;
     const attachments = names.map(achievementArt).filter(Boolean);

@@ -135,8 +135,8 @@ Unknown body fields are ignored. Everything is camelCase.
 ### Auth
 - `POST /api/auth/login` `{ username, password }` → `{ user }` + sets cookie. `username` accepts the username or the user's email, case-insensitively.
 - `POST /api/auth/logout` → `{ ok: true }`
-- `GET /api/me` → `{ user, teammate }` (current `user` also includes `activeProjectId: uuid | null`, `email: string | null`, `emailNotifications: boolean`, `githubLogin: string | null`, `birthday: "MM-DD" | null`; the teammate's email, GitHub login and birthday are never returned anywhere)
-- `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null, email?: string | null, emailNotifications?: boolean, githubLogin?: string | null, birthday?: string | null }` → `{ user }` (password change requires currentPassword; email is trimmed, `""`/`null` clears it, invalid → 400, used by the other user → 409; `githubLogin` accepts `name`, `@name` or a github.com profile URL, `""`/`null` unlinks, invalid → 400, linked to the other user → 409; `birthday` is `MM-DD` (a real calendar day, Feb 29 allowed), `""`/`null` clears it, otherwise 400)
+- `GET /api/me` → `{ user, teammate }` (current `user` also includes `activeProjectId: uuid | null`, `email: string | null`, `emailNotifications: boolean`, `emailPreferences: { assigned, completed, updates, achievements, afk, seasons }` (all booleans, default `true`), `githubLogin: string | null`, `birthday: "MM-DD" | null`; the teammate's email, GitHub login and birthday are never returned anywhere)
+- `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null, email?: string | null, emailNotifications?: boolean, emailPreferences?: Partial<{ assigned, completed, updates, achievements, afk, seasons }>, githubLogin?: string | null, birthday?: string | null }` → `{ user }` (`emailPreferences` is merged into the stored preferences, unknown keys or non-booleans → 400; password change requires currentPassword; email is trimmed, `""`/`null` clears it, invalid → 400, used by the other user → 409; `githubLogin` accepts `name`, `@name` or a github.com profile URL, `""`/`null` unlinks, invalid → 400, linked to the other user → 409; `birthday` is `MM-DD` (a real calendar day, Feb 29 allowed), `""`/`null` clears it, otherwise 400)
 - `GET /api/users` → `{ users: User[] }` (both users)
 - `GET /api/tokens` → `{ tokens: [{ id, name, createdAt, lastUsedAt }] }` (mine only)
 - `POST /api/tokens` `{ name? }` → `{ token: { id, name, createdAt }, secret: "tdr_..." }` (secret shown once)
@@ -291,12 +291,15 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
   move to Later/Now, tags editor (type to create), image gallery with a full-screen lightbox, delete. The lightbox scales images to fill the available viewport while preserving their aspect ratio, with pinch/wheel zoom, drag to pan, and visible close/navigation controls.
 - Completing a task animates and it leaves the list after a short delay (with undo toast).
 - Data freshness: revalidate on window focus and poll every ~10 s so the two users see each other's changes.
-- Settings: change display name/password, email and email notifications, manage agent tokens (create, copy once, revoke),
+- Settings: change display name/password, email and email notifications (master switch plus per-type toggles), manage agent tokens (create, copy once, revoke),
   link to `/agent` instructions, logout.
 
 ## Email notifications
 
 - Each user may set an email (Settings or `PATCH /api/me`). It doubles as a login identifier.
+- Settings shows a master email switch and six per-type switches. The per-type switches save
+  immediately and are disabled until an email is saved and the master switch is on. Turning off
+  the master switch preserves the per-type settings.
 - When one user creates, edits, completes/reopens, hands off, adds images to, or deletes a task that
   involves the other user (assigned to them before or after the change, or created by them), the
   change is queued for the other user, if they have an email and `emailNotifications` is on.
@@ -305,6 +308,13 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
   and automatic two-week reviews. Automatic reviews are attributed to todoer and explain that the
   task returned from Later for review. Existing email preferences and digest timing apply; manual
   assignments do not create duplicate events for the same recipient.
+- Per-type preferences (`emailPreferences`, Settings → Email) sit under the `emailNotifications` master
+  switch, which turns everything off. Each email type checks its own key: `assigned` (a task assigned
+  to you, including Later reviews and self-claims from Later; creating the task or moving it to Now as
+  part of that counts as the assignment), `completed` (completed/reopened, with the good boy score
+  section), `updates` (every other task change), `achievements`, `afk`, `seasons`. Task digests keep
+  only the change lines the recipient wants, both when queueing and again when sending (so a change of
+  mind during the batching window applies); a batch with nothing left is dropped unsent.
 - The API process batches a recipient's queued changes into one digest email once they have been
   quiet for 2 minutes (or 10 minutes after the first change), one block per task with each change
   listed once and a link to `/tasks/:id`. Sent via Resend (`RESEND_API_KEY`, `EMAIL_FROM`); disabled

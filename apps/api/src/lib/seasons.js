@@ -1,6 +1,7 @@
 import { pool } from '../db.js';
 import { addMonths, currentSeason, describeSeason, labelFor, loadScoreRows, scoreFor, seasonBoundaries } from './score.js';
 import { notificationsConfigured, sendEmail } from './notifications.js';
+import { wantsEmail } from './email-preferences.js';
 
 // Seasons: at every boundary (midnight on the 1st, SCORE_TIMEZONE) the finished season's result is
 // frozen in `seasons`: each person's final score, the score they carry into the next season after
@@ -102,14 +103,14 @@ export async function sendSeasonEmails({ send = sendEmail, now = new Date(), db 
   const { rows: pending } = await db.query('SELECT * FROM seasons WHERE NOT emailed AND ends_at >= $1 ORDER BY ends_at',
     [new Date(now.getTime() - 3 * DAY)]);
   if (!pending.length) return 0;
-  const { rows: people } = await db.query('SELECT id, display_name, email, email_notifications FROM users ORDER BY created_at, id');
+  const { rows: people } = await db.query('SELECT id, display_name, email, email_notifications, email_preferences FROM users ORDER BY created_at, id');
   let sent = 0;
   for (const season of pending) {
     const { rows: wins } = await db.query(`SELECT winner_id, count(*)::int AS n FROM seasons WHERE ends_at <= $1 GROUP BY winner_id`, [season.ends_at]);
     const tally = Object.fromEntries(wins.map((row) => [row.winner_id ?? 'ties', row.n]));
     let ok = true;
     for (const recipient of people) {
-      if (!recipient.email || !recipient.email_notifications) continue;
+      if (!wantsEmail(recipient, 'seasons')) continue;
       try {
         await send({ to: recipient.email, idempotencyKey: `todoer-season-${season.id}-${recipient.id}`, ...composeSeasonEmail({ recipient, people, season, tally }) });
         sent++;

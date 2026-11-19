@@ -30,6 +30,7 @@ let dateFromToday, foldScore, gradeDone, gradeOpen, labelFor, scoreFor;
 const password = 'test-only-password';
 const firstToken = `tdr_${randomUUID().replaceAll('-', '')}`;
 const secondToken = `tdr_${randomUUID().replaceAll('-', '')}`;
+const allOn = { assigned: true, completed: true, updates: true, achievements: true, afk: true, seasons: true };
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const api = (method, url, token = firstToken) => request(app)[method](url).set('Authorization', `Bearer ${token}`);
 const create = async (body = {}, token = firstToken) => (await api('post', '/api/tasks', token).send(body).expect(201)).body.task;
@@ -134,7 +135,7 @@ test('login is case-insensitive, cookie sessions expire and logout revokes them'
   assert.equal(session.forever, true);
   assert.notEqual(session.id, cookie.split(';')[0].split('=')[1]);
   const me = await browser.get('/api/me').expect(200);
-  assert.deepEqual(me.body, { user: { ...first, activeProjectId: null, email: null, emailNotifications: true, githubLogin: null, birthday: null }, teammate: second });
+  assert.deepEqual(me.body, { user: { ...first, activeProjectId: null, email: null, emailNotifications: true, emailPreferences: allOn, githubLogin: null, birthday: null }, teammate: second });
   // Each app load renews the cookie so a browser session never lapses.
   const renewed = me.headers['set-cookie']?.[0] ?? '';
   assert.equal(renewed.split(';')[0], cookie.split(';')[0]);
@@ -195,7 +196,7 @@ test('remote clients cannot bypass the login rate limit by changing X-Forwarded-
 
 test('bearer tokens act as their owner, are hashed, and update last_used_at', async () => {
   const me = await api('get', '/api/me', secondToken).expect(200);
-  assert.deepEqual(me.body, { user: { ...second, activeProjectId: null, email: null, emailNotifications: true, githubLogin: null, birthday: null }, teammate: first });
+  assert.deepEqual(me.body, { user: { ...second, activeProjectId: null, email: null, emailNotifications: true, emailPreferences: allOn, githubLogin: null, birthday: null }, teammate: first });
   const token = (await pool.query('SELECT token_hash, last_used_at FROM api_tokens WHERE user_id = $1', [second.id])).rows[0];
   assert.equal(token.token_hash, hash(secondToken));
   assert.ok(token.last_used_at);
@@ -788,6 +789,67 @@ test('task changes involving the teammate are batched into one email digest per 
   });
 });
 
+test('per-type email preferences: validated, merged, and applied to digests at queue and send time', async () => {
+  const { flushNotifications } = await import('../src/lib/notifications.js');
+  assert.equal((await api('patch', '/api/me').send({ emailPreferences: { nope: false } }).expect(400)).body.error !== undefined, true);
+  await api('patch', '/api/me').send({ emailPreferences: { afk: 'no' } }).expect(400);
+  const merged = await api('patch', '/api/me').send({ emailPreferences: { afk: false, seasons: false } }).expect(200);
+  assert.deepEqual(merged.body.user.emailPreferences, { ...allOn, afk: false, seasons: false });
+  const again = await api('patch', '/api/me').send({ emailPreferences: { seasons: true } }).expect(200);
+  assert.deepEqual(again.body.user.emailPreferences, { ...allOn, afk: false });
+  assert.equal(Object.hasOwn((await api('get', '/api/me', secondToken).expect(200)).body.teammate, 'emailPreferences'), false);
+  await api('patch', '/api/me').send({ emailPreferences: { afk: true } }).expect(200);
+
+  const outbox = [];
+  const send = async (message) => { outbox.push(message); };
+  const flush = () => flushNotifications({ send, quiet: 0, maxWait: 0 });
+  await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>', PUBLIC_WEB_URL: 'https://todo.example.com' }, async () => {
+    await pool.query('DELETE FROM notification_events');
+    await api('patch', '/api/me', secondToken).send({ email: 'partner.prefs@example.com', emailPreferences: { updates: false } }).expect(200);
+    // Updates off: assignment (with its creation) and completion still arrive, edits don't.
+    const task = await create({ title: 'QA prefs', assignees: ['teammate'] });
+    await patch(task.id, { notes: 'edited', priority: 2 });
+    await patch(task.id, { done: true });
+    assert.equal(await flush(), 1);
+    assert.match(outbox[0].text, /“QA prefs”\n  - Maxim Test created it\n  - Maxim Test assigned it to you\n  - Maxim Test completed it\n/);
+    assert.doesNotMatch(outbox[0].text, /notes|priority/);
+    assert.match(outbox[0].text, /Good boy score/);
+
+    // Completions off: no score section; a batch with nothing wanted queues nothing.
+    await api('patch', '/api/me', secondToken).send({ emailPreferences: { completed: false } }).expect(200);
+    await patch(task.id, { done: false });
+    await patch(task.id, { notes: 'again' });
+    assert.equal((await pool.query('SELECT 1 FROM notification_events')).rowCount, 0);
+
+    // Preferences changed after queueing are honoured at send time; fully filtered batches are dropped.
+    await api('patch', '/api/me', secondToken).send({ emailPreferences: { updates: true, completed: true } }).expect(200);
+    await patch(task.id, { done: true });
+    await patch(task.id, { notes: 'third' });
+    await api('patch', '/api/me', secondToken).send({ emailPreferences: { completed: false } }).expect(200);
+    assert.equal(await flush(), 1);
+    assert.match(outbox[1].text, /edited the notes/);
+    assert.doesNotMatch(outbox[1].text, /completed it|Good boy score/);
+    await api('patch', '/api/me', secondToken).send({ emailPreferences: { updates: false } }).expect(200);
+    await patch(task.id, { notes: 'fourth' });
+    await api('patch', '/api/me', secondToken).send({ emailPreferences: { updates: true } }).expect(200);
+    await api('patch', '/api/me', secondToken).send({ emailPreferences: { assigned: false } }).expect(200);
+    await patch(task.id, { notes: 'fifth' });
+    await api('patch', '/api/me', secondToken).send({ emailPreferences: { updates: false } }).expect(200);
+    assert.equal(await flush(), 0);
+    assert.equal((await pool.query('SELECT 1 FROM notification_events')).rowCount, 0);
+
+    // Assignments off: handing over a task only reports the other changes.
+    await api('patch', '/api/me', secondToken).send({ emailPreferences: { updates: true } }).expect(200);
+    const handed = await create({ title: 'QA handed prefs', dueDate: '2030-01-02' });
+    await api('post', `/api/tasks/${handed.id}/handoff`).send({ to: 'teammate' }).expect(200);
+    assert.equal((await pool.query('SELECT 1 FROM notification_events')).rowCount, 1);
+    assert.equal(await flush(), 1);
+    assert.match(outbox[2].text, /Maxim Test dropped it/);
+    assert.doesNotMatch(outbox[2].text, /assigned it to you/);
+    await api('patch', '/api/me', secondToken).send({ email: null, emailPreferences: allOn }).expect(200);
+  });
+});
+
 const backdate = (id, days) => pool.query("UPDATE tasks SET created_at = created_at - $2 * interval '1 day' WHERE id = $1", [id, days]);
 const board = async (token = firstToken) => (await api('get', '/api/score', token).expect(200)).body;
 
@@ -1063,6 +1125,13 @@ test('AFK penalty: -5 for each finished day with open tasks and no completion, a
   await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>', PUBLIC_WEB_URL: 'https://todo.example.com' }, async () => {
     await api('patch', '/api/me').send({ email: 'maxim.afk@example.com' }).expect(200);
     await api('patch', '/api/me', secondToken).send({ email: 'partner.afk@example.com' }).expect(200);
+    // AFK emails turned off: the other person's preference is respected, then restored.
+    await api('patch', '/api/me', secondToken).send({ emailPreferences: { afk: false } }).expect(200);
+    assert.equal(await sendAfkEmails({ send, now: at(-1) }), 2); // 2 days x 1 recipient
+    assert.equal(outbox.every((mail) => mail.to === 'maxim.afk@example.com'), true);
+    await pool.query('UPDATE afk_days SET emailed = false');
+    outbox.length = 0;
+    await api('patch', '/api/me', secondToken).send({ emailPreferences: { afk: true } }).expect(200);
     assert.equal(await sendAfkEmails({ send, now: at(-1) }), 4); // 2 days x 2 recipients
     assert.equal(await sendAfkEmails({ send, now: at(-1) }), 0); // never twice
     const mine = outbox.filter((mail) => mail.to === 'maxim.afk@example.com');

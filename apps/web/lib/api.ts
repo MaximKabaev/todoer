@@ -14,12 +14,21 @@ export type User = {
   displayName: string;
   color: Color;
 };
+export type EmailPreferences = {
+  assigned: boolean;
+  completed: boolean;
+  updates: boolean;
+  achievements: boolean;
+  afk: boolean;
+  seasons: boolean;
+};
 export type CurrentUser = User & {
   birthday?: string | null;
   githubLogin: string | null;
   activeProjectId: string | null;
   email?: string | null;
   emailNotifications?: boolean;
+  emailPreferences: EmailPreferences;
 };
 export type Project = {
   id: string;
@@ -315,6 +324,7 @@ export const api = {
     activeProjectId?: string | null;
     email?: string | null;
     emailNotifications?: boolean;
+    emailPreferences?: Partial<EmailPreferences>;
     displayName?: string;
     password?: string;
     currentPassword?: string;
