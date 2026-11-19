@@ -205,6 +205,8 @@ export type Achievement = {
   id: string;
   category: "score" | "streak" | "volume" | "punctuality" | "competition" | "team" | "code" | "fun" | "secret";
   hidden: boolean;
+  /** Badge image path. Hidden ones use a hash-named file, so showing it never gives the secret away. */
+  art: string;
   title: string | null;
   description: string | null;
   target: number | null;

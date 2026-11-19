@@ -1382,11 +1382,14 @@ test('achievements: stored when earned, shown on Stats, emailed once (backfill s
     const old = await create({ title: 'QA ach old', assignees: ['me'] });
     await pool.query(`UPDATE tasks SET created_at = now() - interval '20 days', done = true, done_at = now() - interval '19 days' WHERE id = $1`, [old.id]);
     const { created } = await syncAchievements(pool);
-    assert.deepEqual(created.map((row) => [row.userId, row.id]), [[first.id, 'first-bone']]);
+    // Date-based secrets may also match the backdated day, depending on the calendar: ignore those.
+    const { ACHIEVEMENTS } = await import('../src/lib/achievements.js');
+    const visible = new Set(ACHIEVEMENTS.filter((entry) => !entry.hidden).map((entry) => entry.id));
+    assert.deepEqual(created.filter((row) => visible.has(row.id)).map((row) => [row.userId, row.id]), [[first.id, 'first-bone']]);
     assert.equal((await pool.query("SELECT emailed FROM achievements WHERE id = 'first-bone'")).rows[0].emailed, true);
 
     const { body } = await api('get', '/api/stats').expect(200);
-    assert.equal(body.achievements.length, 49);
+    assert.equal(body.achievements.length, 54);
     const bone = body.achievements.find((entry) => entry.id === 'first-bone');
     assert.equal(bone.title, 'First Bone');
     assert.equal(bone.me.unlocked, true);
@@ -1497,6 +1500,13 @@ test('achievements: hidden ones stay secret from anyone who has not earned them,
       assert.equal(entry.title, null); assert.equal(entry.description, null); assert.equal(entry.me.progress, null);
     }
     assert.ok(!JSON.stringify(mine).includes('archaeologist'));
+    // Placeholders still show the real icon, under a hash name that gives nothing away, and the file exists.
+    const { existsSync } = await import('node:fs');
+    for (const entry of secrets) {
+      assert.match(entry.art, /^\/achievements\/s\/[0-9a-f]{16}\.png$/);
+      assert.ok(existsSync(new URL(`../../web/public${entry.art}`, import.meta.url)), entry.art);
+    }
+    for (const entry of mine.filter((item) => !item.hidden)) assert.equal(entry.art, `/achievements/${entry.id}.png`);
     assert.equal(secrets.filter((entry) => entry.teammate.unlocked).length, 1); // Maxim sees that German has *a* secret
 
     const his = (await api('get', '/api/stats', secondToken).expect(200)).body.achievements;
@@ -1504,6 +1514,7 @@ test('achievements: hidden ones stay secret from anyone who has not earned them,
     assert.equal(revealed.hidden, true);
     assert.equal(revealed.title, 'Archaeologist');
     assert.equal(revealed.me.unlocked, true);
+    assert.equal(revealed.art, secrets.find((entry) => entry.teammate.unlocked).art); // the same icon both see
     assert.equal(his.filter((entry) => entry.title === null).length, secrets.length - 1);
 
     const outbox = [];
@@ -1531,4 +1542,25 @@ test('birthday is private, validated, and clearable', async () => {
   assert.equal((await api('get', '/api/me').expect(200)).body.user.birthday, '02-29');
   assert.equal((await api('get', '/api/me', secondToken).expect(200)).body.teammate.birthday, undefined);
   assert.equal((await api('patch', '/api/me').send({ birthday: '' }).expect(200)).body.user.birthday, null);
+});
+
+test('achievements: date, time and tie secrets', async () => {
+  const { deriveFor, ACHIEVEMENTS } = await import('../src/lib/achievements.js');
+  const { existsSync } = await import('node:fs');
+  for (const entry of ACHIEVEMENTS) assert.ok(existsSync(new URL(`../../web/public${entry.art}`, import.meta.url)), `missing art ${entry.art}`);
+  await withEnv({ SCORE_TIMEZONE: 'UTC' }, async () => {
+    const at = (iso) => new Date(iso);
+    const push = (iso) => ({ kind: 'push', commits: 1, repo: 'me/a', ref: 'main', at: at(iso) });
+    // Oct 31 2025, Friday Feb 13 2026 at 13:37, Dec 25 2026; Thursday Nov 13 2025 does not count.
+    const github = [push('2025-10-31T09:00:00Z'), push('2025-11-13T09:00:00Z'), push('2026-02-13T13:37:10Z'), push('2026-12-25T09:00:00Z')];
+    const seasons = [{ id: 's1', number: 1, winnerId: null, startsAt: at('2026-11-01T00:00:00Z'), endsAt: at('2026-12-01T00:00:00Z') }];
+    const now = at('2026-12-26T00:00:00Z');
+    const got = deriveFor({ person: { id: 'p' }, other: { id: 'o' }, rows: [], github, seasons, now });
+    assert.deepEqual(got.halloween.unlockedAt, at('2025-10-31T09:00:00Z'));
+    assert.deepEqual(got['friday-13'].unlockedAt, at('2026-02-13T13:37:10Z'));
+    assert.deepEqual(got.leet.unlockedAt, at('2026-02-13T13:37:10Z'));
+    assert.deepEqual(got.christmas.unlockedAt, at('2026-12-25T09:00:00Z'));
+    assert.deepEqual(got['season-tie'].unlockedAt, seasons[0].endsAt);
+    assert.equal(deriveFor({ person: { id: 'p' }, rows: [], github: [], seasons, now })['season-tie'].unlockedAt, null);
+  });
 });

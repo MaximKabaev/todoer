@@ -376,7 +376,7 @@ editing a due date is always reflected.
 
 ## Achievements
 
-49 badges per person, shown on Stats. They are derived from the same data as the score and Stats
+54 badges per person, shown on Stats. They are derived from the same data as the score and Stats
 (assigned Now tasks, AFK days, GitHub events, frozen seasons; "completed" excludes empty tasks;
 "active" = the AFK definition: a completion, a push with commits, or a merged PR), then **stored the
 first time they are earned** (`achievements`: user, id, `unlocked_at` = the derived moment it was
@@ -416,13 +416,15 @@ Days and hours use `SCORE_TIMEZONE`; GitHub times are delivery times.
 **Hidden achievements**: some achievements (category `secret`) are hidden. Their rules live only in
 `apps/api/src/lib/achievements.js` (`hidden: true`) and are deliberately not listed here. Until a
 person earns one, the API sends them a placeholder (`id: "secret-N"`, `title`/`description`/`target`/
-`progress` null) that only says whether and when their teammate earned it; the web app shows a
-mystery badge. Unlock emails describe a hidden achievement only to people who have it; others read
-"A secret achievement" with the mystery badge. Some of them use an optional private birthday
+`progress` null) that only says whether and when their teammate earned it, plus its icon: the web app
+shows "???" with the real badge art (locked like any locked badge), so people can guess. Hidden art is
+served from `/achievements/s/<hash>.png` (sha256 of `todoer-secret:<id>`, first 16 hex) so the URL never
+gives the secret away. Unlock emails describe a hidden achievement only to people who have it; others
+read "A secret achievement" with its icon. Some of them use an optional private birthday
 (`users.birthday`, `MM-DD`, `PATCH /api/me {birthday}`, set in Settings, never shown to the teammate).
 
 - `GET /api/stats` → `achievements: [{ id, category ("score" | "streak" | "volume" | "punctuality" |
-  "competition" | "team" | "code" | "fun" | "secret"), hidden, title, description, target (number | null),
+  "competition" | "team" | "code" | "fun" | "secret"), hidden, art (image path), title, description, target (number | null),
   me: State, teammate: State | null }]` in catalog order, `State = { unlocked, unlockedAt (ISO | null),
   progress: { current, target } | null }`. `progress` is null for yes/no achievements; `current` is capped
   at `target` (for score badges it is the best score so far). Building the response also records anything

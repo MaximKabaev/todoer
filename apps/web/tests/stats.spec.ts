@@ -247,7 +247,7 @@ test("achievements show counts, dates, progress and switch people with keyboard 
   await page.route("**/api/stats", async (route) => {
     const response = await route.fetch();
     const data = await response.json();
-    expect(data.achievements).toHaveLength(49);
+    expect(data.achievements).toHaveLength(54);
     for (const entry of data.achievements) {
       if (entry.id === "first-bone") entry.me = {
         unlocked: true, unlockedAt: "2026-11-12T12:00:00Z", progress: { current: 1, target: 1 },
@@ -257,15 +257,15 @@ test("achievements show counts, dates, progress and switch people with keyboard 
         entry.teammate = { unlocked: false, unlockedAt: null, progress: { current: 15, target: 1000 } };
       }
     }
-    counts = `${data.me.user.displayName} ${data.achievements.filter((a: { me: { unlocked: boolean } }) => a.me.unlocked).length}/49 · ${data.teammate.user.displayName} ${data.achievements.filter((a: { teammate: { unlocked: boolean } }) => a.teammate.unlocked).length}/49 · earned`;
+    counts = `${data.me.user.displayName} ${data.achievements.filter((a: { me: { unlocked: boolean } }) => a.me.unlocked).length}/54 · ${data.teammate.user.displayName} ${data.achievements.filter((a: { teammate: { unlocked: boolean } }) => a.teammate.unlocked).length}/54 · earned`;
     await route.fulfill({ response, json: data });
   });
   await page.goto("/stats");
   const section = page.getByRole("region", { name: "Achievements", exact: true });
-  await expect(section.getByTestId("achievement-badge")).toHaveCount(49);
+  await expect(section.getByTestId("achievement-badge")).toHaveCount(54);
   await expect(section.getByTestId("achievement-counts")).toHaveText(counts);
   const art = section.getByRole("img", { name: / badge$/ });
-  await expect(art).toHaveCount(49);
+  await expect(art).toHaveCount(54);
   await expect(art.first()).toHaveCSS("image-rendering", "pixelated");
   const first = section.locator('[data-achievement="first-bone"]');
   await expect(first).toContainText("Earned Nov 12");
@@ -291,7 +291,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     await login(page);
     await page.goto("/stats");
     const section = page.getByRole("region", { name: "Achievements", exact: true });
-    await expect(section.getByTestId("achievement-badge")).toHaveCount(49);
+    await expect(section.getByTestId("achievement-badge")).toHaveCount(54);
     await section.scrollIntoViewIfNeeded();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await section.getByRole("button", { name: "Teammate", exact: true }).click();
@@ -311,8 +311,10 @@ test("secrets keep identities private when comparing people", async ({ page }) =
   await expect(mystery).toContainText("Hidden achievement");
   await expect(mystery).not.toContainText(/Birthday Boy|secret-2|Earned/);
   await expect(mystery.getByRole("progressbar")).toHaveCount(0);
-  await expect(mystery.getByRole("img")).toHaveAttribute("src", "/achievements/secret.png");
-  await expect(mystery.locator("img").locator("..")).toHaveCSS("filter", "none");
+  // The real icon shows (locked, like any locked badge) under a hash name that reveals nothing.
+  await expect(mystery.getByRole("img")).toHaveAttribute("src", /^\/achievements\/s\/[0-9a-f]{16}\.png$/);
+  await expect(mystery.locator("img").locator("..")).not.toHaveCSS("filter", "none");
+  expect(await mystery.getByRole("img").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
   const revealed = section.locator('[data-achievement="new-year"]');
   await expect(revealed.getByRole("heading")).toHaveText("New Year, New Me");
   await expect(revealed.getByText("Secret", { exact: true })).toBeVisible();

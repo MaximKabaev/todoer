@@ -514,7 +514,7 @@
   object-fit: contain;
   image-rendering: pixelated;
 }
-.achievement[data-unlocked="false"]:not([data-mystery="true"]) .achievementArt {
+.achievement[data-unlocked="false"] .achievementArt {
   filter: grayscale(1);
   opacity: 0.45;
 }

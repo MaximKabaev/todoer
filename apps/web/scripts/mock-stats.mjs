@@ -1,6 +1,7 @@
 // Mock implementation of seasons (GET /api/score `season`) and GET /api/stats. Dates use UTC.
 // The mock has no AFK worker, GitHub events or soft resets: those numbers are always 0, and the two
 // finished seasons before the current month are fixed sample results so the UI has a history to show.
+import { createHash } from "node:crypto";
 import { deadline, scoreAt } from "./mock-score.mjs";
 
 // Catalog mirrors apps/api/src/lib/achievements.js.
@@ -62,7 +63,14 @@ const ACHIEVEMENTS = [
   { id: 'archaeologist', category: 'secret', hidden: true, title: 'Archaeologist', description: 'Complete a task that was open for 60+ days', target: null },
   { id: 'inbox-zero', category: 'secret', hidden: true, title: 'Inbox Zero', description: 'End a day with no open tasks after having 10+ open at the end of a day earlier that week', target: null },
   { id: 'big-push', category: 'secret', hidden: true, title: 'Big Push', description: 'Push 10+ commits at once', target: null },
-].map((entry) => ({ hidden: false, ...entry }));
+  { id: 'halloween', category: 'secret', hidden: true, title: 'Spooky Season', description: 'Complete a task or push a commit on October 31', target: null },
+  { id: 'christmas', category: 'secret', hidden: true, title: 'Ho Ho Ho', description: 'Complete a task or push a commit on December 25', target: null },
+  { id: 'friday-13', category: 'secret', hidden: true, title: 'Unlucky for Some', description: 'Complete a task or push a commit on a Friday the 13th', target: null },
+  { id: 'leet', category: 'secret', hidden: true, title: '1337', description: 'Complete a task or push a commit at exactly 13:37', target: null },
+  { id: 'season-tie', category: 'secret', hidden: true, title: 'Perfectly Balanced', description: 'Finish a season in an exact tie (you both earn it)', target: null },
+].map((entry) => ({ hidden: false, ...entry }))
+  // Same art paths as the API: hidden badges use hash-named files.
+  .map((entry) => ({ ...entry, art: `/achievements/${entry.hidden ? `s/${createHash("sha256").update(`todoer-secret:${entry.id}`).digest("hex").slice(0, 16)}` : entry.id}.png` }));
 
 const DAY = 86400000;
 const labelFor = (score) =>
@@ -253,7 +261,7 @@ export function statsFor(tasks, users, me, now = Date.now()) {
       const theirs = theirBadges?.[entry.id] ?? null;
       if (entry.hidden && !mine.unlocked) return {
         id: `secret-${ACHIEVEMENTS.filter((badge) => badge.hidden).indexOf(entry) + 1}`,
-        category: entry.category, hidden: true, title: null, description: null, target: null,
+        category: entry.category, hidden: true, art: entry.art, title: null, description: null, target: null,
         me: { ...mine, progress: null }, teammate: theirs ? { ...theirs, progress: null } : null,
       };
       return { ...entry, me: mine, teammate: theirs };

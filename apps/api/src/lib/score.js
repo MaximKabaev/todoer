@@ -45,10 +45,10 @@ const zoneFormat = (tz) => {
   return zoneFormats.get(tz);
 };
 const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-// Local calendar parts of an instant in the score timezone: { day: 'YYYY-MM-DD', hour, weekday (0 = Monday) }.
+// Local calendar parts of an instant in the score timezone: { day: 'YYYY-MM-DD', hour, minute, weekday (0 = Monday) }.
 export function localParts(instant, tz = scoreTimezone()) {
   const parts = Object.fromEntries(zoneFormat(tz).formatToParts(instant).map((part) => [part.type, part.value]));
-  return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour), weekday: weekdays.indexOf(parts.weekday),
+  return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour), minute: Number(parts.minute), weekday: weekdays.indexOf(parts.weekday),
     offset: Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - Math.floor(instant.getTime() / 1000) * 1000 };
 }
 

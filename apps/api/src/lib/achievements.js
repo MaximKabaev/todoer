@@ -71,7 +71,16 @@ export const ACHIEVEMENTS = [
   { id: 'archaeologist', category: 'secret', hidden: true, title: 'Archaeologist', description: 'Complete a task that was open for 60+ days', target: null },
   { id: 'inbox-zero', category: 'secret', hidden: true, title: 'Inbox Zero', description: 'End a day with no open tasks after having 10+ open at the end of a day earlier that week', target: null },
   { id: 'big-push', category: 'secret', hidden: true, title: 'Big Push', description: 'Push 10+ commits at once', target: null },
+  { id: 'halloween', category: 'secret', hidden: true, title: 'Spooky Season', description: 'Complete a task or push a commit on October 31', target: null },
+  { id: 'christmas', category: 'secret', hidden: true, title: 'Ho Ho Ho', description: 'Complete a task or push a commit on December 25', target: null },
+  { id: 'friday-13', category: 'secret', hidden: true, title: 'Unlucky for Some', description: 'Complete a task or push a commit on a Friday the 13th', target: null },
+  { id: 'leet', category: 'secret', hidden: true, title: '1337', description: 'Complete a task or push a commit at exactly 13:37', target: null },
+  { id: 'season-tie', category: 'secret', hidden: true, title: 'Perfectly Balanced', description: 'Finish a season in an exact tie (you both earn it)', target: null },
 ].map((entry) => ({ hidden: false, ...entry }));
+// Art lives in apps/web/public: /achievements/<id>.png, except hidden ones, whose files are named by a
+// hash (/achievements/s/<hash>.png) so the icon can be shown without the file name giving the secret away.
+const artName = (entry) => (entry.hidden ? `s/${createHash('sha256').update(`todoer-secret:${entry.id}`).digest('hex').slice(0, 16)}` : entry.id);
+for (const entry of ACHIEVEMENTS) entry.art = `/achievements/${artName(entry)}.png`;
 const byId = new Map(ACHIEVEMENTS.map((entry) => [entry.id, entry]));
 // Stable placeholder ids for hidden achievements, so the real id never reaches someone who lacks it.
 const secretIds = new Map(ACHIEVEMENTS.filter((entry) => entry.hidden).map((entry, index) => [entry.id, `secret-${index + 1}`]));
@@ -367,6 +376,12 @@ export function deriveFor({ person, other = null, rows, github, otherGithub = []
   });
   set('inbox-zero', inboxZero);
   set('big-push', pushes.find((event) => event.commits >= 10)?.at ?? null);
+  set('halloween', onDate('10-31'));
+  set('christmas', onDate('12-25'));
+  set('friday-13', earliest(...activeDays.filter((day) => day.endsWith('-13') && localParts(firstActivity.get(day)).weekday === 4)
+    .map((day) => firstActivity.get(day))));
+  set('leet', moments.find((moment) => moment.local.hour === 13 && moment.local.minute === 37)?.at ?? null);
+  set('season-tie', other ? finished.find((season) => !season.winnerId)?.endsAt ?? null : null);
   return result;
 }
 
@@ -423,10 +438,10 @@ export async function syncAchievements(db = pool, now = new Date(), rows = null)
 }
 
 // The catalog with both people's state, from the viewer's point of view, for GET /api/stats:
-// [{ id, category, hidden, title, description, target, me: State, teammate: State | null }],
+// [{ id, category, hidden, art, title, description, target, me: State, teammate: State | null }],
 // State = { unlocked, unlockedAt, progress: { current, target } | null }.
-// A hidden achievement the viewer hasn't earned is a placeholder: id "secret-N", title, description,
-// target and progress null, and only whether (and when) the teammate earned it.
+// A hidden achievement the viewer hasn't earned is a placeholder: id "secret-N", its art (hash-named),
+// title, description, target and progress null, and only whether (and when) the teammate earned it.
 export async function achievementsView(db, user, teammate, now = new Date(), rows = null) {
   const { derived, stored } = await syncAchievements(db, now, rows);
   const state = (person, id, revealed) => {
@@ -442,17 +457,19 @@ export async function achievementsView(db, user, teammate, now = new Date(), row
   return ACHIEVEMENTS.map((entry) => {
     const revealed = !entry.hidden || Boolean(stored[user.id]?.[entry.id]);
     if (revealed) return { ...entry, me: state(user, entry.id, true), teammate: state(teammate, entry.id, true) };
-    return { id: secretIds.get(entry.id), category: entry.category, hidden: true, title: null, description: null, target: null,
+    return { id: secretIds.get(entry.id), category: entry.category, hidden: true, art: entry.art, title: null, description: null, target: null,
       me: state(user, entry.id, false), teammate: state(teammate, entry.id, false) };
   });
 }
 
 // Badge art served by the web app (apps/web/public/achievements/<id>.png), attached to unlock emails
-// as inline images. A missing file just leaves the badge out of the email. "secret" is the mystery badge.
+// as inline images. A missing file just leaves the badge out of the email.
+// `name` is an art name (an id, or "s/<hash>" for a hidden one).
 const artDir = new URL('../../../web/public/achievements/', import.meta.url);
-export function achievementArt(id) {
+const cid = (name) => `achievement-${name.replace(/[^a-z0-9-]/gi, '-')}`;
+export function achievementArt(name) {
   try {
-    return { filename: `${id}.png`, content: readFileSync(new URL(`${id}.png`, artDir)).toString('base64'), content_id: `achievement-${id}` };
+    return { filename: `${name.split('/').pop()}.png`, content: readFileSync(new URL(`${name}.png`, artDir)).toString('base64'), content_id: cid(name), name };
   } catch {
     return null;
   }
@@ -469,8 +486,9 @@ export function composeAchievementEmail({ recipient, people, unlocks, owned = ne
   const lines = unlocks.map((unlock) => {
     const entry = byId.get(unlock.id);
     const revealed = !entry.hidden || unlock.userId === recipient.id || owned.has(unlock.id);
-    return revealed ? { who: name(unlock.userId), art: entry.id, title: entry.title, description: entry.description, quoted: `“${entry.title}”` }
-      : { who: name(unlock.userId), art: 'secret', title: 'A secret achievement', description: 'Earn it yourself to find out what it is.', quoted: 'a secret achievement' };
+    const art = artName(entry);
+    return revealed ? { who: name(unlock.userId), art, title: entry.title, description: entry.description, quoted: `“${entry.title}”` }
+      : { who: name(unlock.userId), art, title: 'A secret achievement', description: 'Earn it yourself to find out what it is.', quoted: 'a secret achievement' };
   });
   const mine = lines.filter((line) => line.who === 'You');
   const subject = unlocks.length === 1
@@ -483,7 +501,7 @@ export function composeAchievementEmail({ recipient, people, unlocks, owned = ne
 <div style="margin:16px 0;padding:12px 16px;border:1px solid #c7d2fe;border-radius:12px;background:#eef2ff">
 <div style="font-weight:700;color:#3730a3;margin-bottom:6px">🏅 Achievement${unlocks.length === 1 ? '' : 's'} unlocked</div>
 ${lines.map((line) => `<table role="presentation" style="margin-top:8px;border-collapse:collapse"><tr>
-${art.has(line.art) ? `<td style="padding:0 12px 0 0;vertical-align:middle"><img src="cid:achievement-${escape(line.art)}" width="64" height="64" alt="${escape(line.title)} badge" style="display:block;image-rendering:pixelated"></td>` : ''}
+${art.has(line.art) ? `<td style="padding:0 12px 0 0;vertical-align:middle"><img src="cid:${escape(cid(line.art))}" width="64" height="64" alt="${escape(line.title)} badge" style="display:block;image-rendering:pixelated"></td>` : ''}
 <td style="vertical-align:middle"><strong>${escape(line.title)}</strong> · ${escape(line.who)}<div style="color:#4b5563">${escape(line.description)}</div></td>
 </tr></table>`).join('\n')}
 ${base ? `<div style="margin-top:8px"><a href="${escape(base)}/stats" style="color:#1f2328">See all achievements</a></div>` : ''}
@@ -512,9 +530,10 @@ export async function sendAchievementEmails({ send = sendEmail, now = new Date()
     const names = composeAchievementEmail({ recipient, people, unlocks: pending, owned }).art;
     const attachments = names.map(achievementArt).filter(Boolean);
     const { subject, text, html } = composeAchievementEmail({ recipient, people, unlocks: pending, owned,
-      art: new Set(attachments.map((file) => file.filename.replace(/\.png$/, ''))) });
+      art: new Set(attachments.map((file) => file.name)) });
     try {
-      await send({ to: recipient.email, idempotencyKey: `todoer-achievement-${key}-${recipient.id}`, subject, text, html, attachments });
+      await send({ to: recipient.email, idempotencyKey: `todoer-achievement-${key}-${recipient.id}`, subject, text, html,
+        attachments: attachments.map(({ name, ...file }) => file) });
       sent++;
     } catch (error) {
       ok = false;

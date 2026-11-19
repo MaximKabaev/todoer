@@ -211,7 +211,6 @@ function useChartTooltip(labels: string[]) {
   };
 }
 
-const achievementArtPath = (id: string) => `/achievements/${id}.png`;
 const achievementCategories = [
   { id: "score", title: "Score", color: "purple" },
   { id: "streak", title: "Streaks", color: "orange" },
@@ -296,7 +295,7 @@ function Achievements({ data }: { data: Stats }) {
                     <div className={styles.achievementArt}>
                       {/* Serve the original pixels without image optimization or smoothing. */}
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={achievementArtPath(isMystery(entry) ? "secret" : entry.id)} alt={isMystery(entry) ? "Hidden achievement badge" : `${entry.title} badge`} width={64} height={64} />
+                      <img src={entry.art} alt={isMystery(entry) ? "Hidden achievement badge" : `${entry.title} badge`} width={64} height={64} />
                     </div>
                     <h4>{isMystery(entry) ? "???" : entry.title}</h4>
                     {entry.hidden && !isMystery(entry) && <span className={styles.secretChip}>Secret</span>}
