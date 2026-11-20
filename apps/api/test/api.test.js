@@ -1449,7 +1449,9 @@ test('achievements: stored when earned, shown on Stats, emailed once (backfill s
   try {
     // An old completion (backfill: never emailed) and a fresh one today.
     const old = await create({ title: 'QA ach old', assignees: ['me'] });
-    await pool.query(`UPDATE tasks SET created_at = now() - interval '20 days', done = true, done_at = now() - interval '19 days' WHERE id = $1`, [old.id]);
+    // Midday UTC, so time-of-day badges (night owl, early bird) don't depend on when the suite runs.
+    await pool.query(`UPDATE tasks SET created_at = now() - interval '20 days', done = true,
+      done_at = date_trunc('day', now()) - interval '19 days' + interval '12 hours' WHERE id = $1`, [old.id]);
     const { created } = await syncAchievements(pool);
     // Date-based secrets may also match the backdated day, depending on the calendar: ignore those.
     const { ACHIEVEMENTS } = await import('../src/lib/achievements.js');
@@ -1477,6 +1479,9 @@ test('achievements: stored when earned, shown on Stats, emailed once (backfill s
     const fresh = await create({ title: 'QA ach new', assignees: ['me'] }, secondToken);
     await pool.query(`UPDATE tasks SET created_at = now() - interval '1 hour' WHERE id = $1`, [fresh.id]);
     await api('patch', `/api/tasks/${fresh.id}`, secondToken).send({ done: true }).expect(200);
+    // Yesterday at midday UTC: still inside the email window, never a night-owl/early-bird hour.
+    await pool.query(`UPDATE tasks SET created_at = date_trunc('day', now()) - interval '13 hours',
+      done_at = date_trunc('day', now()) - interval '12 hours' WHERE id = $1`, [fresh.id]);
     const outbox = [];
     await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>', PUBLIC_WEB_URL: 'https://todo.example.com' }, async () => {
       await api('patch', '/api/me').send({ email: 'maxim.ach@example.com' }).expect(200);
