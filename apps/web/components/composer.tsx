@@ -8,7 +8,7 @@ export const Composer = forwardRef<
   {
     users: [User, User];
     onCreate: (input: TaskInput, open?: boolean) => Promise<unknown>;
-    onImages: (files: File[]) => Promise<unknown>;
+    onImages: (files: File[], input?: TaskInput) => Promise<boolean>;
     uploading: boolean;
     later?: boolean;
   }
@@ -30,6 +30,17 @@ export const Composer = forwardRef<
       setValue(captured);
     }
   }
+  // Images pasted or picked while text is typed join that text in one task,
+  // instead of creating a separate image-only task and dropping the text.
+  async function addImages(files: File[]) {
+    const captured = value;
+    const input = captured.trim()
+      ? { title: parsed.title, ...parsed.fields }
+      : undefined;
+    if (input) setValue("");
+    const ok = await onImages(files, input);
+    if (!ok && input) setValue((current) => current || captured);
+  }
   return (
     <div className="composer-area">
       <form
@@ -42,7 +53,7 @@ export const Composer = forwardRef<
           const files = Array.from(e.clipboardData.files);
           if (files.length) {
             e.preventDefault();
-            void onImages(files);
+            void addImages(files);
           }
         }}
       >
@@ -90,7 +101,7 @@ export const Composer = forwardRef<
           aria-label="Attach images to a new task"
           onChange={(e) => {
             if (e.target.files?.length)
-              void onImages(Array.from(e.target.files));
+              void addImages(Array.from(e.target.files));
             e.target.value = "";
           }}
         />

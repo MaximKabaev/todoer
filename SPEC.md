@@ -476,7 +476,7 @@ Task details offer Copy link and mobile native Share with a copy fallback.
 
 ### Task presentation
 - Task details groups due date, priority, project, tags, and the creation/delete footer in an “Extra options” disclosure, collapsed by default. Its arrow points right when collapsed and down when expanded. Images stay visible above the disclosure, and main task actions remain visible.
-- Capture has no helper tagline or photo button; image paste and task-detail attachments remain available.
+- Capture has no helper tagline or photo button; image paste and task-detail attachments remain available. Pasting an image into the composer while text is typed creates one task titled with that text (quick syntax applies) plus the image, rather than dropping the text.
 - The visible task count sits beside the list title. Task details has a prominent heading.
 - The detail panel uses “I ain’t doing all that rn” to move to Later, with “Send it back to Later” explanatory text and the two-week random review, and offers “Okay, let’s do this” to move back to Now and assign it to yourself.
 - Priority uses named None/Low/Medium/High choices, prominent coloured labels above the title in rows and task details, and orange/red row accents for medium/high priority. Project names and tags remain below the title. Existing sorting and scoring semantics remain unchanged.

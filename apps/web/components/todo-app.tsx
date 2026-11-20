@@ -321,6 +321,15 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     setQueryDraft(null);
     nav.navigate(selectionUrl(value, teammate));
   };
+  const withContext = (input: TaskInput): TaskInput => ({
+    ...context,
+    ...input,
+    ...(context.tags || input.tags
+      ? {
+          tags: [...new Set([...(context.tags || []), ...(input.tags || [])])],
+        }
+      : {}),
+  });
   const create = async (input: TaskInput, open = false) => {
     let captureListUrl = listUrl;
     if (selection.kind === "mine" && segment === 2) captureListUrl = "/my";
@@ -333,18 +342,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
       );
     }
     if (captureListUrl !== listUrl && !selectedId) nav.navigate(captureListUrl);
-    const value = {
-      ...context,
-      ...input,
-      ...(context.tags || input.tags
-        ? {
-            tags: [
-              ...new Set([...(context.tags || []), ...(input.tags || [])]),
-            ],
-          }
-        : {}),
-    };
-    const task = await createCapture(value);
+    const task = await createCapture(withContext(input));
     if (open) {
       // Let an automatic filter reset commit before pushing the inspector, so
       // browser Back returns to the same list that is visible behind the task.
@@ -354,32 +352,39 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
     }
     return task;
   };
-  async function upload(files: File[], targetId?: string | null) {
+  async function upload(
+    files: File[],
+    targetId?: string | null,
+    input: TaskInput = {},
+  ) {
     try {
       const valid = imageFiles(files);
-      if (!valid.length) return;
+      if (!valid.length) return false;
       setUploading(true);
       if (targetId) {
         const { task } = await api.attach(targetId, valid);
         await store.apply(targetId, () => task);
         void store.refreshMeta();
       } else {
-        const task = await createCapture({}, valid);
+        // Text already typed in the composer becomes the new task's title.
+        const task = await createCapture(withContext(input), valid);
         openTask(task);
       }
       toast({
         message: `${valid.length === 1 ? "Image" : `${valid.length} images`} added.`,
       });
+      return true;
     } catch (err) {
       if (targetId && err instanceof ApiError && err.status === 404) {
         await store.forget(targetId);
-        return;
+        return false;
       }
       toast({
         message:
           err instanceof Error ? err.message : "Could not upload images.",
         error: true,
       });
+      return false;
     } finally {
       setUploading(false);
       setDragging(false);
@@ -897,7 +902,7 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
               later={selection.kind === "later"}
               users={[user, teammate]}
               onCreate={create}
-              onImages={(files) => upload(files)}
+              onImages={(files, input) => upload(files, null, input)}
               uploading={uploading}
             />
             <div className="desktop-shortcuts">
