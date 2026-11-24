@@ -241,6 +241,7 @@ export type AgentToken = {
   name: string;
   scope: "full" | "create";
   projectId: string | null;
+  assigneeId: string | null;
   createdAt: string;
   lastUsedAt?: string | null;
 };
@@ -336,10 +337,10 @@ export const api = {
   users: () => request<{ users: User[] }>("/api/users"),
   tokens: () => request<{ tokens: AgentToken[] }>("/api/tokens"),
   // With a projectId the token is create-only: it can add tasks to that project and nothing else.
-  createToken: (name?: string, projectId?: string) =>
+  createToken: (name?: string, projectId?: string, assignee?: string) =>
     request<{ token: AgentToken; secret: string }>(
       "/api/tokens",
-      json("POST", { name, ...(projectId ? { scope: "create", projectId } : {}) }),
+      json("POST", { name, ...(projectId ? { scope: "create", projectId, assignee: assignee || null } : {}) }),
     ),
   revokeToken: (id: string) =>
     request<{ ok: true }>(`/api/tokens/${id}`, json("DELETE")),

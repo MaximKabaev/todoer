@@ -523,7 +523,7 @@ const server = createServer(async (req, res) => {
       const known = (data.tags || []).filter((name) =>
         tags.some((t) => t.id === name || t.name.toLowerCase() === name.toLowerCase()),
       );
-      patch(task, { assignees: [], ...data, tags: known, projectId: createOnly.projectId }, me);
+      patch(task, { assignees: createOnly.assigneeId ? [createOnly.assigneeId] : [], ...data, tags: known, projectId: createOnly.projectId }, me);
       if (task.list === "now" && data.dueDate === undefined) task.dueDate = defaultDate();
       if (data.externalId) externalIds.set(key, task.id);
       return send({ task: { id: task.id }, duplicate: false }, 201);
@@ -655,6 +655,7 @@ const server = createServer(async (req, res) => {
               name: t.name,
               scope: t.scope,
               projectId: t.projectId,
+              assigneeId: t.assigneeId,
               createdAt: t.createdAt,
               lastUsedAt: t.lastUsedAt,
             })),
@@ -664,12 +665,16 @@ const server = createServer(async (req, res) => {
         const scope = data.scope || "full";
         if ((scope === "create") !== Boolean(data.projectId))
           return send({ error: "A create-only token needs a projectId" }, 400);
+        const assignee = data.assignee ? resolveUser(data.assignee, me) : null;
+        if (data.assignee && (scope !== "create" || !assignee))
+          return send({ error: "Unknown assignee, or not a create-only token" }, 400);
         const token = {
           id: randomUUID(),
           userId: me.id,
           name: data.name || "Personal token",
           scope,
           projectId: data.projectId || null,
+          assigneeId: assignee?.id || null,
           createdAt: stamp(),
           lastUsedAt: null,
         };
@@ -684,6 +689,7 @@ const server = createServer(async (req, res) => {
               name: token.name,
               scope: token.scope,
               projectId: token.projectId,
+              assigneeId: token.assigneeId,
               createdAt: token.createdAt,
             },
             secret,

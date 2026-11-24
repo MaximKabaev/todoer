@@ -141,9 +141,10 @@ Unknown body fields are ignored. Everything is camelCase.
 - `GET /api/me` → `{ user, teammate }` (current `user` also includes `activeProjectId: uuid | null`, `email: string | null`, `emailNotifications: boolean`, `emailPreferences: { assigned, completed, updates, achievements, afk, seasons }` (all booleans, default `true`), `githubLogin: string | null`, `birthday: "MM-DD" | null`; the teammate's email, GitHub login and birthday are never returned anywhere)
 - `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null, email?: string | null, emailNotifications?: boolean, emailPreferences?: Partial<{ assigned, completed, updates, achievements, afk, seasons }>, githubLogin?: string | null, birthday?: string | null }` → `{ user }` (`emailPreferences` is merged into the stored preferences, unknown keys or non-booleans → 400; password change requires currentPassword; email is trimmed, `""`/`null` clears it, invalid → 400, used by the other user → 409; `githubLogin` accepts `name`, `@name` or a github.com profile URL, `""`/`null` unlinks, invalid → 400, linked to the other user → 409; `birthday` is `MM-DD` (a real calendar day, Feb 29 allowed), `""`/`null` clears it, otherwise 400)
 - `GET /api/users` → `{ users: User[] }` (both users)
-- `GET /api/tokens` → `{ tokens: [{ id, name, scope: "full" | "create", projectId: uuid | null, createdAt, lastUsedAt }] }` (mine only)
-- `POST /api/tokens` `{ name?, scope?, projectId? }` → `{ token: { id, name, scope, projectId, createdAt }, secret: "tdr_..." }` (secret shown once).
-  `scope` defaults to `"full"`. `scope: "create"` requires `projectId` and returns a `tdc_...` secret; a `projectId` without it → 400.
+- `GET /api/tokens` → `{ tokens: [{ id, name, scope: "full" | "create", projectId: uuid | null, assigneeId: uuid | null, createdAt, lastUsedAt }] }` (mine only)
+- `POST /api/tokens` `{ name?, scope?, projectId?, assignee? }` → `{ token: { id, name, scope, projectId, assigneeId, createdAt }, secret: "tdr_..." }` (secret shown once).
+  `scope` defaults to `"full"`. `scope: "create"` requires `projectId` and returns a `tdc_...` secret; a `projectId` or `assignee` without it → 400.
+  `assignee` (user identifier) is who the token's reports are assigned to by default.
 - `DELETE /api/tokens/:id` → `{ ok: true }`
 
 ### Tasks
@@ -198,7 +199,8 @@ request → 403. Deleting the project revokes its create-only tokens.
   project creates nothing, also when the first task was edited, moved to another project or deleted, and
   with any create-only token of that project. Systems sharing a project should prefix their ids.
 - `reportedBy` (at most 200 characters): stored as the task's `reportedBy`, defaulting to the token's name.
-- `assignees` defaults to nobody (not the token's owner). Assignees get the usual email, attributed to todoer.
+- `assignees` defaults to the token's `assignee`, or nobody if it has none (never the token's owner). An explicit
+  `assignees` (including `[]`) wins. Assignees get the usual email, attributed to todoer.
 - `tags` attaches existing tags; unknown names are skipped rather than created.
 - → `201 { task: { id, webUrl? }, duplicate: false }`, or `200` with the original task's id and
   `duplicate: true` for a repeated `externalId`. The stored task is never returned.

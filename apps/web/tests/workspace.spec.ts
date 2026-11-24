@@ -305,13 +305,16 @@ test("settings creates a create-only token, and its reports show who reported th
   await settings
     .getByRole("combobox", { name: "Token access" })
     .selectOption({ label: `Create-only in ${projectName}` });
+  await settings
+    .getByRole("combobox", { name: "Assign its tasks to" })
+    .selectOption({ label: "Assign to Maxim" });
   await settings.getByRole("button", { name: "Create", exact: true }).click();
   const code = settings.locator(".secret-card code");
   await expect(code).toContainText("tdc_");
   const secret = (await code.textContent())!.trim();
   await expect(
     settings.locator(".token-row").filter({ hasText: tokenName }),
-  ).toContainText(`Create-only in ${projectName}`);
+  ).toContainText(`Create-only in ${projectName} · Assigned to Maxim`);
 
   const server = await playwright.request.newContext({
     baseURL,
@@ -325,6 +328,10 @@ test("settings creates a create-only token, and its reports show who reported th
   expect(retried.status()).toBe(200);
   expect(await retried.json()).toMatchObject({ task: { id: task.id }, duplicate: true });
   expect((await server.get("/api/tasks")).status()).toBe(403);
+  const stored = await (await page.request.get(`/api/tasks/${task.id}`)).json();
+  expect(
+    stored.task.assignees.map((u: { username: string }) => u.username),
+  ).toEqual(["maxim"]);
   await server.dispose();
 
   await page.goto(`/tasks/${task.id}`);

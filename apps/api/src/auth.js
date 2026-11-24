@@ -41,7 +41,7 @@ export async function authenticate(req, res, next) {
     const match = /^Bearer (td[rc]_[A-Za-z0-9_-]+)$/i.exec(authorization);
     if (match) {
       const { rows } = await pool.query(
-        'UPDATE api_tokens SET last_used_at = now() WHERE token_hash = $1 RETURNING user_id, name, scope, project_id AS "projectId"', [tokenHash(match[1])],
+        'UPDATE api_tokens SET last_used_at = now() WHERE token_hash = $1 RETURNING user_id, name, scope, project_id AS "projectId", assignee_id AS "assigneeId"', [tokenHash(match[1])],
       );
       userId = rows[0]?.user_id;
       req.token = rows[0];

@@ -1767,3 +1767,42 @@ test('reports email their assignees, including the token owner, in the name of t
     await api('patch', '/api/me').send({ email: null }).expect(200);
   });
 });
+
+test('a create-only token can assign its reports to one person by default', async () => {
+  const { project } = await reportToken();
+  const { body: { token, secret } } = await api('post', '/api/tokens').send({ scope: 'create', projectId: project.id, assignee: 'partner_test' }).expect(201);
+  assert.equal(token.assigneeId, second.id);
+  assert.equal((await api('get', '/api/tokens')).body.tokens.find(({ id }) => id === token.id).assigneeId, second.id);
+  const assignees = async (data) => {
+    const { body: { task } } = await api('post', '/api/tasks', secret).send(data).expect(201);
+    return (await api('get', `/api/tasks/${task.id}`).expect(200)).body.task.assignees.map(({ id }) => id);
+  };
+  assert.deepEqual(await assignees({ title: 'QA default' }), [second.id]);
+  assert.deepEqual(await assignees({ assignees: ['maxim_test'] }), [first.id]);
+  assert.deepEqual(await assignees({ assignees: [] }), []);
+  assert.deepEqual(await assignees({ list: 'later' }), []);
+  await api('post', '/api/tokens').send({ assignee: 'partner_test' }).expect(400);
+  await api('post', '/api/tokens').send({ scope: 'create', projectId: project.id, assignee: 'nobody' }).expect(400);
+});
+
+test('the report assignee migration gives existing tokens and unclaimed open reports to maxim only', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const sql = await readFile(new URL('../migrations/020_report_assignee.sql', import.meta.url), 'utf8');
+  const { token, report } = await reportToken();
+  const reported = async (data) => (await report(data).expect(201)).body.task.id;
+  const open = await reported({}), taken = await reported({ assignees: ['partner_test'] }), later = await reported({ list: 'later' }), done = await reported({});
+  await patch(done, { done: true });
+  const own = await create({ assignees: [] });
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query('ALTER TABLE api_tokens DROP COLUMN assignee_id');
+    await db.query("UPDATE users SET username = 'maxim' WHERE id = $1", [first.id]);
+    await db.query(sql);
+    const { rows } = await db.query('SELECT task_id, user_id FROM task_assignees WHERE task_id = ANY($1::uuid[])', [[open, taken, later, done, own.id]]);
+    assert.deepEqual(new Map(rows.map((row) => [row.task_id, row.user_id])), new Map(rows.map((row) => [row.task_id, row.task_id === open ? first.id : second.id])));
+    assert.deepEqual(rows.map((row) => row.task_id).sort(), [open, taken].sort());
+    assert.equal((await db.query('SELECT assignee_id FROM api_tokens WHERE id = $1', [token.id])).rows[0].assignee_id, first.id);
+    assert.equal((await db.query("SELECT 1 FROM api_tokens WHERE scope = 'full' AND assignee_id IS NOT NULL")).rowCount, 0);
+  } finally { await db.query('ROLLBACK'); db.release(); }
+});

@@ -30,7 +30,7 @@ export async function createReport(req) {
   const later = body.list === 'later';
   let people = [];
   // The usual error lists the users, which is more than a create-only token may know.
-  try { people = later ? [] : (body.assignees ?? []).map((value) => resolveUser(value, req)); }
+  try { people = later ? [] : (body.assignees ?? [req.token.assigneeId].filter(Boolean)).map((value) => resolveUser(value, req)); }
   catch { throw new HttpError(400, 'Unknown user in assignees'); }
   return transaction(async (db) => {
     const taskId = randomUUID();

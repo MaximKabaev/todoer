@@ -14,7 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { api, type AgentToken, type CurrentUser, type EmailPreferences, type Project } from "@/lib/api";
+import { api, type AgentToken, type CurrentUser, type EmailPreferences, type Project, type User } from "@/lib/api";
 import { Avatar, Confirm, Modal } from "./ui";
 import { useToast } from "./providers";
 
@@ -66,6 +66,7 @@ export function Settings({
     "/api/tokens",
   );
   const { data: projectData } = useSWR<{ projects: Project[] }>("/api/projects");
+  const { data: userData } = useSWR<{ users: User[] }>("/api/users");
   const projectName = (id: string | null) =>
     projectData?.projects.find((p) => p.id === id)?.name || "one project";
   const { mutate, cache } = useSWRConfig();
@@ -107,6 +108,7 @@ export function Settings({
   const [secret, setSecret] = useState<string | null>(null);
   const [tokenName, setTokenName] = useState("");
   const [tokenProject, setTokenProject] = useState("");
+  const [tokenAssignee, setTokenAssignee] = useState("");
   const [revoke, setRevoke] = useState<AgentToken | null>(null);
   const [copied, setCopied] = useState("");
   const agentUrl = `${window.location.origin}/agent`;
@@ -406,7 +408,11 @@ export function Settings({
               <strong>{t.name || "Personal token"}</strong>
               <small>
                 {t.scope === "create" &&
-                  `Create-only in ${projectName(t.projectId)} · `}
+                  `Create-only in ${projectName(t.projectId)} · ${
+                    t.assigneeId
+                      ? `Assigned to ${userData?.users.find((u) => u.id === t.assigneeId)?.displayName || "one person"}`
+                      : "Unassigned"
+                  } · `}
                 Created {new Date(t.createdAt).toLocaleDateString()}
                 {t.lastUsedAt
                   ? ` · Last used ${new Date(t.lastUsedAt).toLocaleDateString()}`
@@ -455,10 +461,12 @@ export function Settings({
               const result = await api.createToken(
                 tokenName || undefined,
                 tokenProject || undefined,
+                tokenAssignee || undefined,
               );
               setSecret(result.secret);
               setTokenName("");
               setTokenProject("");
+              setTokenAssignee("");
               await refresh();
             } catch (err) {
               toast({
@@ -489,6 +497,20 @@ export function Settings({
               </option>
             ))}
           </select>
+          {tokenProject && (
+            <select
+              aria-label="Assign its tasks to"
+              value={tokenAssignee}
+              onChange={(e) => setTokenAssignee(e.target.value)}
+            >
+              <option value="">Unassigned</option>
+              {userData?.users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  Assign to {u.displayName}
+                </option>
+              ))}
+            </select>
+          )}
           <button className="secondary-button">
             <Plus size={15} /> Create
           </button>
