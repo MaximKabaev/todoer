@@ -79,8 +79,8 @@ catalogRouter.get('/counts', async (req, res) => {
       WHERE $3::uuid IS NULL OR t.project_id = $3
     ) SELECT
       count(*) FILTER (WHERE NOT done AND list = 'now' AND mine)::int AS mine,
-      count(*) FILTER (WHERE NOT done AND list = 'now' AND mine AND created_by = $1)::int AS "mineCreated",
-      count(*) FILTER (WHERE NOT done AND list = 'now' AND mine AND created_by = $2)::int AS "mineFromTeammate",
+      count(*) FILTER (WHERE NOT done AND list = 'now' AND mine AND created_by = $1 AND reported_by IS NULL)::int AS "mineCreated",
+      count(*) FILTER (WHERE NOT done AND list = 'now' AND mine AND created_by = $2 AND reported_by IS NULL)::int AS "mineFromTeammate",
       count(*) FILTER (WHERE NOT done AND list = 'now' AND teammate)::int AS teammate,
       count(*) FILTER (WHERE NOT done AND list = 'later')::int AS later,
       count(*) FILTER (WHERE NOT done AND list = 'now' AND unassigned)::int AS unassigned,

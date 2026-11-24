@@ -1638,3 +1638,132 @@ test('achievements: date, time and tie secrets', async () => {
     assert.equal(deriveFor({ person: { id: 'p' }, rows: [], github: [], seasons, now })['season-tie'].unlockedAt, null);
   });
 });
+
+// A project, and a create-only token for it owned by the first user.
+async function reportToken(name = 'CustomsAI') {
+  const { body: { project } } = await api('post', '/api/projects').send({ name: 'Reports' }).expect(201);
+  const { body } = await api('post', '/api/tokens').send({ name, scope: 'create', projectId: project.id }).expect(201);
+  const report = (data) => api('post', '/api/tasks', body.secret).send(data);
+  return { project, token: body.token, secret: body.secret, report };
+}
+
+test('create-only tokens need a project, are listed with their scope, and never widen to full access', async () => {
+  const { project, token, secret, report } = await reportToken();
+  assert.match(secret, /^tdc_/);
+  assert.deepEqual([token.scope, token.projectId], ['create', project.id]);
+  const listed = (await api('get', '/api/tokens').expect(200)).body.tokens;
+  assert.equal(listed.find(({ id }) => id === token.id).scope, 'create');
+  assert.ok(listed.some(({ scope, projectId }) => scope === 'full' && projectId === null));
+  await api('post', '/api/tokens').send({ scope: 'create' }).expect(400);
+  await api('post', '/api/tokens').send({ projectId: project.id }).expect(400);
+  await api('post', '/api/tokens').send({ scope: 'full', projectId: project.id }).expect(400);
+  await api('post', '/api/tokens').send({ scope: 'other', projectId: project.id }).expect(400);
+  await api('post', '/api/tokens').send({ scope: 'create', projectId: randomUUID() }).expect(400);
+  await assert.rejects(pool.query('UPDATE api_tokens SET project_id = NULL WHERE id = $1', [token.id]), { code: '23514' });
+  // Deleting the project revokes the token.
+  await report({ title: 'QA before' }).expect(201);
+  await api('delete', `/api/projects/${project.id}`).expect(200);
+  await report({ title: 'QA after' }).expect(401);
+  assert.equal((await pool.query('SELECT 1 FROM api_tokens WHERE id = $1', [token.id])).rowCount, 0);
+});
+
+test('create-only tokens are refused everywhere except POST /api/tasks', async () => {
+  const { project, token, secret, report } = await reportToken();
+  const task = await create({ title: 'QA private', projectId: project.id });
+  const before = (await pool.query('SELECT count(*)::int AS n FROM tasks')).rows[0].n;
+  for (const [method, url] of [
+    ['get', '/api/me'], ['patch', '/api/me'], ['get', '/api/users'], ['get', '/api/tokens'], ['post', '/api/tokens'],
+    ['delete', `/api/tokens/${token.id}`], ['post', '/api/auth/logout'], ['get', '/api/tasks'], ['head', '/api/tasks'], ['put', '/api/tasks'], ['get', `/api/tasks/${task.id}`],
+    ['patch', `/api/tasks/${task.id}`], ['delete', `/api/tasks/${task.id}`], ['post', `/api/tasks/${task.id}`], ['post', `/api/tasks/${task.id}/handoff`],
+    ['post', `/api/tasks/${task.id}/attachments`], ['get', `/api/attachments/${randomUUID()}/file`], ['delete', `/api/attachments/${randomUUID()}`],
+    ['get', '/api/projects'], ['post', '/api/projects'], ['delete', `/api/projects/${project.id}`], ['get', '/api/tags'], ['post', '/api/tags'],
+    ['get', '/api/counts'], ['get', '/api/score'], ['get', '/api/stats'], ['post', '/api//tasks'], ['post', '/api/tasks/../tokens'], ['post', '/api/anything'],
+  ]) assert.equal((await api(method, url, secret)).status, 403, `${method} ${url}`);
+  // A session cookie sent alongside does not lift the restriction.
+  const login = await request(app).post('/api/auth/login').send({ username: 'maxim_test', password }).expect(200);
+  await api('get', '/api/tasks', secret).set('Cookie', login.headers['set-cookie'][0].split(';')[0]).expect(403);
+  // Nor can it create outside its project, complete tasks, upload files, or send anything but JSON.
+  await report({ projectId: (await create()).id }).expect(403);
+  await report({ projectId: null }).expect(403);
+  for (const extra of [{ done: true }, { position: 1 }, { createdBy: second.id }, { addAssignees: ['me'] }]) await report({ title: 'QA extra', ...extra }).expect(400);
+  await api('post', '/api/tasks', secret).attach('files', png(), 'a.png').expect(415);
+  await api('post', '/api/tasks', secret).type('form').send('title=x').expect(415);
+  await api('post', '/api/tasks', secret).expect(415);
+  const unknown = await report({ assignees: ['nobody'] }).expect(400);
+  assert.deepEqual(unknown.body, { error: 'Unknown user in assignees' });
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM tasks')).rows[0].n, before + 1); // only create() above
+});
+
+test('reports land in the token project with a reporter, and belong to neither person', async () => {
+  const { project, report } = await reportToken();
+  const tag = (await api('post', '/api/tags').send({ name: 'qa-report' })).body.tag;
+  const people = { assignees: ['maxim_test', 'partner_test'] };
+  const counts = async (token) => (await api('get', `/api/counts?projectId=${project.id}`, token).expect(200)).body;
+  const created = async () => (await api('get', '/api/stats').expect(200)).body.me.allTime.created;
+  const createdBefore = await created();
+  const { body } = await report({ title: ' Wrong\ncode\0 ', notes: 'a\0b\nc', reportedBy: 'Ivan\r\nPetrov', tags: ['QA-REPORT', 'qa-unknown-tag'], ...people }).expect(201);
+  assert.deepEqual(body, { task: { id: body.task.id }, duplicate: false });
+  const { task } = (await api('get', `/api/tasks/${body.task.id}`).expect(200)).body;
+  assert.deepEqual([task.title, task.notes, task.reportedBy, task.projectId, task.createdBy.id, task.dueDate], ['Wrong code', 'ab\nc', 'Ivan Petrov', project.id, first.id, dateFromToday(7)]);
+  assert.deepEqual(task.tags.map(({ id }) => id), [tag.id]);
+  assert.equal(task.assignees.length, 2);
+  assert.equal((await pool.query("SELECT 1 FROM tags WHERE name = 'qa-unknown-tag'")).rowCount, 0);
+  for (const [token, view] of [[firstToken, 'mine_created'], [secondToken, 'mine_from_teammate']]) {
+    assert.equal((await api('get', `/api/tasks?view=${view}&projectId=${project.id}`, token)).body.tasks.length, 0);
+    const { mine, mineCreated, mineFromTeammate } = await counts(token);
+    assert.deepEqual([mine, mineCreated, mineFromTeammate], [1, 0, 0]);
+  }
+  assert.equal(await created(), createdBefore);
+
+  // Defaults: unassigned, reported by the token's name; people's own tasks have no reporter.
+  const bare = (await api('get', `/api/tasks/${(await report({}).expect(201)).body.task.id}`)).body.task;
+  assert.deepEqual([bare.title, bare.assignees, bare.reportedBy], ['', [], 'CustomsAI']);
+  const later = (await api('get', `/api/tasks/${(await report({ list: 'later', ...people }).expect(201)).body.task.id}`)).body.task;
+  assert.deepEqual([later.list, later.assignees, later.dueDate], ['later', [], null]);
+  assert.equal((await create({ reportedBy: 'Spoof' })).reportedBy, null);
+  await report({ title: 'x'.repeat(501) }).expect(400);
+  await withEnv({ PUBLIC_WEB_URL: 'https://todo.example.com/' }, async () => {
+    const { body: linked } = await report({ title: 'QA link' }).expect(201);
+    assert.equal(linked.task.webUrl, `https://todo.example.com/tasks/${linked.task.id}`);
+  });
+});
+
+test('externalId makes retries safe: concurrent, after edits, moves, deletion and token rotation', async () => {
+  const { project, report } = await reportToken();
+  const burst = await Promise.all(Array.from({ length: 8 }, () => report({ title: 'QA burst', externalId: 'r-1' })));
+  assert.deepEqual(burst.map(({ status }) => status).sort(), [200, 200, 200, 200, 200, 200, 200, 201]);
+  const taskId = burst[0].body.task.id;
+  assert.ok(burst.every(({ body, status }) => body.task.id === taskId && body.duplicate === (status === 200)));
+  assert.equal((await pool.query("SELECT 1 FROM tasks WHERE title = 'QA burst'")).rowCount, 1);
+  assert.notEqual((await report({ externalId: 'r-2' }).expect(201)).body.task.id, taskId);
+
+  const again = async () => assert.deepEqual((await report({ title: 'QA again', externalId: 'r-1' }).expect(200)).body, { task: { id: taskId }, duplicate: true });
+  await patch(taskId, { title: 'QA edited', done: true, projectId: null });
+  await again();
+  await api('delete', `/api/tasks/${taskId}`).expect(200);
+  await again();
+  const { body: { secret } } = await api('post', '/api/tokens', secondToken).send({ scope: 'create', projectId: project.id }).expect(201);
+  assert.equal((await api('post', '/api/tasks', secret).send({ externalId: 'r-1' }).expect(200)).body.duplicate, true);
+  // Another project has its own ids, and a rejected report does not use one up.
+  assert.equal((await (await reportToken()).report({ externalId: 'r-1' }).expect(201)).body.duplicate, false);
+  await report({ externalId: 'r-3', dueDate: '2026-02-31' }).expect(400);
+  await report({ externalId: 'r-3' }).expect(201);
+  await api('post', '/api/tasks').send({ externalId: 'r-9' }).expect(400);
+});
+
+test('reports email their assignees, including the token owner, in the name of todoer', async () => {
+  const { flushNotifications } = await import('../src/lib/notifications.js');
+  const { report } = await reportToken();
+  await withEnv({ RESEND_API_KEY: 're_test', EMAIL_FROM: 'todoer <todo@example.com>' }, async () => {
+    await pool.query('DELETE FROM notification_events');
+    await api('patch', '/api/me').send({ email: 'report-owner@example.com' }).expect(200);
+    await report({ title: 'QA nobody', externalId: 'm-0' }).expect(201);
+    await report({ title: 'QA mail', externalId: 'm-1', reportedBy: 'Ivan', assignees: ['maxim_test'] }).expect(201);
+    await report({ title: 'QA mail', externalId: 'm-1', reportedBy: 'Ivan', assignees: ['maxim_test'] }).expect(200);
+    const outbox = [];
+    await flushNotifications({ send: async (message) => { outbox.push(message); }, quiet: 0, maxWait: 0 });
+    assert.deepEqual(outbox.map(({ to, subject }) => [to, subject]), [['report-owner@example.com', 'todoer updated “QA mail”']]);
+    assert.match(outbox[0].text, /todoer received a report from Ivan\n  - todoer assigned it to you\n/);
+    await api('patch', '/api/me').send({ email: null }).expect(200);
+  });
+});

@@ -1714,15 +1714,22 @@ kbd {
 }
 .token-form {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin-top: 15px;
 }
 .token-form input {
+  flex: 1 1 100%;
+  font-size: 11px;
+  min-height: 38px;
+}
+.token-form select {
   flex: 1;
   width: 0;
   font-size: 11px;
   min-height: 38px;
+  padding: 0 10px;
 }
 .token-form button {
   font-size: 11px;
@@ -2831,6 +2838,9 @@ kbd {
     min-height: 44px;
     font-size: 11px;
   }
+  .token-form select {
+    min-height: 44px;
+  }
   .logout-button {
     min-height: 55px;
     font-size: 13px;
@@ -3034,7 +3044,8 @@ kbd {
     position: absolute;
     inset: -5px 0;
   }
-  .token-form input {
+  .token-form input,
+  .token-form select {
     font-size: 16px;
   }
   .tags-editor input {

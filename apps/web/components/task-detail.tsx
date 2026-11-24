@@ -638,7 +638,9 @@ export function TaskDetail({
             </div>
             <div className="detail-footer">
               <span>
-                Created by {task.createdBy.displayName}
+                {task.reportedBy != null
+                  ? `Reported by ${task.reportedBy}`
+                  : `Created by ${task.createdBy.displayName}`}
                 <br />
                 <small>{timeAgo(task.createdAt)}</small>
               </span>

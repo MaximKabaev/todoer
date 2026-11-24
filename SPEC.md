@@ -39,6 +39,8 @@ SPEC.md               this file
 - Agent auth: `Authorization: Bearer <token>`. Each user can create personal API tokens
   (stored as sha256 hashes; plaintext shown once on creation). The seed creates one token per user
   and prints it. A request authenticated by token acts **as that user** (so "me" = token owner).
+- Create-only tokens (`scope: "create"`, secret prefix `tdc_`) are for other servers, see **Reports**.
+  They can call `POST /api/tasks` for one project and nothing else: every other endpoint answers 403.
 - Every endpoint except `POST /api/auth/login`, `GET /api/health` and `GET /api/agent` requires auth.
   401 → `{ "error": "unauthorized" }`.
 - Both users can see and edit **everything**. There is no private data between them.
@@ -59,6 +61,7 @@ SPEC.md               this file
 | priority | 0..3 | 0 none (default), 1 low, 2 medium, 3 high |
 | projectId | uuid \| null | |
 | createdBy | user id | set server-side from the authenticated user |
+| reportedBy | text \| null | read-only; who reported a task that came in through a create-only token (see **Reports**), otherwise null |
 | assignees | user[] | 0, 1 or 2 users. Both people may be assigned to the same task. |
 | tags | tag[] | |
 | attachments | attachment[] | images |
@@ -138,8 +141,9 @@ Unknown body fields are ignored. Everything is camelCase.
 - `GET /api/me` → `{ user, teammate }` (current `user` also includes `activeProjectId: uuid | null`, `email: string | null`, `emailNotifications: boolean`, `emailPreferences: { assigned, completed, updates, achievements, afk, seasons }` (all booleans, default `true`), `githubLogin: string | null`, `birthday: "MM-DD" | null`; the teammate's email, GitHub login and birthday are never returned anywhere)
 - `PATCH /api/me` `{ displayName?, password?, currentPassword?, activeProjectId?: uuid | null, email?: string | null, emailNotifications?: boolean, emailPreferences?: Partial<{ assigned, completed, updates, achievements, afk, seasons }>, githubLogin?: string | null, birthday?: string | null }` → `{ user }` (`emailPreferences` is merged into the stored preferences, unknown keys or non-booleans → 400; password change requires currentPassword; email is trimmed, `""`/`null` clears it, invalid → 400, used by the other user → 409; `githubLogin` accepts `name`, `@name` or a github.com profile URL, `""`/`null` unlinks, invalid → 400, linked to the other user → 409; `birthday` is `MM-DD` (a real calendar day, Feb 29 allowed), `""`/`null` clears it, otherwise 400)
 - `GET /api/users` → `{ users: User[] }` (both users)
-- `GET /api/tokens` → `{ tokens: [{ id, name, createdAt, lastUsedAt }] }` (mine only)
-- `POST /api/tokens` `{ name? }` → `{ token: { id, name, createdAt }, secret: "tdr_..." }` (secret shown once)
+- `GET /api/tokens` → `{ tokens: [{ id, name, scope: "full" | "create", projectId: uuid | null, createdAt, lastUsedAt }] }` (mine only)
+- `POST /api/tokens` `{ name?, scope?, projectId? }` → `{ token: { id, name, scope, projectId, createdAt }, secret: "tdr_..." }` (secret shown once).
+  `scope` defaults to `"full"`. `scope: "create"` requires `projectId` and returns a `tdc_...` secret; a `projectId` without it → 400.
 - `DELETE /api/tokens/:id` → `{ ok: true }`
 
 ### Tasks
@@ -169,6 +173,7 @@ Unknown body fields are ignored. Everything is camelCase.
     UTF-8 attachment filenames are preserved.
     This powers drag-and-drop: drop images → one request → one task.
   → `201 { task }`
+  - `externalId` with a full token or session → 400 (it only works with a create-only token; see **Reports**).
 - `PATCH /api/tasks/:id` — any subset of the POST JSON fields. `assignees`/`tags` replace the full set.
   Also accepts `addAssignees`, `removeAssignees`, `addTags`, `removeTags` (same identifier rules),
   and `position`. Transitioning false→true sets `doneAt`; repeating `done: true` preserves it.
@@ -179,6 +184,27 @@ Unknown body fields are ignored. Everything is camelCase.
 - `POST /api/tasks/:id/attachments` multipart `files` → `{ task }`
 - `DELETE /api/attachments/:id` → `{ ok: true }`
 - `GET /api/attachments/:id/file` → the image bytes
+
+### Reports (create-only tokens)
+
+Another server (e.g. CustomsAI, passing on error reports from brokers) creates tasks with a create-only
+token. Such a token can only call `POST /api/tasks`, always in the project it was created for; any other
+request → 403. Deleting the project revokes its create-only tokens.
+
+- Body: JSON only (anything else → 415), all fields optional: `{ title, notes, list, dueDate, priority,
+  assignees, tags, externalId, reportedBy }`. `projectId` may be sent if it is the token's project (otherwise 403).
+  Any other field, such as `done`, → 400. `title` is at most 500 characters and kept to one line.
+- `externalId` (at most 200 characters): the sender's own report id. An id already received for that
+  project creates nothing, also when the first task was edited, moved to another project or deleted, and
+  with any create-only token of that project. Systems sharing a project should prefix their ids.
+- `reportedBy` (at most 200 characters): stored as the task's `reportedBy`, defaulting to the token's name.
+- `assignees` defaults to nobody (not the token's owner). Assignees get the usual email, attributed to todoer.
+- `tags` attaches existing tags; unknown names are skipped rather than created.
+- → `201 { task: { id, webUrl? }, duplicate: false }`, or `200` with the original task's id and
+  `duplicate: true` for a repeated `externalId`. The stored task is never returned.
+- A report's `createdBy` is the token's owner, but it counts as nobody's own: it is left out of
+  `mine_created` and `mine_from_teammate` (and their counts), and of the created/assigned-to-teammate
+  stats and achievements. The task panel says "Reported by …" instead of "Created by …".
 
 ### Projects
 - `GET /api/projects` → `{ projects: (Project & { openCount: number })[] }`
@@ -239,6 +265,7 @@ Unknown body fields are ignored. Everything is camelCase.
   "list": "now", "dueDate": null, "priority": 0, "projectId": null,
   "project": { "id": "...", "name": "...", "color": "blue", "emoji": null } | null,
   "createdBy": { "id": "...", "username": "maxim", "displayName": "Maxim", "color": "blue" },
+  "reportedBy": null,
   "assignees": [User], "tags": [{ "id": "...", "name": "bug", "color": "red" }],
   "attachments": [{ "id": "...", "filename": "shot.png", "mimeType": "image/png", "size": 1234,
                     "width": 800, "height": 600, "url": "/api/attachments/<id>/file" }],
@@ -291,7 +318,7 @@ The web app also exposes this at `http://localhost:3000/agent` (simple rewrite/r
   move to Later/Now, tags editor (type to create), image gallery with a full-screen lightbox, delete. The lightbox scales images to fill the available viewport while preserving their aspect ratio, with pinch/wheel zoom, drag to pan, and visible close/navigation controls.
 - Completing a task animates and it leaves the list after a short delay (with undo toast).
 - Data freshness: revalidate on window focus and poll every ~10 s so the two users see each other's changes.
-- Settings: change display name/password, email and email notifications (master switch plus per-type toggles), manage agent tokens (create, copy once, revoke),
+- Settings: change display name/password, email and email notifications (master switch plus per-type toggles), manage agent tokens (create with full access or create-only in one project, copy once, revoke),
   link to `/agent` instructions, logout.
 
 ## Email notifications

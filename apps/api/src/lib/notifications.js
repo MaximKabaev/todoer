@@ -63,6 +63,11 @@ export async function recordLaterReview(db, task, recipientId) {
   await queueChange(db, recipientId, null, task, ['brought it back from Later after two weeks', 'assigned it to you for review']);
 }
 
+// A report has no human actor here, so every assignee hears about it, including the token's owner.
+export async function recordReport(db, task) {
+  for (const { id } of task.assignees) await queueChange(db, id, null, task, [`received a report from ${task.reportedBy}`, 'assigned it to you']);
+}
+
 // Notify the involved teammate, plus yourself when taking a task out of Later.
 export async function recordChange(db, req, before, after, scoresBefore = null) {
   if (!notificationsConfigured()) return;

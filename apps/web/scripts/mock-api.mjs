@@ -130,6 +130,7 @@ function fixture(title, options = {}) {
     priority: 0,
     projectId: null,
     createdBy: users[0],
+    reportedBy: null,
     assignees: [users[0]],
     tags: [],
     attachments: [],
@@ -221,6 +222,8 @@ fixture("Put a date in the calendar", {
   projectId: projects[2].id,
 });
 const tokens = [];
+// Task ids by "projectId externalId", for create-only tokens.
+const externalIds = new Map();
 const resolveUser = (identifier, me) =>
   identifier === "me"
     ? me
@@ -261,8 +264,8 @@ function filterTasks(params, me) {
       (t.list !== "now" || !t.assignees.some((a) => a.id === me.id))
     )
       return false;
-    if (view === "mine_created" && t.createdBy.id !== me.id) return false;
-    if (view === "mine_from_teammate" && t.createdBy.id !== other.id)
+    if (view === "mine_created" && (t.reportedBy !== null || t.createdBy.id !== me.id)) return false;
+    if (view === "mine_from_teammate" && (t.reportedBy !== null || t.createdBy.id !== other.id))
       return false;
     if (
       view === "teammate" &&
@@ -496,6 +499,35 @@ const server = createServer(async (req, res) => {
       tokenSecrets.get(req.headers.authorization?.replace(/^Bearer /, ""));
     const me = users.find((u) => u.id === userId);
     if (!me) return send({ error: "unauthorized" }, 401);
+    const createOnly = tokens.find(
+      (t) =>
+        t.scope === "create" &&
+        tokenSecrets.get(t.id) === req.headers.authorization?.replace(/^Bearer /, ""),
+    );
+    if (createOnly) {
+      if (method !== "POST" || url.pathname !== "/api/tasks")
+        return send({ error: "This token can only create tasks" }, 403);
+      const { data } = await body(req);
+      if (data.projectId && data.projectId !== createOnly.projectId)
+        return send({ error: "This token can only create tasks in its own project" }, 403);
+      const key = `${createOnly.projectId} ${data.externalId}`;
+      if (data.externalId && externalIds.has(key))
+        return send({ task: { id: externalIds.get(key) }, duplicate: true });
+      const task = fixture("", {
+        assignees: [],
+        createdBy: me,
+        reportedBy: data.reportedBy || createOnly.name,
+        createdAt: stamp(),
+        position: Date.now(),
+      });
+      const known = (data.tags || []).filter((name) =>
+        tags.some((t) => t.id === name || t.name.toLowerCase() === name.toLowerCase()),
+      );
+      patch(task, { assignees: [], ...data, tags: known, projectId: createOnly.projectId }, me);
+      if (task.list === "now" && data.dueDate === undefined) task.dueDate = defaultDate();
+      if (data.externalId) externalIds.set(key, task.id);
+      return send({ task: { id: task.id }, duplicate: false }, 201);
+    }
     if (url.pathname === "/api/auth/logout") {
       sessions.delete(session);
       res.setHeader(
@@ -621,20 +653,27 @@ const server = createServer(async (req, res) => {
             .map((t) => ({
               id: t.id,
               name: t.name,
+              scope: t.scope,
+              projectId: t.projectId,
               createdAt: t.createdAt,
               lastUsedAt: t.lastUsedAt,
             })),
         });
       if (method === "POST") {
         const { data } = await body(req);
+        const scope = data.scope || "full";
+        if ((scope === "create") !== Boolean(data.projectId))
+          return send({ error: "A create-only token needs a projectId" }, 400);
         const token = {
           id: randomUUID(),
           userId: me.id,
           name: data.name || "Personal token",
+          scope,
+          projectId: data.projectId || null,
           createdAt: stamp(),
           lastUsedAt: null,
         };
-        const secret = `tdr_${randomBytes(24).toString("hex")}`;
+        const secret = `${scope === "create" ? "tdc" : "tdr"}_${randomBytes(24).toString("hex")}`;
         tokens.push(token);
         tokenSecrets.set(secret, me.id);
         tokenSecrets.set(token.id, secret);
@@ -643,6 +682,8 @@ const server = createServer(async (req, res) => {
             token: {
               id: token.id,
               name: token.name,
+              scope: token.scope,
+              projectId: token.projectId,
               createdAt: token.createdAt,
             },
             secret,
@@ -792,6 +833,12 @@ const server = createServer(async (req, res) => {
         if (isProject)
           for (const [id, projectId] of activeProjects)
             if (projectId === item.id) activeProjects.set(id, null);
+        // Deleting a project revokes its create-only tokens.
+        for (const t of tokens.filter((t) => isProject && t.projectId === item.id)) {
+          tokenSecrets.delete(tokenSecrets.get(t.id));
+          tokenSecrets.delete(t.id);
+          tokens.splice(tokens.indexOf(t), 1);
+        }
         tasks.forEach((t) => {
           if (isProject && t.projectId === item.id) t.projectId = null;
           if (!isProject) t.tags = t.tags.filter((tag) => tag.id !== item.id);

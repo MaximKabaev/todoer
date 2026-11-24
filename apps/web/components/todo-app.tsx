@@ -559,7 +559,8 @@ function Workspace({ user, teammate }: { user: CurrentUser; teammate: User }) {
         t.list === "now" &&
         t.assignees.some((a) => a.id === user.id) &&
         (segment === 0 ||
-          t.createdBy.id === (segment === 1 ? user.id : teammate.id))
+          (t.reportedBy == null &&
+            t.createdBy.id === (segment === 1 ? user.id : teammate.id)))
       );
     if (selection.kind === "teammate")
       return t.list === "now" && t.assignees.some((a) => a.id === teammate.id);

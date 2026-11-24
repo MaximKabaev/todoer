@@ -9,7 +9,8 @@ export const userColumns = 'id, username, display_name AS "displayName", color';
 export const meColumns = `${userColumns}, active_project_id AS "activeProjectId", email, email_notifications AS "emailNotifications", ${emailPreferencesSql()} AS "emailPreferences", github_login AS "githubLogin", birthday`;
 export const publicUser = (user) => ({ id: user.id, username: user.username, displayName: user.displayName, color: user.color });
 export const tokenHash = (secret) => createHash('sha256').update(secret).digest('hex');
-export const newToken = () => `tdr_${randomBytes(32).toString('base64url')}`;
+// Create-only tokens have their own prefix: recognisable if leaked, and unknown to older API builds.
+export const newToken = (scope = 'full') => `${scope === 'create' ? 'tdc' : 'tdr'}_${randomBytes(32).toString('base64url')}`;
 export const cookieName = 'todoer_session';
 // Sessions never expire server-side. Browsers cap cookies at 400 days, so GET /api/me
 // (called on every app load) re-issues the cookie to keep it alive indefinitely.
@@ -37,12 +38,13 @@ export async function authenticate(req, res, next) {
   if (secret) req.sessionId = sessionHash(secret);
   let userId;
   if (authorization) {
-    const match = /^Bearer (tdr_[A-Za-z0-9_-]+)$/i.exec(authorization);
+    const match = /^Bearer (td[rc]_[A-Za-z0-9_-]+)$/i.exec(authorization);
     if (match) {
       const { rows } = await pool.query(
-        'UPDATE api_tokens SET last_used_at = now() WHERE token_hash = $1 RETURNING user_id', [tokenHash(match[1])],
+        'UPDATE api_tokens SET last_used_at = now() WHERE token_hash = $1 RETURNING user_id, name, scope, project_id AS "projectId"', [tokenHash(match[1])],
       );
       userId = rows[0]?.user_id;
+      req.token = rows[0];
     }
   } else {
     if (secret) {
@@ -52,6 +54,10 @@ export async function authenticate(req, res, next) {
     }
   }
   if (!userId) throw new HttpError(401, 'unauthorized');
+  // Deny by default: anything but a full token may reach exactly one route, whatever is added later.
+  if (req.token && req.token.scope !== 'full' && !(req.method === 'POST' && /^\/api\/tasks\/?$/i.test(req.baseUrl + req.path))) {
+    throw new HttpError(403, 'This token can only create tasks');
+  }
   const { rows } = await pool.query(`SELECT ${meColumns} FROM users ORDER BY created_at, id`);
   req.users = rows.map(publicUser);
   req.user = rows.find((user) => user.id === userId);

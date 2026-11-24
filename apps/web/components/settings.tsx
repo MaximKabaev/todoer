@@ -14,7 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { api, type AgentToken, type CurrentUser, type EmailPreferences } from "@/lib/api";
+import { api, type AgentToken, type CurrentUser, type EmailPreferences, type Project } from "@/lib/api";
 import { Avatar, Confirm, Modal } from "./ui";
 import { useToast } from "./providers";
 
@@ -65,6 +65,9 @@ export function Settings({
   const { data, mutate: refresh } = useSWR<{ tokens: AgentToken[] }>(
     "/api/tokens",
   );
+  const { data: projectData } = useSWR<{ projects: Project[] }>("/api/projects");
+  const projectName = (id: string | null) =>
+    projectData?.projects.find((p) => p.id === id)?.name || "one project";
   const { mutate, cache } = useSWRConfig();
   const router = useRouter();
   const toast = useToast();
@@ -103,6 +106,7 @@ export function Settings({
   const [busy, setBusy] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
   const [tokenName, setTokenName] = useState("");
+  const [tokenProject, setTokenProject] = useState("");
   const [revoke, setRevoke] = useState<AgentToken | null>(null);
   const [copied, setCopied] = useState("");
   const agentUrl = `${window.location.origin}/agent`;
@@ -391,7 +395,8 @@ export function Settings({
         )}
         <p className="small muted">
           Give it this link and a personal token below. Your agent can see and
-          edit your shared tasks as you.
+          edit your shared tasks as you. A create-only token can just add tasks
+          to one project.
         </p>
         <h4>Agent tokens</h4>
         {data?.tokens.map((t) => (
@@ -400,6 +405,8 @@ export function Settings({
             <span>
               <strong>{t.name || "Personal token"}</strong>
               <small>
+                {t.scope === "create" &&
+                  `Create-only in ${projectName(t.projectId)} · `}
                 Created {new Date(t.createdAt).toLocaleDateString()}
                 {t.lastUsedAt
                   ? ` · Last used ${new Date(t.lastUsedAt).toLocaleDateString()}`
@@ -445,9 +452,13 @@ export function Settings({
           onSubmit={async (e) => {
             e.preventDefault();
             try {
-              const result = await api.createToken(tokenName || undefined);
+              const result = await api.createToken(
+                tokenName || undefined,
+                tokenProject || undefined,
+              );
               setSecret(result.secret);
               setTokenName("");
+              setTokenProject("");
               await refresh();
             } catch (err) {
               toast({
@@ -466,6 +477,18 @@ export function Settings({
             value={tokenName}
             onChange={(e) => setTokenName(e.target.value)}
           />
+          <select
+            aria-label="Token access"
+            value={tokenProject}
+            onChange={(e) => setTokenProject(e.target.value)}
+          >
+            <option value="">Full access</option>
+            {projectData?.projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                Create-only in {p.name || "Untitled project"}
+              </option>
+            ))}
+          </select>
           <button className="secondary-button">
             <Plus size={15} /> Create
           </button>

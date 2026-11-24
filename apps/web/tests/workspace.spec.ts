@@ -285,6 +285,57 @@ test("settings creates a token, shows its secret once, revokes it, and logs out"
   await expect(page).toHaveURL(/\/login(?:\?next=.*)?$/);
 });
 
+test("settings creates a create-only token, and its reports show who reported them", async ({
+  page,
+  playwright,
+  baseURL,
+}) => {
+  await login(page);
+  const projectName = `Reports ${Date.now()}`;
+  const { project } = await (
+    await page.request.post("/api/projects", { data: { name: projectName } })
+  ).json();
+  await page.getByRole("link", { name: /Maxim Settings & account/ }).click();
+  const settings = page.getByRole("dialog", {
+    name: "Your little space",
+    exact: true,
+  });
+  const tokenName = `Report token ${Date.now()}`;
+  await settings.getByRole("textbox", { name: "Token name" }).fill(tokenName);
+  await settings
+    .getByRole("combobox", { name: "Token access" })
+    .selectOption({ label: `Create-only in ${projectName}` });
+  await settings.getByRole("button", { name: "Create", exact: true }).click();
+  const code = settings.locator(".secret-card code");
+  await expect(code).toContainText("tdc_");
+  const secret = (await code.textContent())!.trim();
+  await expect(
+    settings.locator(".token-row").filter({ hasText: tokenName }),
+  ).toContainText(`Create-only in ${projectName}`);
+
+  const server = await playwright.request.newContext({
+    baseURL,
+    extraHTTPHeaders: { Authorization: `Bearer ${secret}` },
+  });
+  const data = { title: "Wrong tariff code", externalId: "r-1", reportedBy: "Ivan Petrov" };
+  const created = await server.post("/api/tasks", { data });
+  expect(created.status()).toBe(201);
+  const { task } = await created.json();
+  const retried = await server.post("/api/tasks", { data });
+  expect(retried.status()).toBe(200);
+  expect(await retried.json()).toMatchObject({ task: { id: task.id }, duplicate: true });
+  expect((await server.get("/api/tasks")).status()).toBe(403);
+  await server.dispose();
+
+  await page.goto(`/tasks/${task.id}`);
+  await page.getByText("Extra options", { exact: true }).click();
+  await expect(page.getByText("Reported by Ivan Petrov")).toBeVisible();
+  await page.request.delete(`/api/tasks/${task.id}`);
+  await page.request.delete(`/api/projects/${project.id}`);
+  const { tokens } = await (await page.request.get("/api/tokens")).json();
+  expect(tokens.map((t: { name: string }) => t.name)).not.toContain(tokenName);
+});
+
 test("the rewrite streams a full 20 MiB image without truncation", async ({
   request,
 }) => {

@@ -102,14 +102,20 @@ authRouter.patch('/me', async (req, res) => {
   });
   res.json({ user });
 });
+const tokenColumns = 'id, name, scope, project_id AS "projectId", created_at AS "createdAt"';
 authRouter.get('/tokens', async (req, res) => {
-  const { rows } = await pool.query('SELECT id, name, created_at AS "createdAt", last_used_at AS "lastUsedAt" FROM api_tokens WHERE user_id = $1 ORDER BY created_at', [req.user.id]);
+  const { rows } = await pool.query(`SELECT ${tokenColumns}, last_used_at AS "lastUsedAt" FROM api_tokens WHERE user_id = $1 ORDER BY created_at`, [req.user.id]);
   res.json({ tokens: rows });
 });
 authRouter.post('/tokens', async (req, res) => {
-  const { name = 'Agent token' } = z.object({ name: z.string().trim().max(200).optional() }).parse(req.body ?? {});
-  const secret = newToken();
-  const { rows } = await pool.query('INSERT INTO api_tokens (user_id, name, token_hash) VALUES ($1,$2,$3) RETURNING id, name, created_at AS "createdAt"', [req.user.id, name, tokenHash(secret)]);
+  const { name = 'Agent token', scope = 'full', projectId = null } = z.object({
+    name: z.string().trim().max(200).optional(), scope: z.enum(['full', 'create']).optional(), projectId: id.nullable().optional(),
+  }).parse(req.body ?? {});
+  // Never guess: a request that asks for a restriction must not end up with a full-access token.
+  if (scope === 'create' && !projectId) throw new HttpError(400, 'A create-only token needs a projectId');
+  if (scope === 'full' && projectId) throw new HttpError(400, 'projectId needs scope "create"');
+  const secret = newToken(scope);
+  const { rows } = await pool.query(`INSERT INTO api_tokens (user_id, name, token_hash, scope, project_id) VALUES ($1,$2,$3,$4,$5) RETURNING ${tokenColumns}`, [req.user.id, name, tokenHash(secret), scope, projectId]);
   res.status(201).json({ token: rows[0], secret });
 });
 authRouter.delete('/tokens/:id', async (req, res) => {

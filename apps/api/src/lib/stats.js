@@ -37,8 +37,8 @@ async function personStats(db, { person, other, index, rows, history, season, to
       coalesce(sum(e.commits) FILTER (WHERE e.kind = 'push'), 0)::int AS commits, (count(*) FILTER (WHERE e.kind = 'merge'))::int AS merges
     FROM github_events e JOIN users u ON lower(u.github_login) = lower(e.github_login) AND u.id = $1 GROUP BY 1`, [person.id, scoreTimezone()]);
   const { rows: [counts] } = await db.query(`SELECT
-      (SELECT count(*)::int FROM tasks WHERE created_by = $1) AS created,
-      (SELECT count(*)::int FROM tasks t WHERE t.created_by = $1 AND $2::uuid IS NOT NULL
+      (SELECT count(*)::int FROM tasks WHERE created_by = $1 AND reported_by IS NULL) AS created,
+      (SELECT count(*)::int FROM tasks t WHERE t.created_by = $1 AND t.reported_by IS NULL AND $2::uuid IS NOT NULL
         AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = $2)
         AND NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id <> $2)) AS "assignedToTeammate"`,
   [person.id, other?.id ?? null]);

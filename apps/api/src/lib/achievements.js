@@ -401,7 +401,7 @@ export async function deriveAchievements(db, now = new Date(), rows = null) {
   for (const person of users) {
     const other = users.find((candidate) => candidate.id !== person.id) ?? null;
     // Tasks this person created that are assigned only to the other person, in creation order.
-    const { rows: delegated } = other ? await db.query(`SELECT t.created_at AS at FROM tasks t WHERE t.created_by = $1
+    const { rows: delegated } = other ? await db.query(`SELECT t.created_at AS at FROM tasks t WHERE t.created_by = $1 AND t.reported_by IS NULL
         AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = $2)
         AND NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id <> $2) ORDER BY t.created_at`, [person.id, other.id])
       : { rows: [] };

@@ -4,6 +4,7 @@ import { resolveUser } from '../auth.js';
 import { HttpError } from '../lib/errors.js';
 import { id, identifier, querySchema, taskBody, taskPatchSchema, taskSchema, z } from '../lib/validation.js';
 import { applyRelations, getTask, hydrate, taskColumns } from '../lib/tasks.js';
+import { createReport } from '../lib/reports.js';
 import { removeFiles, saveAttachments, upload, withUploadCleanup } from '../lib/uploads.js';
 import { notificationsConfigured, recordChange } from '../lib/notifications.js';
 import { dateFromToday, scoreSnapshot, SCORE, loadScoreRows, taskScoreChange } from '../lib/score.js';
@@ -18,8 +19,8 @@ tasksRouter.get('/', async (req, res) => {
   const assigned = (userId) => `EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = ${param(userId)})`;
   if (['mine', 'mine_created', 'mine_from_teammate'].includes(query.view)) {
     clauses.push("t.list = 'now'", assigned(req.user.id));
-    if (query.view === 'mine_created') clauses.push(`t.created_by = ${param(req.user.id)}`);
-    if (query.view === 'mine_from_teammate') clauses.push(`t.created_by = ${param(req.teammate?.id ?? null)}`);
+    if (query.view === 'mine_created') clauses.push(`t.created_by = ${param(req.user.id)}`, 't.reported_by IS NULL');
+    if (query.view === 'mine_from_teammate') clauses.push(`t.created_by = ${param(req.teammate?.id ?? null)}`, 't.reported_by IS NULL');
   } else if (query.view === 'teammate') clauses.push("t.list = 'now'", assigned(req.teammate?.id ?? null));
   else if (query.view === 'later') clauses.push("t.list = 'later'");
   else if (query.view === 'unassigned') clauses.push("t.list = 'now'", 'NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id)');
@@ -41,8 +42,15 @@ tasksRouter.get('/', async (req, res) => {
 });
 
 tasksRouter.get('/:id', async (req, res) => res.json({ task: await getTask(id.parse(req.params.id)) }));
-tasksRouter.post('/', upload, async (req, res) => {
+tasksRouter.post('/', async (req, res, next) => {
+  // Before the upload parser, so a create-only token cannot make the server read files.
+  if (!req.token || req.token.scope === 'full') return next();
+  const report = await createReport(req);
+  res.status(report.duplicate ? 200 : 201).json(report);
+}, upload, async (req, res) => {
   const body = taskSchema.parse(taskBody(req));
+  // Ignoring it like other unknown fields would look like duplicate protection without being any.
+  if (req.body?.externalId !== undefined) throw new HttpError(400, 'externalId needs a create-only token');
   const task = await withUploadCleanup((written) => transaction(async (db) => {
     const scoresBefore = body.done && notificationsConfigured() ? await scoreSnapshot(db) : null;
     // Tasks planned for Now get a one-week deadline unless the caller says otherwise (null = no date).

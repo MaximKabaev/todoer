@@ -4,9 +4,12 @@ import { HttpError } from './errors.js';
 
 export const taskColumns = `t.id, t.title, t.notes, t.done, t.done_at AS "doneAt", t.list,
   to_char(t.due_date, 'YYYY-MM-DD') AS "dueDate", t.priority, t.resurfaced_at AS "resurfacedAt", t.project_id AS "projectId",
-  t.created_by AS "creatorId", t.position, t.created_at AS "createdAt", t.updated_at AS "updatedAt"`;
+  t.created_by AS "creatorId", t.reported_by AS "reportedBy", t.position, t.created_at AS "createdAt", t.updated_at AS "updatedAt"`;
 export const attachmentColumns = `id, task_id AS "taskId", filename, mime_type AS "mimeType", size, width, height,
   '/api/attachments/' || id || '/file' AS url, created_at AS "createdAt"`;
+
+// { webUrl } when PUBLIC_WEB_URL is configured, otherwise {}.
+export const taskWebUrl = (id) => (process.env.PUBLIC_WEB_URL ? { webUrl: `${process.env.PUBLIC_WEB_URL.replace(/\/+$/, '')}/tasks/${id}` } : {});
 
 // Five bounded queries regardless of how many tasks are returned; no per-task lookups.
 export async function hydrate(rows, db = pool) {
@@ -38,7 +41,7 @@ export async function hydrate(rows, db = pool) {
   const projectMap = new Map(projects.rows.map((project) => [project.id, project]));
   return rows.map(({ creatorId, ...row }) => ({
     ...row,
-    ...(process.env.PUBLIC_WEB_URL ? { webUrl: `${process.env.PUBLIC_WEB_URL.replace(/\/+$/, '')}/tasks/${row.id}` } : {}),
+    ...taskWebUrl(row.id),
     project: projectMap.get(row.projectId) ?? null, createdBy: userMap.get(creatorId),
     assignees: assigned.get(row.id), tags: tagged.get(row.id), attachments: attached.get(row.id),
   }));

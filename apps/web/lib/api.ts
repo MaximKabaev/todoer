@@ -69,6 +69,8 @@ export type Task = {
   projectId: string | null;
   project: Pick<Project, "id" | "name" | "color" | "emoji"> | null;
   createdBy: User;
+  // Set only on tasks another server created with a create-only token.
+  reportedBy?: string | null;
   assignees: User[];
   tags: Tag[];
   attachments: Attachment[];
@@ -237,6 +239,8 @@ export type Stats = {
 export type AgentToken = {
   id: string;
   name: string;
+  scope: "full" | "create";
+  projectId: string | null;
   createdAt: string;
   lastUsedAt?: string | null;
 };
@@ -331,10 +335,11 @@ export const api = {
   }) => request<{ user: CurrentUser }>("/api/me", json("PATCH", input)),
   users: () => request<{ users: User[] }>("/api/users"),
   tokens: () => request<{ tokens: AgentToken[] }>("/api/tokens"),
-  createToken: (name?: string) =>
+  // With a projectId the token is create-only: it can add tasks to that project and nothing else.
+  createToken: (name?: string, projectId?: string) =>
     request<{ token: AgentToken; secret: string }>(
       "/api/tokens",
-      json("POST", { name }),
+      json("POST", { name, ...(projectId ? { scope: "create", projectId } : {}) }),
     ),
   revokeToken: (id: string) =>
     request<{ ok: true }>(`/api/tokens/${id}`, json("DELETE")),
